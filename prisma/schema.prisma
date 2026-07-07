@@ -1,0 +1,128 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                  Int              @id @default(autoincrement())
+  email               String           @unique
+  password            String
+  name                String           @default("")
+  role                String           // "client" | "provider" | "admin"
+  providerType        String?          // "freelancer" | "salon"
+  phoneNumber         String?          @unique
+  isPhoneVerified     Boolean          @default(false)
+  onboardingCompleted Boolean          @default(false)
+  createdAt           DateTime         @default(now())
+  providerProfile     ProviderProfile?
+  clientProfile       ClientProfile?
+
+  @@map("users")
+}
+
+model ClientProfile {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@map("client_profile")
+}
+
+model ProviderProfile {
+  id              Int               @id @default(autoincrement())
+  userId          Int               @unique
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  location        String
+  profileImageUrl String?
+  latitude        Float?
+  longitude       Float?
+  categories      String?           // JSON string array of categories, e.g. '["Hair", "Nails"]'
+  experience      Int               @default(0)
+  licenseType     String?
+  certificateUrl  String?
+  coverImageUrl   String?
+  services        ProviderService[]
+  amenities       ProviderAmenity[]
+  createdAt       DateTime          @default(now())
+
+  @@map("provider_profile")
+}
+
+model ProviderService {
+  id          Int             @id @default(autoincrement())
+  profileId   Int
+  profile     ProviderProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name        String
+  price       Int
+  category    String
+  createdAt   DateTime        @default(now())
+
+  @@map("provider_service")
+}
+
+model ProviderAmenity {
+  id          Int             @id @default(autoincrement())
+  profileId   Int
+  profile     ProviderProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name        String
+  type        String?         @default("amenity") // "amenity" or "ambience"
+  icon        String?         @db.VarChar(10)
+  createdAt   DateTime        @default(now())
+
+  @@map("provider_amenity")
+}
+
+model SystemSetting {
+  key   String @id
+  value String @db.Text
+
+  @@map("setting_system")
+}
+
+model CategorySetting {
+  id        Int              @id @default(autoincrement())
+  title     String           @unique @db.VarChar(100)
+  services  ServiceSetting[]
+  createdAt DateTime         @default(now())
+
+  @@map("setting_category")
+}
+
+model ServiceSetting {
+  id         Int             @id @default(autoincrement())
+  mainTypeId Int
+  mainType   CategorySetting @relation(fields: [mainTypeId], references: [id], onDelete: Cascade)
+  title      String          @db.VarChar(100)
+  createdAt  DateTime        @default(now())
+
+  @@unique([mainTypeId, title])
+  @@map("setting_service")
+}
+
+model AmbienceGroupSetting {
+  id        Int               @id @default(autoincrement())
+  title     String            @unique @db.VarChar(100)
+  icon      String?           @db.VarChar(10)
+  items     AmbienceSetting[]
+  createdAt DateTime          @default(now())
+
+  @@map("setting_ambience_group")
+}
+
+model AmbienceSetting {
+  id              Int                  @id @default(autoincrement())
+  ambienceGroupId Int
+  ambienceGroup   AmbienceGroupSetting @relation(fields: [ambienceGroupId], references: [id], onDelete: Cascade)
+  title           String               @db.VarChar(100)
+  icon            String?              @db.VarChar(10)
+  createdAt       DateTime             @default(now())
+
+  @@unique([ambienceGroupId, title])
+  @@map("setting_ambience")
+}

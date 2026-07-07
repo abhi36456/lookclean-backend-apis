@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --color-primary: #d4af6a;
+  --color-primary-light: #f5dc8e;
+  --color-primary-dark: #b08642;
+  --color-primary-contrast: #0a0a0a;
+  --color-dark-bg: #030712;
+  --color-dark-card: #111827;
+  --color-dark-border: #1f2937;
+  --color-muted-gray: #9ca3af;
+  --color-accent-green: #10b981;
+}
+
+:root {
+  --background: #030712;
+  --foreground: #f3f4f6;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Glassmorphism custom styles */
+.glass-panel {
+  background: rgba(17, 24, 39, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card {
+  background: rgba(31, 41, 55, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: rgba(212, 175, 106, 0.4);
+  box-shadow: 0 10px 25px -5px rgba(212, 175, 106, 0.15), 0 8px 10px -6px rgba(212, 175, 106, 0.15);
+  transform: translateY(-2px);
+}
+
+.glass-input {
+  background: rgba(17, 24, 39, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f3f4f6;
+  transition: all 0.2s ease-in-out;
+}
+
+.glass-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(212, 175, 106, 0.25);
+  outline: none;
+}
+
+/* Hide scrollbars */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Gradient text */
+.text-gradient {
+  background: linear-gradient(135deg, rgb(245, 220, 142), rgb(212, 175, 106) 50%, rgb(176, 134, 66));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Custom background gradient class */
+.bg-primary-gradient {
+  background: linear-gradient(135deg, rgb(245, 220, 142), rgb(212, 175, 106) 50%, rgb(176, 134, 66));
+}
+
