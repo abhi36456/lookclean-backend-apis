@@ -19,7 +19,6 @@ const openApiSpec = {
   tags: [
     { name: 'Authenticate', description: 'Consolidated login, registration, and role selection APIs' },
     { name: 'Client Profile', description: 'Client profile details and settings' },
-    { name: 'Provider Profile', description: 'Provider profile details and settings' },
     { name: 'Verification', description: 'Phone OTP verification APIs' },
     { name: 'Provider Onboarding Flow', description: 'Step-by-step onboarding APIs (Steps 1 to 5) for service providers' },
   ],
@@ -218,12 +217,29 @@ const openApiSpec = {
         requestBody: {
           required: true,
           content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string', example: 'Sarah Connor' },
+                  location: { type: 'string', example: 'Los Angeles, CA' },
+                  latitude: { type: 'number', format: 'float', example: 34.0522 },
+                  longitude: { type: 'number', format: 'float', example: -118.2437 },
+                  profileImage: { type: 'string', format: 'binary', description: 'Upload client profile image file' },
+                  onboardingCompleted: { type: 'boolean', example: true },
+                },
+              },
+            },
             'application/json': {
               schema: {
                 type: 'object',
                 properties: {
                   name: { type: 'string', example: 'Sarah Connor' },
-                  onboardingCompleted: { type: 'boolean' },
+                  location: { type: 'string', example: 'Los Angeles, CA' },
+                  latitude: { type: 'number', format: 'float', example: 34.0522 },
+                  longitude: { type: 'number', format: 'float', example: -118.2437 },
+                  profileImageUrl: { type: 'string', example: 'https://...' },
+                  onboardingCompleted: { type: 'boolean', example: true },
                 },
               },
             },
@@ -244,7 +260,7 @@ const openApiSpec = {
     },
     '/providers/me': {
       get: {
-        tags: ['Provider Profile'],
+        tags: ['Provider Onboarding Flow'],
         summary: 'Get current provider profile details',
         description: 'Returns provider profile details based on authenticated Bearer token. Accessible only for providers.',
         responses: {
@@ -258,58 +274,6 @@ const openApiSpec = {
           },
           401: {
             description: 'Missing or expired token header',
-          },
-          403: {
-            description: 'Forbidden: Requires provider role',
-          },
-        },
-      },
-    },
-    '/providers/profile': {
-      put: {
-        tags: ['Provider Profile'],
-        summary: 'Update Provider Profile Settings',
-        description: 'Sets location, services, amenities, experience and license configuration. Accessible only for providers.',
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string', example: 'Glamour Cuts' },
-                  onboardingCompleted: { type: 'boolean' },
-                  providerProfile: {
-                    type: 'object',
-                    properties: {
-                      name: { type: 'string', example: 'Maison Lumière' },
-                      location: { type: 'string', example: 'Downtown Manhattan' },
-                      experience: { type: 'integer', example: 5 },
-                      licenseType: { type: 'string', example: 'Cosmetology Board Certificate' },
-                      certificateUrl: { type: 'string', example: 'license_doc.pdf' },
-                      coverImageUrl: { type: 'string', example: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=500' },
-                      services: {
-                        type: 'array',
-                        items: { $ref: '#/components/schemas/Service' },
-                      },
-                      amenities: {
-                        type: 'array',
-                        items: { type: 'string' },
-                        example: ['Parking area', 'AC waiting area'],
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          200: {
-            description: 'Profile saved successfully',
-          },
-          401: {
-            description: 'Unauthorized access',
           },
           403: {
             description: 'Forbidden: Requires provider role',
@@ -476,9 +440,8 @@ const openApiSpec = {
                     items: {
                       type: 'object',
                       properties: {
-                        name: { type: 'string', example: 'Haircut' },
+                        service_id: { type: 'integer', example: 1 },
                         price: { type: 'integer', example: 45 },
-                        category: { type: 'string', example: '1' },
                       },
                     },
                   },
@@ -509,17 +472,12 @@ const openApiSpec = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['items'],
+                required: ['ambience_id'],
                 properties: {
-                  items: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        name: { type: 'string', example: 'Free Wi-Fi' },
-                        type: { type: 'string', example: '1' },
-                      },
-                    },
+                  ambience_id: {
+                    type: 'string',
+                    example: '1,2,3',
+                    description: 'Comma-separated string of Ambience Setting IDs or an array of IDs',
                   },
                 },
               },

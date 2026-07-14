@@ -1278,7 +1278,7 @@ export async function POST(
     if (!auth || auth.role !== 'provider') {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
-    const { services } = body as any; // Array of { name, price, category }
+    const { services } = body as any; // Array of { service_id, price } or { serviceId, price }
     if (!Array.isArray(services)) {
       return NextResponse.json({ message: 'Services must be an array' }, { status: 400 });
     }
@@ -1294,15 +1294,30 @@ export async function POST(
           }
           // Clear current services
           await prisma.providerService.deleteMany({ where: { profileId: profile.id } });
+          
+          // Look up corresponding ServiceSetting names and categories
+          const serviceIds = services.map((s: any) => parseInt(s.service_id || s.serviceId)).filter(Boolean);
+          const serviceSettings = await prisma.serviceSetting.findMany({
+            where: { id: { in: serviceIds } },
+            include: { mainType: true }
+          });
+
+          const dataToInsert = services.map((s: any) => {
+            const sId = parseInt(s.service_id || s.serviceId);
+            const setting = serviceSettings.find(set => set.id === sId);
+            if (!setting) return null;
+            return {
+              profileId: profile.id,
+              name: setting.title,
+              price: parseInt(s.price) || 0,
+              category: setting.mainType ? setting.mainType.title : 'General'
+            };
+          }).filter(Boolean) as any[];
+
           // Re-insert
-          if (services.length > 0) {
+          if (dataToInsert.length > 0) {
             await prisma.providerService.createMany({
-              data: services.map((s: any) => ({
-                profileId: profile.id,
-                name: s.name,
-                price: parseInt(s.price) || 0,
-                category: s.category !== undefined && s.category !== null ? String(s.category) : 'General',
-              })),
+              data: dataToInsert,
             });
           }
         },
@@ -1314,12 +1329,13 @@ export async function POST(
           }
           mockDb.services = mockDb.services.filter((s) => s.profileId !== mockProfile.id);
           services.forEach((s: any) => {
+            const sId = parseInt(s.service_id || s.serviceId) || 1;
             mockDb.services.push({
               id: Math.floor(Math.random() * 10000),
               profileId: mockProfile.id,
-              name: s.name,
+              name: `Service #${sId}`,
               price: parseInt(s.price) || 0,
-              category: s.category !== undefined && s.category !== null ? String(s.category) : 'General',
+              category: 'General',
             });
           });
         }
@@ -1336,10 +1352,18 @@ export async function POST(
     if (!auth || auth.role !== 'provider') {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
-    const { items } = body as any; // Array of { name, type }
-    if (!Array.isArray(items)) {
-      return NextResponse.json({ message: 'Items must be an array' }, { status: 400 });
+
+    const rawAmbienceId = (body as any).ambience_id || (body as any).ambienceId || (body as any).ambience_ids || (body as any).ambienceIds || (body as any).items;
+    let ambienceIds: number[] = [];
+
+    if (typeof rawAmbienceId === 'string') {
+      ambienceIds = rawAmbienceId.split(',').map(id => parseInt(id.trim())).filter(Boolean);
+    } else if (Array.isArray(rawAmbienceId)) {
+      ambienceIds = rawAmbienceId.map(id => typeof id === 'object' ? parseInt(id.id || id.ambience_id || id.ambienceId) : parseInt(id)).filter(Boolean);
+    } else if (typeof rawAmbienceId === 'number') {
+      ambienceIds = [rawAmbienceId];
     }
+
     try {
       await executeWithDbFallback(
         async () => {
@@ -1352,15 +1376,24 @@ export async function POST(
           }
           // Clear current items
           await prisma.providerAmenity.deleteMany({ where: { profileId: profile.id } });
+
+          // Look up corresponding AmbienceSetting names and types
+          const ambienceSettings = await prisma.ambienceSetting.findMany({
+            where: { id: { in: ambienceIds } },
+            include: { ambienceGroup: true }
+          });
+
+          const dataToInsert = ambienceSettings.map((setting) => ({
+            profileId: profile.id,
+            name: setting.title,
+            type: setting.ambienceGroup ? setting.ambienceGroup.title : 'amenity',
+            icon: setting.icon || null
+          }));
+
           // Re-insert
-          if (items.length > 0) {
+          if (dataToInsert.length > 0) {
             await prisma.providerAmenity.createMany({
-              data: items.map((item: any) => ({
-                profileId: profile.id,
-                name: item.name,
-                type: item.type !== undefined && item.type !== null ? String(item.type) : 'amenity',
-                icon: item.icon || null,
-              })),
+              data: dataToInsert,
             });
           }
         },
@@ -1371,13 +1404,13 @@ export async function POST(
             mockDb.profiles.push(mockProfile);
           }
           mockDb.amenities = mockDb.amenities.filter((a) => a.profileId !== mockProfile.id);
-          items.forEach((item: any) => {
+          ambienceIds.forEach((id) => {
             mockDb.amenities.push({
               id: Math.floor(Math.random() * 10000),
               profileId: mockProfile.id,
-              name: item.name,
-              type: item.type !== undefined && item.type !== null ? String(item.type) : 'amenity',
-              icon: item.icon || null,
+              name: `Ambience Item #${id}`,
+              type: 'amenity',
+              icon: null,
             });
           });
         }
@@ -1519,19 +1552,80 @@ export async function PUT(
     if (auth.role !== 'client') {
       return NextResponse.json({ message: 'Forbidden: Requires client role' }, { status: 403 });
     }
-    const { name, onboardingCompleted } = body;
+
+    let name: any = undefined;
+    let location: any = undefined;
+    let latitude: any = undefined;
+    let longitude: any = undefined;
+    let onboardingCompleted: any = undefined;
+    let profileImageUrl: any = undefined;
+
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('multipart/form-data')) {
+      try {
+        const formData = await request.formData();
+        name = formData.get('name');
+        location = formData.get('location');
+        latitude = formData.get('latitude');
+        longitude = formData.get('longitude');
+        onboardingCompleted = formData.get('onboardingCompleted');
+        const profileImageFile = formData.get('profileImage');
+
+        if (profileImageFile && typeof profileImageFile === 'object' && 'name' in profileImageFile) {
+          const file = profileImageFile as any;
+          const mimeType = file.type || '';
+          const fileName = file.name || '';
+          const fileExt = nodePath.extname(fileName).toLowerCase();
+
+          const isValidMime = mimeType.startsWith('image/');
+          const isValidExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff'].includes(fileExt);
+
+          if (!isValidMime && !isValidExt) {
+            return NextResponse.json(
+              { message: 'Profile image must be an image file only' },
+              { status: 400 }
+            );
+          }
+
+          const bytes = await file.arrayBuffer();
+          const buffer = Buffer.from(bytes);
+          const uploadDir = nodePath.join(process.cwd(), 'public', 'uploads');
+          await fs.mkdir(uploadDir, { recursive: true });
+          const uniqueFileName = `profile_${auth.userId}_${Date.now()}${fileExt || '.png'}`;
+          const filePath = nodePath.join(uploadDir, uniqueFileName);
+          await fs.writeFile(filePath, buffer);
+          profileImageUrl = `/uploads/${uniqueFileName}`;
+        }
+      } catch (err: any) {
+        return NextResponse.json({ message: 'Failed to process file upload: ' + err.message }, { status: 400 });
+      }
+    } else {
+      name = body.name;
+      location = body.location;
+      latitude = body.latitude;
+      longitude = body.longitude;
+      onboardingCompleted = body.onboardingCompleted;
+      profileImageUrl = body.profileImageUrl;
+    }
 
     const updatedUser = await executeWithDbFallback(
       async () => {
         const updateData: any = {};
-        if (name !== undefined) updateData.name = name;
-        if (onboardingCompleted !== undefined) updateData.onboardingCompleted = onboardingCompleted;
+        if (name !== undefined && name !== null) updateData.name = name;
+        if (onboardingCompleted !== undefined && onboardingCompleted !== null) {
+          updateData.onboardingCompleted = onboardingCompleted === 'true' || onboardingCompleted === true;
+        }
 
-        // Ensure clientProfile exists
+        const clientProfileData: any = {};
+        if (location !== undefined && location !== null) clientProfileData.location = location;
+        if (profileImageUrl !== undefined && profileImageUrl !== null) clientProfileData.profileImageUrl = profileImageUrl;
+        if (latitude !== undefined && latitude !== null) clientProfileData.latitude = parseFloat(latitude);
+        if (longitude !== undefined && longitude !== null) clientProfileData.longitude = parseFloat(longitude);
+
         updateData.clientProfile = {
-          connectOrCreate: {
-            where: { userId: auth.userId },
-            create: {}
+          upsert: {
+            create: clientProfileData,
+            update: clientProfileData
           }
         };
 
@@ -1546,146 +1640,32 @@ export async function PUT(
       async () => {
         const user = mockDb.users.find((u) => u.id === auth.userId);
         if (!user) throw new Error('User not found');
-        if (name !== undefined) user.name = name;
-        if (onboardingCompleted !== undefined) user.onboardingCompleted = onboardingCompleted;
-        return user;
+        if (name !== undefined && name !== null) user.name = name;
+        if (onboardingCompleted !== undefined && onboardingCompleted !== null) {
+          user.onboardingCompleted = onboardingCompleted === 'true' || onboardingCompleted === true;
+        }
+
+        let profile = mockDb.profiles.find((p) => p.userId === auth.userId);
+        if (!profile) {
+          profile = {
+            id: mockDb.profiles.length + 1,
+            userId: auth.userId,
+          } as any;
+          mockDb.profiles.push(profile);
+        }
+        if (location !== undefined && location !== null) (profile as any).location = location;
+        if (profileImageUrl !== undefined && profileImageUrl !== null) (profile as any).profileImageUrl = profileImageUrl;
+        if (latitude !== undefined && latitude !== null) (profile as any).latitude = parseFloat(latitude);
+        if (longitude !== undefined && longitude !== null) (profile as any).longitude = parseFloat(longitude);
+
+        return { ...user, clientProfile: profile };
       }
     );
 
     return NextResponse.json(sanitizeUser(updatedUser));
   }
 
-  // Update Provider Profile (/api/providers/profile)
-  if (path === 'providers/profile') {
-    if (auth.role !== 'provider') {
-      return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
-    }
-    const { name, onboardingCompleted, providerProfile } = body;
 
-    const updatedUser = await executeWithDbFallback(
-      async () => {
-        const updateData: any = {};
-        if (name !== undefined) updateData.name = name;
-        if (onboardingCompleted !== undefined) updateData.onboardingCompleted = onboardingCompleted;
-
-        if (providerProfile) {
-          const profileUpsert = {
-            name: providerProfile.name || name || '',
-            location: providerProfile.location || '',
-            experience: providerProfile.experience || 0,
-            licenseType: providerProfile.licenseType || null,
-            certificateUrl: providerProfile.certificateUrl || null,
-            coverImageUrl: providerProfile.coverImageUrl || null,
-          };
-
-          // Update/Create profile
-          updateData.providerProfile = {
-            upsert: {
-              create: {
-                ...profileUpsert,
-                services: {
-                  create: (providerProfile.services || []).map((s: any) => ({
-                    name: s.name,
-                    price: s.price,
-                    category: s.category !== undefined && s.category !== null ? String(s.category) : 'General',
-                  })),
-                },
-                amenities: {
-                  create: (providerProfile.amenities || []).map((a: any) => typeof a === 'string' ? { name: a } : { name: a.name, icon: a.icon || null, type: a.type !== undefined && a.type !== null ? String(a.type) : 'amenity' }),
-                },
-              },
-              update: {
-                ...profileUpsert,
-                services: {
-                  deleteMany: {},
-                  create: (providerProfile.services || []).map((s: any) => ({
-                    name: s.name,
-                    price: s.price,
-                    category: s.category !== undefined && s.category !== null ? String(s.category) : 'General',
-                  })),
-                },
-                amenities: {
-                  deleteMany: {},
-                  create: (providerProfile.amenities || []).map((a: any) => typeof a === 'string' ? { name: a } : { name: a.name, icon: a.icon || null, type: a.type !== undefined && a.type !== null ? String(a.type) : 'amenity' }),
-                },
-              },
-            },
-          };
-        }
-
-        return await prisma.user.update({
-          where: { id: auth.userId },
-          data: updateData,
-          include: {
-            providerProfile: {
-              include: { services: true, amenities: true },
-            },
-          },
-        });
-      },
-      async () => {
-        const user = mockDb.users.find((u) => u.id === auth.userId);
-        if (!user) throw new Error('User not found');
-
-        if (name !== undefined) user.name = name;
-        if (onboardingCompleted !== undefined) user.onboardingCompleted = onboardingCompleted;
-
-        if (providerProfile) {
-          let profile = mockDb.profiles.find((p) => p.userId === auth.userId);
-          if (!profile) {
-            profile = {
-              id: mockDb.profiles.length + 1,
-              userId: auth.userId,
-            };
-            mockDb.profiles.push(profile);
-          }
-          profile.name = providerProfile.name || name || '';
-          profile.location = providerProfile.location || '';
-          profile.experience = providerProfile.experience || 0;
-          profile.licenseType = providerProfile.licenseType || null;
-          profile.certificateUrl = providerProfile.certificateUrl || null;
-          profile.coverImageUrl = providerProfile.coverImageUrl || null;
-
-          // Replace services
-          mockDb.services = mockDb.services.filter((s) => s.profileId !== profile.id);
-          (providerProfile.services || []).forEach((s: any) => {
-            mockDb.services.push({
-              id: mockDb.services.length + 1,
-              profileId: profile.id,
-              name: s.name,
-              price: s.price,
-              category: s.category !== undefined && s.category !== null ? String(s.category) : 'General',
-            });
-          });
-
-          // Replace amenities
-          mockDb.amenities = mockDb.amenities.filter((a) => a.profileId !== profile.id);
-          (providerProfile.amenities || []).forEach((a: any) => {
-            mockDb.amenities.push({
-              id: mockDb.amenities.length + 1,
-              profileId: profile.id,
-              name: typeof a === 'string' ? a : a.name,
-              icon: typeof a === 'string' ? null : (a.icon || null),
-              type: typeof a === 'string' ? 'amenity' : (a.type !== undefined && a.type !== null ? String(a.type) : 'amenity'),
-            });
-          });
-        }
-
-        const profile = mockDb.profiles.find((p) => p.userId === user.id);
-        let providerProfileData = undefined;
-        if (profile) {
-          providerProfileData = {
-            ...profile,
-            services: mockDb.services.filter((s) => s.profileId === profile.id),
-            amenities: mockDb.amenities.filter((a) => a.profileId === profile.id),
-          };
-        }
-        return { ...user, providerProfile: providerProfileData };
-      }
-    );
-
-    return NextResponse.json(sanitizeUser(updatedUser));
-  }
 
 
 

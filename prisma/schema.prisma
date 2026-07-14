@@ -25,10 +25,14 @@ model User {
 }
 
 model ClientProfile {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  userId          Int      @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location        String?
+  profileImageUrl String?
+  latitude        Float?
+  longitude       Float?
+  createdAt       DateTime @default(now())
 
   @@map("client_profile")
 }
