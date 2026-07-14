@@ -627,12 +627,6 @@ export async function POST(
         return NextResponse.json({ message: 'Twilio gateway is not configured' }, { status: 500 });
       }
 
-      const isMockSid = cleanAccountSid === ('AC' + '3ac28e3feafb0445109b3ff4d39b903c') || cleanAccountSid === ('AC' + '2d58c785db2e9488cc5eafb445abcb49');
-      if (isMockSid) {
-        console.log(`[Twilio Forgot Password OTP Sent (MOCK)] To: ${user.phoneNumber}, Code: ${otp}`);
-        return NextResponse.json({ success: true, message: 'OTP code sent successfully via Twilio SMS (Simulated)' });
-      }
-
       // Connect to Twilio API to send the SMS
       const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${cleanAccountSid}/Messages.json`;
       const messageBody = `Your LookClean password reset verification code is: ${otp}`;
@@ -785,12 +779,6 @@ export async function POST(
 
     if (!cleanAccountSid || !cleanAuthToken || (!cleanFromNumber && !cleanMessagingServiceSid)) {
       return NextResponse.json({ message: 'Twilio gateway is not configured' }, { status: 500 });
-    }
-
-    const isMockSid = cleanAccountSid === ('AC' + '3ac28e3feafb0445109b3ff4d39b903c') || cleanAccountSid === ('AC' + '2d58c785db2e9488cc5eafb445abcb49');
-    if (isMockSid) {
-      console.log(`[Twilio OTP Sent (MOCK)] To: ${phoneNumber}, Code: ${otp}`);
-      return NextResponse.json({ success: true, message: 'SMS OTP sent successfully via Twilio! (Simulated)' });
     }
 
     // Connect to Twilio API to send the SMS
@@ -975,15 +963,6 @@ export async function POST(
         success: false,
         message: 'A test recipient phone number is required to verify the connection.'
       }, { status: 400 });
-    }
-
-    const isMockSid = cleanAccountSid === ('AC' + '3ac28e3feafb0445109b3ff4d39b903c') || cleanAccountSid === ('AC' + '2d58c785db2e9488cc5eafb445abcb49');
-    if (isMockSid) {
-      console.log(`[Twilio Verify (MOCK)] Mode: ${mode}, AccountSid: ${cleanAccountSid}`);
-      return NextResponse.json({
-        success: true,
-        message: `Successfully verified Twilio connection! Test SMS sent to ${testPhoneNumber}. (Simulated)`
-      });
     }
 
     // Connect to Twilio API to send the test SMS
