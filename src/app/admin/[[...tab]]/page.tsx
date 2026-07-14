@@ -116,7 +116,7 @@ export default function AdminPage() {
   const [newGroupIcon, setNewGroupIcon] = useState('');
   const [newGroupFirstItemTitle, setNewGroupFirstItemTitle] = useState('');
   const [newGroupFirstItemIcon, setNewGroupFirstItemIcon] = useState('');
-  
+
   // Change password state
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -406,12 +406,12 @@ export default function AdminPage() {
     e.preventDefault();
     setPasswordError('');
     setPasswordSuccess('');
-    
+
     if (!currentPassword || !newPassword || !confirmPassword) {
       setPasswordError('All password fields are required.');
       return;
     }
-    
+
     if (newPassword !== confirmPassword) {
       setPasswordError('New password and confirm password do not match.');
       return;
@@ -489,7 +489,7 @@ export default function AdminPage() {
   const handleVerifyTwilio = async (mode: 'staging' | 'live') => {
     setTwilioError('');
     setTwilioSuccess('');
-    
+
     const sid = mode === 'staging' ? stagingSid : liveSid;
     const tokenVal = mode === 'staging' ? stagingToken : liveToken;
     const phoneVal = mode === 'staging' ? stagingNumber : liveNumber;
@@ -790,7 +790,7 @@ export default function AdminPage() {
 
               {/* Flex Container for Settings Layout */}
               <div className="flex flex-col lg:flex-row gap-6 items-start">
-                
+
                 {/* Left side Sub-tabs navigation */}
                 <div className="w-full lg:w-60 flex flex-row lg:flex-col gap-1 z-10">
                   <button
@@ -862,13 +862,13 @@ export default function AdminPage() {
                       <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
                         <Lock className="w-4 h-4 text-primary" /> Admin Change Password
                       </h3>
-                      
+
                       {passwordSuccess && (
                         <div className="bg-green-500/10 border border-green-500/20 text-green-400 p-3 rounded-xl text-xs font-medium">
                           {passwordSuccess}
                         </div>
                       )}
-                      
+
                       {passwordError && (
                         <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-xs font-medium">
                           {passwordError}
@@ -909,7 +909,7 @@ export default function AdminPage() {
                           {twilioSuccess}
                         </div>
                       )}
-                      
+
                       {twilioError && (
                         <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-xs font-medium">
                           {twilioError}
@@ -1003,7 +1003,7 @@ export default function AdminPage() {
                             <Input
                               label="Recipient Phone Number (for testing)"
                               type="text"
-                              placeholder="+918320911397"
+                              placeholder="+11234567890"
                               value={testPhoneStaging}
                               onChange={(e) => setTestPhoneStaging(e.target.value)}
                             />
@@ -1065,7 +1065,7 @@ export default function AdminPage() {
                             <Input
                               label="Recipient Phone Number (for testing)"
                               type="text"
-                              placeholder="+918320911397"
+                              placeholder="+11234567890"
                               value={testPhoneLive}
                               onChange={(e) => setTestPhoneLive(e.target.value)}
                             />
@@ -1100,7 +1100,7 @@ export default function AdminPage() {
                         <Tag className="w-4 h-4 text-primary" /> Category Settings
                       </h3>
                       <p className="text-xs text-gray-400">Add or remove master categories for providers to select from.</p>
-                      
+
                       <form onSubmit={handleAddCategory} className="flex gap-3 items-end pt-2">
                         <div className="flex-1">
                           <Input
@@ -1292,7 +1292,7 @@ export default function AdminPage() {
                               <Scissors className="w-4 h-4 text-primary" /> Add Service to {activeAddServiceCategory}
                             </h3>
                             <p className="text-xs text-gray-450">Please enter a title for the new sub-service.</p>
-                            
+
                             <form onSubmit={async (e) => {
                               e.preventDefault();
                               if (!newModalServiceTitle.trim()) return;
@@ -1320,18 +1320,18 @@ export default function AdminPage() {
                               } catch (err) {
                                 console.error(err);
                               } finally {
-                                  setServicesLoading(false);
+                                setServicesLoading(false);
                               }
                             }} className="space-y-4">
                               <Input
-                                  label="Service Title"
-                                  type="text"
-                                  placeholder="e.g. Skin fade, Kids cut..."
-                                  value={newModalServiceTitle}
-                                  onChange={(e) => setNewModalServiceTitle(e.target.value)}
-                                  required
-                                />
-                              
+                                label="Service Title"
+                                type="text"
+                                placeholder="e.g. Skin fade, Kids cut..."
+                                value={newModalServiceTitle}
+                                onChange={(e) => setNewModalServiceTitle(e.target.value)}
+                                required
+                              />
+
                               <div className="flex justify-end gap-3 pt-2">
                                 <button
                                   type="button"
@@ -1350,237 +1350,237 @@ export default function AdminPage() {
                       )}
                     </Card>
                   ) : (
-                     <Card className="border border-gray-850 p-6 space-y-4">
-                       <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
-                         <Sparkles className="w-4 h-4 text-primary" /> Ambience & Amenities Settings
-                       </h3>
-                       <p className="text-xs text-gray-400">Manage master amenities and ambience configurations. Click inline buttons to add items directly to a group.</p>
+                    <Card className="border border-gray-850 p-6 space-y-4">
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-primary" /> Ambience & Amenities Settings
+                      </h3>
+                      <p className="text-xs text-gray-400">Manage master amenities and ambience configurations. Click inline buttons to add items directly to a group.</p>
 
-                       <div className="border-t border-gray-900 pt-4">
-                         {ambienceList.length === 0 ? (
-                           <div className="text-center py-6">
-                             <p className="text-xs text-gray-500 italic mb-4">No groups or items created yet.</p>
-                           </div>
-                         ) : (
-                           <div className="space-y-6">
-                             {Array.from(new Set(ambienceList.map(a => a.mainType))).map((group) => {
-                               const firstItem = ambienceList.find(a => a.mainType === group);
-                               return (
-                                 <div key={group} className="space-y-3">
-                                   <h5 className="text-[10px] font-extrabold text-purple-400 uppercase tracking-wider border-b border-gray-900 pb-2 flex items-center justify-between">
-                                     <div className="flex items-center gap-1.5">
-                                       {firstItem?.mainTypeIcon && <span>{firstItem.mainTypeIcon}</span>}
-                                       <span>{group}</span>
-                                     </div>
-                                     <button
-                                       onClick={() => {
-                                         setActiveAddItemGroup(group);
-                                         setActiveAddItemGroupIcon(firstItem?.mainTypeIcon || '');
-                                         setNewModalItemTitle('');
-                                         setNewModalItemIcon('');
-                                         setAddItemModalOpen(true);
-                                       }}
-                                       className="text-[9px] text-primary hover:text-white font-extrabold uppercase px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
-                                     >
-                                       + Add Item
-                                     </button>
-                                   </h5>
-                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                     {ambienceList.filter(a => a.mainType === group).map((item) => (
-                                       <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-900/40 border border-white/5 hover:border-primary/20 transition-all">
-                                         <span className="text-xs font-semibold text-gray-200 flex items-center gap-2">
-                                           {item.icon && <span className="text-sm">{item.icon}</span>}
-                                           <span>{item.title}</span>
-                                         </span>
-                                         <button
-                                           onClick={() => handleDeleteAmbience(item.id)}
-                                           className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase px-2 py-1 rounded hover:bg-red-500/10 cursor-pointer"
-                                         >
-                                           Delete
-                                         </button>
-                                       </div>
-                                     ))}
-                                   </div>
-                                 </div>
-                               );
-                             })}
-                           </div>
-                         )}
+                      <div className="border-t border-gray-900 pt-4">
+                        {ambienceList.length === 0 ? (
+                          <div className="text-center py-6">
+                            <p className="text-xs text-gray-500 italic mb-4">No groups or items created yet.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-6">
+                            {Array.from(new Set(ambienceList.map(a => a.mainType))).map((group) => {
+                              const firstItem = ambienceList.find(a => a.mainType === group);
+                              return (
+                                <div key={group} className="space-y-3">
+                                  <h5 className="text-[10px] font-extrabold text-purple-400 uppercase tracking-wider border-b border-gray-900 pb-2 flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5">
+                                      {firstItem?.mainTypeIcon && <span>{firstItem.mainTypeIcon}</span>}
+                                      <span>{group}</span>
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        setActiveAddItemGroup(group);
+                                        setActiveAddItemGroupIcon(firstItem?.mainTypeIcon || '');
+                                        setNewModalItemTitle('');
+                                        setNewModalItemIcon('');
+                                        setAddItemModalOpen(true);
+                                      }}
+                                      className="text-[9px] text-primary hover:text-white font-extrabold uppercase px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
+                                    >
+                                      + Add Item
+                                    </button>
+                                  </h5>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    {ambienceList.filter(a => a.mainType === group).map((item) => (
+                                      <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-900/40 border border-white/5 hover:border-primary/20 transition-all">
+                                        <span className="text-xs font-semibold text-gray-200 flex items-center gap-2">
+                                          {item.icon && <span className="text-sm">{item.icon}</span>}
+                                          <span>{item.title}</span>
+                                        </span>
+                                        <button
+                                          onClick={() => handleDeleteAmbience(item.id)}
+                                          className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase px-2 py-1 rounded hover:bg-red-500/10 cursor-pointer"
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
 
-                         <div className="pt-6 border-t border-gray-900 mt-6">
-                           {isAddingNewGroup ? (
-                             <div className="p-4 rounded-xl border border-dashed border-primary/30 bg-primary/5 space-y-4">
-                               <h5 className="text-[10px] font-extrabold text-primary uppercase tracking-wider">Create New Ambience Group</h5>
-                               <form onSubmit={async (e) => {
-                                 e.preventDefault();
-                                 if (!newGroupTitle.trim() || !newGroupFirstItemTitle.trim()) return;
-                                 setAmbienceLoading(true);
-                                 try {
-                                   const res = await fetch('/api/admin/settings/ambience', {
-                                     method: 'POST',
-                                     headers: {
-                                       'Content-Type': 'application/json',
-                                       Authorization: `Bearer ${token}`,
-                                     },
-                                     body: JSON.stringify({
-                                       mainType: newGroupTitle,
-                                       mainTypeIcon: newGroupIcon,
-                                       title: newGroupFirstItemTitle,
-                                       icon: newGroupFirstItemIcon
-                                     }),
-                                   });
-                                   if (res.ok) {
-                                     setIsAddingNewGroup(false);
-                                     setNewGroupTitle('');
-                                     setNewGroupIcon('');
-                                     setNewGroupFirstItemTitle('');
-                                     setNewGroupFirstItemIcon('');
-                                     fetchAmbience();
-                                   } else {
-                                     const data = await res.json();
-                                     alert(data.message || 'Failed to create group');
-                                   }
-                                 } catch (err) {
-                                   console.error(err);
-                                 } finally {
-                                   setAmbienceLoading(false);
-                                 }
-                               }} className="space-y-4">
-                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                   <Input
-                                     label="Group Title"
-                                     type="text"
-                                     placeholder="e.g. Convenience & Refreshments"
-                                     value={newGroupTitle}
-                                     onChange={(e) => setNewGroupTitle(e.target.value)}
-                                     required
-                                   />
-                                   <Input
-                                     label="Group Icon (Emoji)"
-                                     type="text"
-                                     placeholder="e.g. ☕"
-                                     value={newGroupIcon}
-                                     onChange={(e) => setNewGroupIcon(e.target.value)}
-                                   />
-                                 </div>
-                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                   <Input
-                                     label="First Item Title"
-                                     type="text"
-                                     placeholder="e.g. Complimentary beverages"
-                                     value={newGroupFirstItemTitle}
-                                     onChange={(e) => setNewGroupFirstItemTitle(e.target.value)}
-                                     required
-                                   />
-                                   <Input
-                                     label="First Item Icon (Emoji)"
-                                     type="text"
-                                     placeholder="e.g. ☕"
-                                     value={newGroupFirstItemIcon}
-                                     onChange={(e) => setNewGroupFirstItemIcon(e.target.value)}
-                                   />
-                                 </div>
-                                 <div className="flex justify-end gap-3 pt-2">
-                                   <button
-                                     type="button"
-                                     onClick={() => setIsAddingNewGroup(false)}
-                                     className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
-                                   >
-                                     Cancel
-                                   </button>
-                                   <Button type="submit" isLoading={ambienceLoading} className="px-5 py-2">
-                                     Create Group
-                                   </Button>
-                                 </div>
-                               </form>
-                             </div>
-                           ) : (
-                             <button
-                               onClick={() => setIsAddingNewGroup(true)}
-                               className="w-full p-4 rounded-xl border border-dashed border-gray-800 hover:border-primary/40 text-xs font-semibold text-gray-400 hover:text-white text-center cursor-pointer transition-all flex items-center justify-center gap-2 hover:bg-white/5"
-                             >
-                               <Sparkles className="w-4 h-4 text-gray-500" />
-                               <span>+ Add New Ambience & Amenities Group</span>
-                             </button>
-                           )}
-                         </div>
-                       </div>
+                        <div className="pt-6 border-t border-gray-900 mt-6">
+                          {isAddingNewGroup ? (
+                            <div className="p-4 rounded-xl border border-dashed border-primary/30 bg-primary/5 space-y-4">
+                              <h5 className="text-[10px] font-extrabold text-primary uppercase tracking-wider">Create New Ambience Group</h5>
+                              <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                if (!newGroupTitle.trim() || !newGroupFirstItemTitle.trim()) return;
+                                setAmbienceLoading(true);
+                                try {
+                                  const res = await fetch('/api/admin/settings/ambience', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      Authorization: `Bearer ${token}`,
+                                    },
+                                    body: JSON.stringify({
+                                      mainType: newGroupTitle,
+                                      mainTypeIcon: newGroupIcon,
+                                      title: newGroupFirstItemTitle,
+                                      icon: newGroupFirstItemIcon
+                                    }),
+                                  });
+                                  if (res.ok) {
+                                    setIsAddingNewGroup(false);
+                                    setNewGroupTitle('');
+                                    setNewGroupIcon('');
+                                    setNewGroupFirstItemTitle('');
+                                    setNewGroupFirstItemIcon('');
+                                    fetchAmbience();
+                                  } else {
+                                    const data = await res.json();
+                                    alert(data.message || 'Failed to create group');
+                                  }
+                                } catch (err) {
+                                  console.error(err);
+                                } finally {
+                                  setAmbienceLoading(false);
+                                }
+                              }} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <Input
+                                    label="Group Title"
+                                    type="text"
+                                    placeholder="e.g. Convenience & Refreshments"
+                                    value={newGroupTitle}
+                                    onChange={(e) => setNewGroupTitle(e.target.value)}
+                                    required
+                                  />
+                                  <Input
+                                    label="Group Icon (Emoji)"
+                                    type="text"
+                                    placeholder="e.g. ☕"
+                                    value={newGroupIcon}
+                                    onChange={(e) => setNewGroupIcon(e.target.value)}
+                                  />
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <Input
+                                    label="First Item Title"
+                                    type="text"
+                                    placeholder="e.g. Complimentary beverages"
+                                    value={newGroupFirstItemTitle}
+                                    onChange={(e) => setNewGroupFirstItemTitle(e.target.value)}
+                                    required
+                                  />
+                                  <Input
+                                    label="First Item Icon (Emoji)"
+                                    type="text"
+                                    placeholder="e.g. ☕"
+                                    value={newGroupFirstItemIcon}
+                                    onChange={(e) => setNewGroupFirstItemIcon(e.target.value)}
+                                  />
+                                </div>
+                                <div className="flex justify-end gap-3 pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsAddingNewGroup(false)}
+                                    className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <Button type="submit" isLoading={ambienceLoading} className="px-5 py-2">
+                                    Create Group
+                                  </Button>
+                                </div>
+                              </form>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setIsAddingNewGroup(true)}
+                              className="w-full p-4 rounded-xl border border-dashed border-gray-800 hover:border-primary/40 text-xs font-semibold text-gray-400 hover:text-white text-center cursor-pointer transition-all flex items-center justify-center gap-2 hover:bg-white/5"
+                            >
+                              <Sparkles className="w-4 h-4 text-gray-500" />
+                              <span>+ Add New Ambience & Amenities Group</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
 
-                       {/* Add Item Modal Overlay */}
-                       {addItemModalOpen && (
-                         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                           <Card className="border border-gray-850 p-6 space-y-4 max-w-md w-full bg-gray-950 shadow-2xl">
-                             <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
-                               <Sparkles className="w-4 h-4 text-primary" /> Add Item to {activeAddItemGroup}
-                             </h3>
-                             <p className="text-xs text-gray-450">Please enter a title and select/type an emoji icon for the new option.</p>
-                             
-                             <form onSubmit={async (e) => {
-                               e.preventDefault();
-                               if (!newModalItemTitle.trim()) return;
-                               setAmbienceLoading(true);
-                               try {
-                                 const res = await fetch('/api/admin/settings/ambience', {
-                                   method: 'POST',
-                                   headers: {
-                                     'Content-Type': 'application/json',
-                                     Authorization: `Bearer ${token}`,
-                                   },
-                                   body: JSON.stringify({
-                                     mainType: activeAddItemGroup,
-                                     mainTypeIcon: activeAddItemGroupIcon,
-                                     title: newModalItemTitle,
-                                     icon: newModalItemIcon
-                                   }),
-                                 });
-                                 if (res.ok) {
-                                   setAddItemModalOpen(false);
-                                   setNewModalItemTitle('');
-                                   setNewModalItemIcon('');
-                                   fetchAmbience();
-                                 } else {
-                                   const data = await res.json();
-                                   alert(data.message || 'Failed to add ambience item');
-                                 }
-                               } catch (err) {
-                                 console.error(err);
-                               } finally {
-                                 setAmbienceLoading(false);
-                               }
-                             }} className="space-y-4">
-                               <Input
-                                 label="Item Title"
-                                 type="text"
-                                 placeholder="e.g. Aromatherapy, Free Wi-Fi..."
-                                 value={newModalItemTitle}
-                                 onChange={(e) => setNewModalItemTitle(e.target.value)}
-                                 required
-                               />
-                               <Input
-                                 label="Item Icon Emoji"
-                                 type="text"
-                                 placeholder="e.g. 🕯️, 📶"
-                                 value={newModalItemIcon}
-                                 onChange={(e) => setNewModalItemIcon(e.target.value)}
-                               />
-                               
-                               <div className="flex justify-end gap-3 pt-2">
-                                 <button
-                                   type="button"
-                                   onClick={() => setAddItemModalOpen(false)}
-                                   className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
-                                 >
-                                   Cancel
-                                 </button>
-                                 <Button type="submit" isLoading={ambienceLoading} className="px-5 py-2">
-                                   Add Item
-                                 </Button>
-                               </div>
-                             </form>
-                           </Card>
-                         </div>
-                       )}
-                     </Card>
+                      {/* Add Item Modal Overlay */}
+                      {addItemModalOpen && (
+                        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                          <Card className="border border-gray-850 p-6 space-y-4 max-w-md w-full bg-gray-950 shadow-2xl">
+                            <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                              <Sparkles className="w-4 h-4 text-primary" /> Add Item to {activeAddItemGroup}
+                            </h3>
+                            <p className="text-xs text-gray-450">Please enter a title and select/type an emoji icon for the new option.</p>
+
+                            <form onSubmit={async (e) => {
+                              e.preventDefault();
+                              if (!newModalItemTitle.trim()) return;
+                              setAmbienceLoading(true);
+                              try {
+                                const res = await fetch('/api/admin/settings/ambience', {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    Authorization: `Bearer ${token}`,
+                                  },
+                                  body: JSON.stringify({
+                                    mainType: activeAddItemGroup,
+                                    mainTypeIcon: activeAddItemGroupIcon,
+                                    title: newModalItemTitle,
+                                    icon: newModalItemIcon
+                                  }),
+                                });
+                                if (res.ok) {
+                                  setAddItemModalOpen(false);
+                                  setNewModalItemTitle('');
+                                  setNewModalItemIcon('');
+                                  fetchAmbience();
+                                } else {
+                                  const data = await res.json();
+                                  alert(data.message || 'Failed to add ambience item');
+                                }
+                              } catch (err) {
+                                console.error(err);
+                              } finally {
+                                setAmbienceLoading(false);
+                              }
+                            }} className="space-y-4">
+                              <Input
+                                label="Item Title"
+                                type="text"
+                                placeholder="e.g. Aromatherapy, Free Wi-Fi..."
+                                value={newModalItemTitle}
+                                onChange={(e) => setNewModalItemTitle(e.target.value)}
+                                required
+                              />
+                              <Input
+                                label="Item Icon Emoji"
+                                type="text"
+                                placeholder="e.g. 🕯️, 📶"
+                                value={newModalItemIcon}
+                                onChange={(e) => setNewModalItemIcon(e.target.value)}
+                              />
+
+                              <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setAddItemModalOpen(false)}
+                                  className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <Button type="submit" isLoading={ambienceLoading} className="px-5 py-2">
+                                  Add Item
+                                </Button>
+                              </div>
+                            </form>
+                          </Card>
+                        </div>
+                      )}
+                    </Card>
                   )}
                 </div>
               </div>

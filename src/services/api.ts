@@ -270,7 +270,17 @@ export const usersApi = {
   getMe: async () => {
     if (useMock) return mockApi.getMe();
     try {
-      const response = await apiClient.get('/users/me');
+      let role = '';
+      if (typeof window !== 'undefined') {
+        const storedUser = localStorage.getItem('lc_user');
+        if (storedUser) {
+          try {
+            role = JSON.parse(storedUser).role;
+          } catch {}
+        }
+      }
+      const endpoint = role === 'provider' ? '/providers/me' : '/clients/me';
+      const response = await apiClient.get(endpoint);
       return response.data;
     } catch {
       return mockApi.getMe();
@@ -280,7 +290,17 @@ export const usersApi = {
   updateProfile: async (profileData: ProfileData) => {
     if (useMock) return mockApi.updateProfile(profileData);
     try {
-      const response = await apiClient.put('/users/profile', profileData);
+      let role = profileData.role;
+      if (!role && typeof window !== 'undefined') {
+        const storedUser = localStorage.getItem('lc_user');
+        if (storedUser) {
+          try {
+            role = JSON.parse(storedUser).role;
+          } catch {}
+        }
+      }
+      const endpoint = role === 'provider' ? '/providers/profile' : '/clients/profile';
+      const response = await apiClient.put(endpoint, profileData);
       return response.data;
     } catch {
       return mockApi.updateProfile(profileData);

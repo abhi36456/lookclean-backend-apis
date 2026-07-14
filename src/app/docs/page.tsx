@@ -18,7 +18,9 @@ const openApiSpec = {
   ],
   tags: [
     { name: 'Authenticate', description: 'Consolidated login, registration, and role selection APIs' },
-    { name: 'User Profile & Verification', description: 'User profile management and phone OTP verification' },
+    { name: 'Client Profile', description: 'Client profile details and settings' },
+    { name: 'Provider Profile', description: 'Provider profile details and settings' },
+    { name: 'Verification', description: 'Phone OTP verification APIs' },
     { name: 'Provider Onboarding Flow', description: 'Step-by-step onboarding APIs (Steps 1 to 5) for service providers' },
   ],
   components: {
@@ -185,11 +187,11 @@ const openApiSpec = {
         },
       },
     },
-    '/users/me': {
+    '/clients/me': {
       get: {
-        tags: ['User Profile & Verification'],
+        tags: ['Client Profile'],
         summary: 'Get current user profile details',
-        description: 'Returns profile details based on authenticated Bearer token.',
+        description: 'Returns profile details based on authenticated Bearer token. Accessible only for clients.',
         responses: {
           200: {
             description: 'Profile data loaded successfully',
@@ -202,14 +204,17 @@ const openApiSpec = {
           401: {
             description: 'Missing or expired token header',
           },
+          403: {
+            description: 'Forbidden: Requires client role',
+          },
         },
       },
     },
-    '/users/profile': {
+    '/clients/profile': {
       put: {
-        tags: ['User Profile & Verification'],
+        tags: ['Client Profile'],
         summary: 'Update User Profile Settings',
-        description: 'Sets role, type, and detailed provider profile configuration.',
+        description: 'Update client profile details. Accessible only for clients.',
         requestBody: {
           required: true,
           content: {
@@ -217,8 +222,62 @@ const openApiSpec = {
               schema: {
                 type: 'object',
                 properties: {
-                  role: { type: 'string', enum: ['client', 'provider'] },
-                  providerType: { type: 'string', enum: ['freelancer', 'salon'] },
+                  name: { type: 'string', example: 'Sarah Connor' },
+                  onboardingCompleted: { type: 'boolean' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Profile saved successfully',
+          },
+          401: {
+            description: 'Unauthorized access',
+          },
+          403: {
+            description: 'Forbidden: Requires client role',
+          },
+        },
+      },
+    },
+    '/providers/me': {
+      get: {
+        tags: ['Provider Profile'],
+        summary: 'Get current provider profile details',
+        description: 'Returns provider profile details based on authenticated Bearer token. Accessible only for providers.',
+        responses: {
+          200: {
+            description: 'Profile data loaded successfully',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/User' },
+              },
+            },
+          },
+          401: {
+            description: 'Missing or expired token header',
+          },
+          403: {
+            description: 'Forbidden: Requires provider role',
+          },
+        },
+      },
+    },
+    '/providers/profile': {
+      put: {
+        tags: ['Provider Profile'],
+        summary: 'Update Provider Profile Settings',
+        description: 'Sets location, services, amenities, experience and license configuration. Accessible only for providers.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string', example: 'Glamour Cuts' },
                   onboardingCompleted: { type: 'boolean' },
                   providerProfile: {
                     type: 'object',
@@ -252,12 +311,15 @@ const openApiSpec = {
           401: {
             description: 'Unauthorized access',
           },
+          403: {
+            description: 'Forbidden: Requires provider role',
+          },
         },
       },
     },
     '/users/verify/mobile/send': {
       post: {
-        tags: ['User Profile & Verification'],
+        tags: ['Verification'],
         summary: 'Send Mobile SMS Verification',
         description: 'Sends dynamic OTP verification SMS code via Twilio.',
         requestBody: {
@@ -283,7 +345,7 @@ const openApiSpec = {
     },
     '/users/verify/mobile': {
       post: {
-        tags: ['User Profile & Verification'],
+        tags: ['Verification'],
         summary: 'Verify Mobile SMS OTP',
         description: 'Verify phone using OTP code (Use: 1234 or 123456 or dynamic code).',
         requestBody: {
