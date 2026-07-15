@@ -76,7 +76,7 @@ model ProviderAmenity {
   profile     ProviderProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   name        String
   type        String?         @default("amenity") // "amenity" or "ambience"
-  icon        String?         @db.VarChar(10)
+  icon        String?         @db.VarChar(255)
   createdAt   DateTime        @default(now())
 
   @@map("provider_amenity")
@@ -112,7 +112,6 @@ model ServiceSetting {
 model AmbienceGroupSetting {
   id        Int               @id @default(autoincrement())
   title     String            @unique @db.VarChar(100)
-  icon      String?           @db.VarChar(10)
   items     AmbienceSetting[]
   createdAt DateTime          @default(now())
 
@@ -124,7 +123,7 @@ model AmbienceSetting {
   ambienceGroupId Int
   ambienceGroup   AmbienceGroupSetting @relation(fields: [ambienceGroupId], references: [id], onDelete: Cascade)
   title           String               @db.VarChar(100)
-  icon            String?              @db.VarChar(10)
+  icon            String?              @db.VarChar(255)
   createdAt       DateTime             @default(now())
 
   @@unique([ambienceGroupId, title])

@@ -345,15 +345,15 @@ const openApiSpec = {
         requestBody: {
           required: true,
           content: {
-            'application/json': {
+            'multipart/form-data': {
               schema: {
                 type: 'object',
                 required: ['name', 'location'],
                 properties: {
                   name: { type: 'string', example: 'Glamour Cuts' },
                   location: { type: 'string', example: 'Los Angeles, CA' },
-                  coverImageUrl: { type: 'string', example: 'https://...' },
-                  profileImageUrl: { type: 'string', example: 'https://...' },
+                  profileImage: { type: 'string', format: 'binary', description: 'Profile image file (PNG/JPG)' },
+                  coverImage: { type: 'string', format: 'binary', description: 'Cover image file (PNG/JPG)' },
                   latitude: { type: 'number', example: 34.0522 },
                   longitude: { type: 'number', example: -118.2437 },
                 },
@@ -472,12 +472,15 @@ const openApiSpec = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['ambience_id'],
+                required: ['ambienceIds'],
                 properties: {
-                  ambience_id: {
-                    type: 'string',
-                    example: '1,2,3',
-                    description: 'Comma-separated string of Ambience Setting IDs or an array of IDs',
+                  ambienceIds: {
+                    type: 'array',
+                    items: {
+                      type: 'integer'
+                    },
+                    example: [1, 2, 3],
+                    description: 'Array of Ambience Setting IDs',
                   },
                 },
               },

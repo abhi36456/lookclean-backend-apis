@@ -23,6 +23,7 @@ interface UserData {
   providerProfile?: {
     name: string;
     location: string;
+    profileImageUrl?: string | null;
     experience: number;
     licenseType?: string;
     certificateUrl?: string;
@@ -30,6 +31,12 @@ interface UserData {
     services?: { name: string; price: number; category: string }[];
     amenities?: { name: string }[];
   };
+  clientProfile?: {
+    location?: string | null;
+    profileImageUrl?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  } | null;
 }
 
 export default function AdminPage() {
@@ -108,14 +115,13 @@ export default function AdminPage() {
   const [activeAddItemGroup, setActiveAddItemGroup] = useState('');
   const [activeAddItemGroupIcon, setActiveAddItemGroupIcon] = useState('');
   const [newModalItemTitle, setNewModalItemTitle] = useState('');
-  const [newModalItemIcon, setNewModalItemIcon] = useState('');
+  const [newModalItemSvg, setNewModalItemSvg] = useState<File | null>(null);
 
   // Add New Group state
   const [isAddingNewGroup, setIsAddingNewGroup] = useState(false);
   const [newGroupTitle, setNewGroupTitle] = useState('');
-  const [newGroupIcon, setNewGroupIcon] = useState('');
   const [newGroupFirstItemTitle, setNewGroupFirstItemTitle] = useState('');
-  const [newGroupFirstItemIcon, setNewGroupFirstItemIcon] = useState('');
+  const [newGroupCsv, setNewGroupCsv] = useState<File | null>(null);
 
   // Change password state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -1377,7 +1383,7 @@ export default function AdminPage() {
                                         setActiveAddItemGroup(group);
                                         setActiveAddItemGroupIcon(firstItem?.mainTypeIcon || '');
                                         setNewModalItemTitle('');
-                                        setNewModalItemIcon('');
+                                        setNewModalItemSvg(null);
                                         setAddItemModalOpen(true);
                                       }}
                                       className="text-[9px] text-primary hover:text-white font-extrabold uppercase px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
@@ -1389,7 +1395,13 @@ export default function AdminPage() {
                                     {ambienceList.filter(a => a.mainType === group).map((item) => (
                                       <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-900/40 border border-white/5 hover:border-primary/20 transition-all">
                                         <span className="text-xs font-semibold text-gray-200 flex items-center gap-2">
-                                          {item.icon && <span className="text-sm">{item.icon}</span>}
+                                          {item.icon && (
+                                            item.icon.startsWith('http') || item.icon.startsWith('/') ? (
+                                              <img src={item.icon} alt={item.title} className="w-4 h-4 object-contain shrink-0" />
+                                            ) : (
+                                              <span className="text-sm">{item.icon}</span>
+                                            )
+                                          )}
                                           <span>{item.title}</span>
                                         </span>
                                         <button
@@ -1413,28 +1425,34 @@ export default function AdminPage() {
                               <h5 className="text-[10px] font-extrabold text-primary uppercase tracking-wider">Create New Ambience Group</h5>
                               <form onSubmit={async (e) => {
                                 e.preventDefault();
-                                if (!newGroupTitle.trim() || !newGroupFirstItemTitle.trim()) return;
+                                if (!newGroupTitle.trim()) return;
+                                if (!newGroupFirstItemTitle.trim() && !newGroupCsv) {
+                                  alert('Please enter a First Item Title or upload a CSV file with items.');
+                                  return;
+                                }
                                 setAmbienceLoading(true);
                                 try {
+                                  const fd = new FormData();
+                                  fd.append('mainType', newGroupTitle);
+                                  if (newGroupFirstItemTitle.trim()) {
+                                    fd.append('title', newGroupFirstItemTitle);
+                                  }
+                                  if (newGroupCsv) {
+                                    fd.append('csvFile', newGroupCsv);
+                                  }
+
                                   const res = await fetch('/api/admin/settings/ambience', {
                                     method: 'POST',
                                     headers: {
-                                      'Content-Type': 'application/json',
                                       Authorization: `Bearer ${token}`,
                                     },
-                                    body: JSON.stringify({
-                                      mainType: newGroupTitle,
-                                      mainTypeIcon: newGroupIcon,
-                                      title: newGroupFirstItemTitle,
-                                      icon: newGroupFirstItemIcon
-                                    }),
+                                    body: fd,
                                   });
                                   if (res.ok) {
                                     setIsAddingNewGroup(false);
                                     setNewGroupTitle('');
-                                    setNewGroupIcon('');
                                     setNewGroupFirstItemTitle('');
-                                    setNewGroupFirstItemIcon('');
+                                    setNewGroupCsv(null);
                                     fetchAmbience();
                                   } else {
                                     const data = await res.json();
@@ -1446,7 +1464,7 @@ export default function AdminPage() {
                                   setAmbienceLoading(false);
                                 }
                               }} className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4">
                                   <Input
                                     label="Group Title"
                                     type="text"
@@ -1455,35 +1473,35 @@ export default function AdminPage() {
                                     onChange={(e) => setNewGroupTitle(e.target.value)}
                                     required
                                   />
-                                  <Input
-                                    label="Group Icon (Emoji)"
-                                    type="text"
-                                    placeholder="e.g. ☕"
-                                    value={newGroupIcon}
-                                    onChange={(e) => setNewGroupIcon(e.target.value)}
-                                  />
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                                   <Input
-                                    label="First Item Title"
+                                    label="First Item Title (Optional)"
                                     type="text"
                                     placeholder="e.g. Complimentary beverages"
                                     value={newGroupFirstItemTitle}
                                     onChange={(e) => setNewGroupFirstItemTitle(e.target.value)}
-                                    required
                                   />
-                                  <Input
-                                    label="First Item Icon (Emoji)"
-                                    type="text"
-                                    placeholder="e.g. ☕"
-                                    value={newGroupFirstItemIcon}
-                                    onChange={(e) => setNewGroupFirstItemIcon(e.target.value)}
-                                  />
+                                  <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Or Upload Items CSV File</label>
+                                    <input
+                                      type="file"
+                                      accept=".csv"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0] || null;
+                                        setNewGroupCsv(file);
+                                      }}
+                                      className="w-full text-xs text-gray-400 bg-gray-900 border border-gray-800 rounded-xl p-2.5 hover:border-primary/40 focus:border-primary transition-all focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-primary/20 file:text-primary file:cursor-pointer hover:file:bg-primary/30"
+                                    />
+                                  </div>
                                 </div>
                                 <div className="flex justify-end gap-3 pt-2">
                                   <button
                                     type="button"
-                                    onClick={() => setIsAddingNewGroup(false)}
+                                    onClick={() => {
+                                      setIsAddingNewGroup(false);
+                                      setNewGroupCsv(null);
+                                    }}
                                     className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
                                   >
                                     Cancel
@@ -1496,7 +1514,12 @@ export default function AdminPage() {
                             </div>
                           ) : (
                             <button
-                              onClick={() => setIsAddingNewGroup(true)}
+                              onClick={() => {
+                                setNewGroupTitle('');
+                                setNewGroupFirstItemTitle('');
+                                setNewGroupCsv(null);
+                                setIsAddingNewGroup(true);
+                              }}
                               className="w-full p-4 rounded-xl border border-dashed border-gray-800 hover:border-primary/40 text-xs font-semibold text-gray-400 hover:text-white text-center cursor-pointer transition-all flex items-center justify-center gap-2 hover:bg-white/5"
                             >
                               <Sparkles className="w-4 h-4 text-gray-500" />
@@ -1520,23 +1543,25 @@ export default function AdminPage() {
                               if (!newModalItemTitle.trim()) return;
                               setAmbienceLoading(true);
                               try {
+                                const fd = new FormData();
+                                fd.append('mainType', activeAddItemGroup || '');
+                                fd.append('mainTypeIcon', activeAddItemGroupIcon || '');
+                                fd.append('title', newModalItemTitle);
+                                if (newModalItemSvg) {
+                                  fd.append('svgFile', newModalItemSvg);
+                                }
+
                                 const res = await fetch('/api/admin/settings/ambience', {
                                   method: 'POST',
                                   headers: {
-                                    'Content-Type': 'application/json',
                                     Authorization: `Bearer ${token}`,
                                   },
-                                  body: JSON.stringify({
-                                    mainType: activeAddItemGroup,
-                                    mainTypeIcon: activeAddItemGroupIcon,
-                                    title: newModalItemTitle,
-                                    icon: newModalItemIcon
-                                  }),
+                                  body: fd,
                                 });
                                 if (res.ok) {
                                   setAddItemModalOpen(false);
                                   setNewModalItemTitle('');
-                                  setNewModalItemIcon('');
+                                  setNewModalItemSvg(null);
                                   fetchAmbience();
                                 } else {
                                   const data = await res.json();
@@ -1556,18 +1581,27 @@ export default function AdminPage() {
                                 onChange={(e) => setNewModalItemTitle(e.target.value)}
                                 required
                               />
-                              <Input
-                                label="Item Icon Emoji"
-                                type="text"
-                                placeholder="e.g. 🕯️, 📶"
-                                value={newModalItemIcon}
-                                onChange={(e) => setNewModalItemIcon(e.target.value)}
-                              />
+
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Or Upload SVG Icon File</label>
+                                <input
+                                  type="file"
+                                  accept=".svg"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0] || null;
+                                    setNewModalItemSvg(file);
+                                  }}
+                                  className="w-full text-xs text-gray-400 bg-gray-900 border border-gray-800 rounded-xl p-2.5 hover:border-primary/40 focus:border-primary transition-all focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-primary/20 file:text-primary file:cursor-pointer hover:file:bg-primary/30"
+                                />
+                              </div>
 
                               <div className="flex justify-end gap-3 pt-2">
                                 <button
                                   type="button"
-                                  onClick={() => setAddItemModalOpen(false)}
+                                  onClick={() => {
+                                    setAddItemModalOpen(false);
+                                    setNewModalItemSvg(null);
+                                  }}
                                   className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
                                 >
                                   Cancel
@@ -1632,6 +1666,7 @@ export default function AdminPage() {
                     <table className="w-full text-left text-sm border-collapse">
                       <thead>
                         <tr className="border-b border-gray-850 bg-gray-950/40 text-gray-400 font-bold uppercase tracking-wider text-xs">
+                          <th className="p-4 w-12 text-center">Photo</th>
                           <th className="p-4">Name</th>
                           <th className="p-4">Email</th>
                           <th className="p-4">Role</th>
@@ -1642,6 +1677,27 @@ export default function AdminPage() {
                       <tbody className="divide-y divide-gray-850">
                         {filteredUsers.map((user) => (
                           <tr key={user.id} className="hover:bg-gray-900/20 transition-all">
+                            <td className="p-4 w-12 text-center">
+                              <div className="w-9 h-9 rounded-xl border border-gray-850 bg-gray-900/60 flex items-center justify-center overflow-hidden mx-auto shrink-0">
+                                {user.role === 'provider' && user.providerProfile?.profileImageUrl ? (
+                                  <img
+                                    src={user.providerProfile.profileImageUrl}
+                                    alt={user.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : user.role === 'client' && user.clientProfile?.profileImageUrl ? (
+                                  <img
+                                    src={user.clientProfile.profileImageUrl}
+                                    alt={user.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <span className="text-xs font-bold text-primary uppercase">
+                                    {(user.name || user.email || '?').charAt(0).toUpperCase()}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             <td className="p-4 font-bold text-white">{user.name || 'Unnamed User'}</td>
                             <td className="p-4 text-gray-300">{user.email}</td>
                             <td className="p-4">
@@ -1764,9 +1820,30 @@ export default function AdminPage() {
                           <Clock className="w-4 h-4 text-amber-500" />
                           <span>{selectedUser.providerProfile?.experience || 0} years experience</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Award className="w-4 h-4 text-purple-500" />
-                          <span>License: {selectedUser.providerProfile?.licenseType || 'N/A'}</span>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Award className="w-4 h-4 text-purple-500" />
+                            <span>License: {selectedUser.providerProfile?.licenseType || 'N/A'}</span>
+                          </div>
+                          {selectedUser.providerProfile?.certificateUrl && (
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={selectedUser.providerProfile.certificateUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[10px] text-primary hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
+                              >
+                                View
+                              </a>
+                              <a
+                                href={selectedUser.providerProfile.certificateUrl}
+                                download
+                                className="text-[10px] text-gray-400 hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-gray-850 border border-gray-800 hover:bg-gray-750 transition-all cursor-pointer"
+                              >
+                                Download
+                              </a>
+                            </div>
+                          )}
                         </div>
                       </div>
 

@@ -125,17 +125,117 @@ function verifyResetToken(token: string) {
   }
 }
 
-function getAuthenticatedUser(request: Request) {
+async function getAuthenticatedUser(request: Request) {
   const authHeader = request.headers.get('Authorization') || request.headers.get('authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
   const token = authHeader.substring(7);
-  return verifyToken(token);
+  const payload = verifyToken(token);
+  if (!payload) return null;
+
+  try {
+    const user = await executeWithDbFallback(
+      async () => {
+        return await prisma.user.findUnique({
+          where: { id: payload.userId },
+        });
+      },
+      async () => {
+        return mockDb.users.find((u) => u.id === payload.userId) || null;
+      }
+    );
+    if (user) {
+      payload.role = user.role;
+    }
+  } catch (err) {
+    console.warn('[getAuthenticatedUser] Error fetching user role from database', err);
+  }
+
+  return payload;
 }
 
-function sanitizeUser(user: unknown) {
+function parseCsv(csvText: string): { title: string; icon?: string }[] {
+  const lines = csvText.split(/\r?\n/);
+  if (lines.length === 0) return [];
+  
+  const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
+  const titleIndex = headers.indexOf('title');
+  const iconIndex = headers.indexOf('icon');
+  
+  if (titleIndex === -1) {
+    throw new Error('CSV must contain a "title" column');
+  }
+
+  const results: { title: string; icon?: string }[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    const cols: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        cols.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    cols.push(current.trim());
+
+    const title = cols[titleIndex];
+    const icon = iconIndex !== -1 ? cols[iconIndex] : undefined;
+    if (title) {
+      results.push({
+        title: title.replace(/^"|"$/g, '').trim(),
+        icon: icon ? icon.replace(/^"|"$/g, '').trim() : undefined
+      });
+    }
+  }
+  return results;
+}
+
+function sanitizeUser(user: unknown, request?: any) {
   if (!user) return null;
-  const plainUser = JSON.parse(JSON.stringify(user)) as Record<string, unknown>;
+  const plainUser = JSON.parse(JSON.stringify(user)) as Record<string, any>;
   delete plainUser.password;
+
+  let baseUrl = '';
+  if (request && typeof request === 'object' && 'url' in request) {
+    try {
+      const url = new URL(request.url);
+      baseUrl = `${url.protocol}//${url.host}`;
+    } catch {
+      // Ignore
+    }
+  }
+
+  if (baseUrl) {
+    if (plainUser.clientProfile && typeof plainUser.clientProfile === 'object') {
+      const img = plainUser.clientProfile.profileImageUrl;
+      if (img && img.startsWith('/')) {
+        plainUser.clientProfile.profileImageUrl = `${baseUrl}${img}`;
+      }
+    }
+    if (plainUser.providerProfile && typeof plainUser.providerProfile === 'object') {
+      const img = plainUser.providerProfile.profileImageUrl;
+      if (img && img.startsWith('/')) {
+        plainUser.providerProfile.profileImageUrl = `${baseUrl}${img}`;
+      }
+      const cover = plainUser.providerProfile.coverImageUrl;
+      if (cover && cover.startsWith('/')) {
+        plainUser.providerProfile.coverImageUrl = `${baseUrl}${cover}`;
+      }
+      const cert = plainUser.providerProfile.certificateUrl;
+      if (cert && cert.startsWith('/')) {
+        plainUser.providerProfile.certificateUrl = `${baseUrl}${cert}`;
+      }
+    }
+  }
+
   return plainUser;
 }
 
@@ -150,7 +250,7 @@ export async function GET(
 
   // 1. Fetch client profile (/api/clients/me)
   if (path === 'clients/me') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
@@ -177,12 +277,12 @@ export async function GET(
     if (!userData) {
       return NextResponse.json({ message: 'User not found' }, { status: 404 });
     }
-    return NextResponse.json(sanitizeUser(userData));
+    return NextResponse.json(sanitizeUser(userData, request));
   }
 
   // 1b. Fetch provider profile (/api/providers/me)
   if (path === 'providers/me') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
@@ -220,12 +320,12 @@ export async function GET(
     if (!userData) {
       return NextResponse.json({ message: 'User not found' }, { status: 404 });
     }
-    return NextResponse.json(sanitizeUser(userData));
+    return NextResponse.json(sanitizeUser(userData, request));
   }
 
   // Twilio settings (/api/admin/settings/twilio)
   if (path === 'admin/settings/twilio') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
@@ -255,7 +355,7 @@ export async function GET(
 
   // 3. Admin user list (/api/admin/users)
   if (path === 'admin/users') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
@@ -267,6 +367,7 @@ export async function GET(
             providerProfile: {
               include: { services: true, amenities: true },
             },
+            clientProfile: true,
           },
         });
       },
@@ -274,25 +375,32 @@ export async function GET(
         return mockDb.users.map((user) => {
           const profile = mockDb.profiles.find((p) => p.userId === user.id);
           let providerProfile = undefined;
+          let clientProfile = undefined;
           if (profile) {
-            providerProfile = {
-              ...profile,
-              services: mockDb.services.filter((s) => s.profileId === profile.id),
-              amenities: mockDb.amenities.filter((a) => a.profileId === profile.id),
-            };
+            if (user.role === 'provider') {
+              providerProfile = {
+                ...profile,
+                services: mockDb.services.filter((s) => s.profileId === profile.id),
+                amenities: mockDb.amenities.filter((a) => a.profileId === profile.id),
+              };
+            } else if (user.role === 'client') {
+              clientProfile = {
+                ...profile,
+              };
+            }
           }
-          return { ...user, providerProfile };
+          return { ...user, providerProfile, clientProfile };
         });
       }
     );
 
-    const sanitizedUsers = (usersList as any[] || []).map(sanitizeUser);
+    const sanitizedUsers = (usersList as any[] || []).map((u) => sanitizeUser(u, request));
     return NextResponse.json(sanitizedUsers);
   }
 
   // 4. Admin stats (/api/admin/stats)
   if (path === 'admin/stats') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
@@ -321,6 +429,16 @@ export async function GET(
 
   // 5. GET Categories Settings list (/api/admin/settings/categories or /api/provider/setup/categories)
   if (path === 'admin/settings/categories' || path === 'provider/setup/categories') {
+    const auth = await getAuthenticatedUser(request);
+    if (!auth) {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+    if (path === 'admin/settings/categories' && auth.role !== 'admin') {
+      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+    }
+    if (path === 'provider/setup/categories' && auth.role !== 'provider' && auth.role !== 'admin') {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
     const list = await executeWithDbFallback(
       async () => {
         return await prisma.categorySetting.findMany({ orderBy: { title: 'asc' } });
@@ -346,6 +464,16 @@ export async function GET(
 
   // 6. GET Services Settings list (/api/admin/settings/services or /api/provider/setup/services)
   if (path === 'admin/settings/services' || path === 'provider/setup/services') {
+    const auth = await getAuthenticatedUser(request);
+    if (!auth) {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+    if (path === 'admin/settings/services' && auth.role !== 'admin') {
+      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+    }
+    if (path === 'provider/setup/services' && auth.role !== 'provider' && auth.role !== 'admin') {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
     const list = await executeWithDbFallback(
       async () => {
         const dbList = await prisma.serviceSetting.findMany({
@@ -372,20 +500,90 @@ export async function GET(
 
   // 7. GET Ambience & Amenities Settings list (/api/admin/settings/ambience or /api/provider/setup/ambience)
   if (path === 'admin/settings/ambience' || path === 'provider/setup/ambience') {
+    const auth = await getAuthenticatedUser(request);
+    if (!auth) {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+    if (path === 'admin/settings/ambience' && auth.role !== 'admin') {
+      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+    }
+    if (path === 'provider/setup/ambience' && auth.role !== 'provider' && auth.role !== 'admin') {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+    let baseUrl = '';
+    try {
+      const url = new URL(request.url);
+      baseUrl = `${url.protocol}//${url.host}`;
+    } catch {
+      // Ignore
+    }
+
+    if (path === 'provider/setup/ambience') {
+      const groupsList = await executeWithDbFallback(
+        async () => {
+          const dbGroups = await prisma.ambienceGroupSetting.findMany({
+            include: { items: { orderBy: { title: 'asc' } } },
+            orderBy: { title: 'asc' }
+          });
+          return dbGroups.map((g) => ({
+            id: g.id,
+            title: g.title,
+            items: g.items.map((item) => {
+              let icon = item.icon;
+              if (baseUrl && icon && icon.startsWith('/')) {
+                icon = `${baseUrl}${icon}`;
+              }
+              return {
+                id: item.id,
+                title: item.title,
+                icon: icon
+              };
+            })
+          }));
+        },
+        async () => {
+          return [
+            {
+              id: 1,
+              title: 'Amenities',
+              items: [
+                { id: 1, title: 'Free Wi-Fi', icon: null },
+                { id: 2, title: 'Parking', icon: null }
+              ]
+            },
+            {
+              id: 2,
+              title: 'Ambience',
+              items: [
+                { id: 3, title: 'Quiet Space', icon: null },
+                { id: 4, title: 'Relaxing Music', icon: null }
+              ]
+            }
+          ];
+        }
+      );
+      return NextResponse.json(groupsList);
+    }
+
     const list = await executeWithDbFallback(
       async () => {
         const dbList = await prisma.ambienceSetting.findMany({
           include: { ambienceGroup: true },
           orderBy: { title: 'asc' }
         });
-        return dbList.map(a => ({
-          id: a.id,
-          mainTypeId: a.ambienceGroupId,
-          mainType: a.ambienceGroup.title,
-          mainTypeIcon: a.ambienceGroup.icon,
-          title: a.title,
-          icon: a.icon
-        }));
+        return dbList.map(a => {
+          let icon = a.icon;
+          if (baseUrl && icon && icon.startsWith('/')) {
+            icon = `${baseUrl}${icon}`;
+          }
+          return {
+            id: a.id,
+            mainTypeId: a.ambienceGroupId,
+            mainType: a.ambienceGroup.title,
+            title: a.title,
+            icon: icon
+          };
+        });
       },
       async () => {
         return [
@@ -411,10 +609,13 @@ export async function POST(
   console.log(`[API POST] /api/${path}`);
 
   let body = {};
-  try {
-    body = await request.json();
-  } catch {
-    // Empty body or not JSON
+  const contentType = request.headers.get('content-type') || '';
+  if (!contentType.includes('multipart/form-data')) {
+    try {
+      body = await request.json();
+    } catch {
+      // Empty body or not JSON
+    }
   }
   // 1. Sign Up (Common Register /api/auth/register)
   if (path === 'auth/register') {
@@ -460,7 +661,7 @@ export async function POST(
       const responseObj = response as { token: string; user: any };
       return NextResponse.json({
         token: responseObj.token,
-        user: sanitizeUser(responseObj.user),
+        user: sanitizeUser(responseObj.user, request),
       });
     } catch (err: any) {
       return NextResponse.json({ message: err.message || 'Error occurred' }, { status: 400 });
@@ -523,7 +724,7 @@ export async function POST(
       const responseObj = response as { token: string; user: any };
       return NextResponse.json({
         token: responseObj.token,
-        user: sanitizeUser(responseObj.user),
+        user: sanitizeUser(responseObj.user, request),
       });
     } catch (err: any) {
       return NextResponse.json({ message: err.message || 'Login failed' }, { status: 400 });
@@ -532,7 +733,7 @@ export async function POST(
 
   // 3. Select Role and Provider Type (/api/auth/select-role)
   if (path === 'auth/select-role') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
@@ -561,10 +762,11 @@ export async function POST(
           return user;
         }
       );
-      const newToken = generateToken(responseObj.id, responseObj.email, responseObj.role);
+      const authHeader = request.headers.get('Authorization') || request.headers.get('authorization');
+      const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
       return NextResponse.json({
-        token: newToken,
-        user: sanitizeUser(responseObj),
+        token: token,
+        user: sanitizeUser(responseObj, request),
       });
     } catch (err: any) {
       return NextResponse.json({ message: err.message || 'Error updating role' }, { status: 400 });
@@ -741,7 +943,7 @@ export async function POST(
 
   // 7. Send Mobile SMS OTP (/api/users/verify/mobile/send)
   if (path === 'users/verify/mobile/send') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
@@ -827,7 +1029,7 @@ export async function POST(
 
   // 8. Verify Mobile SMS OTP (/api/users/verify/mobile)
   if (path === 'users/verify/mobile') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
@@ -866,7 +1068,7 @@ export async function POST(
 
   // 9. Save Twilio Settings (/api/admin/settings/twilio)
   if (path === 'admin/settings/twilio') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
@@ -929,7 +1131,7 @@ export async function POST(
 
   // 10. Verify Twilio Connection (/api/admin/settings/twilio/verify)
   if (path === 'admin/settings/twilio/verify') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
@@ -1014,7 +1216,7 @@ export async function POST(
 
   // 11. Change Admin Password (/api/admin/change-password)
   if (path === 'admin/change-password') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
@@ -1051,7 +1253,7 @@ export async function POST(
 
   // 12. Create Category Setting (/api/admin/settings/categories)
   if (path === 'admin/settings/categories') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
@@ -1076,7 +1278,7 @@ export async function POST(
 
   // 13. Create Service Setting (/api/admin/settings/services)
   if (path === 'admin/settings/services') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
@@ -1119,52 +1321,179 @@ export async function POST(
 
   // 14. Create Ambience/Amenity Setting (/api/admin/settings/ambience)
   if (path === 'admin/settings/ambience') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
-    const { mainType, mainTypeIcon, title, icon } = body as any;
-    if (!mainType || !title) {
-      return NextResponse.json({ message: 'mainType and title are required' }, { status: 400 });
+
+    let baseUrl = '';
+    try {
+      const url = new URL(request.url);
+      baseUrl = `${url.protocol}//${url.host}`;
+    } catch {
+      // Ignore
     }
+
+    let mainType: any = undefined;
+    let mainTypeIcon: any = undefined;
+    let title: any = undefined;
+    let icon: any = undefined;
+    let iconUrl: any = undefined;
+    let csvItems: { title: string; icon?: string }[] = [];
+
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('multipart/form-data')) {
+      try {
+        const formData = await request.formData();
+        mainType = formData.get('mainType');
+        mainTypeIcon = formData.get('mainTypeIcon');
+        title = formData.get('title');
+        icon = formData.get('icon');
+        const svgFile = formData.get('svgFile');
+        const csvFile = formData.get('csvFile');
+
+        if (csvFile && typeof csvFile === 'object' && 'name' in csvFile) {
+          const file = csvFile as any;
+          const csvText = await file.text();
+          csvItems = parseCsv(csvText);
+        }
+
+        if (svgFile && typeof svgFile === 'object' && 'name' in svgFile) {
+          const file = svgFile as any;
+          const fileName = file.name || '';
+          const fileExt = nodePath.extname(fileName).toLowerCase();
+
+          if (fileExt !== '.svg') {
+            return NextResponse.json(
+              { message: 'Uploaded file must be an SVG file' },
+              { status: 400 }
+            );
+          }
+
+          const bytes = await file.arrayBuffer();
+          const buffer = Buffer.from(bytes);
+          const uploadDir = nodePath.join(process.cwd(), 'public', 'uploads');
+          await fs.mkdir(uploadDir, { recursive: true });
+          const uniqueFileName = `icon_${Date.now()}${fileExt}`;
+          const filePath = nodePath.join(uploadDir, uniqueFileName);
+          await fs.writeFile(filePath, buffer);
+          iconUrl = `/uploads/${uniqueFileName}`;
+        }
+      } catch (err: any) {
+        return NextResponse.json({ message: 'Failed to process upload: ' + err.message }, { status: 400 });
+      }
+    } else {
+      const bodyObj = body as any;
+      mainType = bodyObj.mainType;
+      mainTypeIcon = bodyObj.mainTypeIcon;
+      title = bodyObj.title;
+      icon = bodyObj.icon;
+      if (bodyObj.csvItems && Array.isArray(bodyObj.csvItems)) {
+        csvItems = bodyObj.csvItems;
+      }
+    }
+
+    if (!mainType) {
+      return NextResponse.json({ message: 'mainType is required' }, { status: 400 });
+    }
+
+    const hasSingleItem = title && title.toString().trim().length > 0;
+    if (!hasSingleItem && csvItems.length === 0) {
+      return NextResponse.json({ message: 'Title or CSV items list is required' }, { status: 400 });
+    }
+
+    const finalIcon = iconUrl || (icon ? icon.toString().trim() : null);
+
     try {
       const ambience = await executeWithDbFallback(
         async () => {
           let group = await prisma.ambienceGroupSetting.findUnique({
-            where: { title: mainType.trim() }
+            where: { title: mainType.toString().trim() }
           });
           if (!group) {
             group = await prisma.ambienceGroupSetting.create({
               data: {
-                title: mainType.trim(),
-                icon: mainTypeIcon ? mainTypeIcon.trim() : null
+                title: mainType.toString().trim(),
               }
             });
-          } else if (mainTypeIcon && group.icon !== mainTypeIcon) {
-            group = await prisma.ambienceGroupSetting.update({
-              where: { id: group.id },
-              data: { icon: mainTypeIcon.trim() }
-            });
           }
-          return await prisma.ambienceSetting.create({
-            data: {
-              ambienceGroupId: group.id,
-              title: title.trim(),
-              icon: icon ? icon.trim() : null
-            }
-          });
+
+          const createdItems = [];
+
+          if (hasSingleItem) {
+            const single = await prisma.ambienceSetting.create({
+              data: {
+                ambienceGroupId: group.id,
+                title: title.toString().trim(),
+                icon: finalIcon
+              }
+            });
+            createdItems.push(single);
+          }
+
+          for (const csvItem of csvItems) {
+            const created = await prisma.ambienceSetting.upsert({
+              where: {
+                ambienceGroupId_title: {
+                  ambienceGroupId: group.id,
+                  title: csvItem.title.trim()
+                }
+              },
+              update: {
+                icon: csvItem.icon ? csvItem.icon.trim() : null
+              },
+              create: {
+                ambienceGroupId: group.id,
+                title: csvItem.title.trim(),
+                icon: csvItem.icon ? csvItem.icon.trim() : null
+              }
+            });
+            createdItems.push(created);
+          }
+
+          return { group, items: createdItems };
         },
         async () => {
-          return {
-            id: Math.floor(Math.random() * 10000),
-            ambienceGroupId: 1,
-            title: title.trim(),
-            icon: icon ? icon.trim() : null,
-            createdAt: new Date()
-          };
+          const groupObj = { id: Math.floor(Math.random() * 10000), title: mainType.toString().trim() };
+          const createdItems = [];
+
+          if (hasSingleItem) {
+            createdItems.push({
+              id: Math.floor(Math.random() * 10000),
+              ambienceGroupId: groupObj.id,
+              title: title.toString().trim(),
+              icon: finalIcon,
+              createdAt: new Date()
+            });
+          }
+
+          for (const csvItem of csvItems) {
+            createdItems.push({
+              id: Math.floor(Math.random() * 10000),
+              ambienceGroupId: groupObj.id,
+              title: csvItem.title.trim(),
+              icon: csvItem.icon ? csvItem.icon.trim() : null,
+              createdAt: new Date()
+            });
+          }
+
+          return { group: groupObj, items: createdItems };
         }
       );
-      return NextResponse.json({ success: true, ambience });
+
+      const returnAmbience = {
+        success: true,
+        group: ambience.group,
+        items: ambience.items.map((item: any) => {
+          let itemIcon = item.icon;
+          if (baseUrl && itemIcon && itemIcon.startsWith('/')) {
+            itemIcon = `${baseUrl}${itemIcon}`;
+          }
+          return { ...item, icon: itemIcon };
+        })
+      };
+
+      return NextResponse.json(returnAmbience);
     } catch (err: any) {
       return NextResponse.json({ message: err.message || 'Failed to create ambience setting' }, { status: 400 });
     }
@@ -1172,24 +1501,84 @@ export async function POST(
 
   // 15. Provider Onboarding Step 1: Profile Setup (/api/provider/setup/profile)
   if (path === 'provider/setup/profile') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'provider') {
-      return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
-    const { coverImageUrl, profileImageUrl, name, location, latitude, longitude } = body as any;
+
+    let name: any = undefined;
+    let location: any = undefined;
+    let latitude: any = undefined;
+    let longitude: any = undefined;
+    let coverImageUrl: any = undefined;
+    let profileImageUrl: any = undefined;
+
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('multipart/form-data')) {
+      try {
+        const formData = await request.formData();
+        name = formData.get('name');
+        location = formData.get('location');
+        latitude = formData.get('latitude');
+        longitude = formData.get('longitude');
+        const profileImageFile = formData.get('profileImage');
+        const coverImageFile = formData.get('coverImage');
+
+        const uploadDir = nodePath.join(process.cwd(), 'public', 'uploads');
+        await fs.mkdir(uploadDir, { recursive: true });
+
+        if (profileImageFile && typeof profileImageFile === 'object' && 'name' in profileImageFile) {
+          const file = profileImageFile as any;
+          const fileExt = nodePath.extname(file.name || '').toLowerCase();
+          const uniqueFileName = `profile_${auth.userId}_${Date.now()}${fileExt || '.png'}`;
+          const bytes = await file.arrayBuffer();
+          await fs.writeFile(nodePath.join(uploadDir, uniqueFileName), Buffer.from(bytes));
+          profileImageUrl = `/uploads/${uniqueFileName}`;
+        } else if (typeof profileImageFile === 'string') {
+          profileImageUrl = profileImageFile;
+        }
+
+        if (coverImageFile && typeof coverImageFile === 'object' && 'name' in coverImageFile) {
+          const file = coverImageFile as any;
+          const fileExt = nodePath.extname(file.name || '').toLowerCase();
+          const uniqueFileName = `cover_${auth.userId}_${Date.now()}${fileExt || '.png'}`;
+          const bytes = await file.arrayBuffer();
+          await fs.writeFile(nodePath.join(uploadDir, uniqueFileName), Buffer.from(bytes));
+          coverImageUrl = `/uploads/${uniqueFileName}`;
+        } else if (typeof coverImageFile === 'string') {
+          coverImageUrl = coverImageFile;
+        }
+      } catch (err: any) {
+        return NextResponse.json({ message: 'Failed to process file upload: ' + err.message }, { status: 400 });
+      }
+    } else {
+      const bodyObj = body as any;
+      name = bodyObj.name;
+      location = bodyObj.location;
+      latitude = bodyObj.latitude;
+      longitude = bodyObj.longitude;
+      coverImageUrl = bodyObj.coverImageUrl;
+      profileImageUrl = bodyObj.profileImageUrl;
+    }
+
     if (!name || !location) {
       return NextResponse.json({ message: 'Name and location are required' }, { status: 400 });
     }
+
     try {
       const profile = await executeWithDbFallback(
         async () => {
+          let existing = await prisma.providerProfile.findUnique({ where: { userId: auth.userId } });
+          const finalProfileImage = profileImageUrl !== undefined ? profileImageUrl : (existing?.profileImageUrl || null);
+          const finalCoverImage = coverImageUrl !== undefined ? coverImageUrl : (existing?.coverImageUrl || null);
+
           return await prisma.providerProfile.upsert({
             where: { userId: auth.userId },
             update: {
               name,
               location,
-              coverImageUrl,
-              profileImageUrl,
+              coverImageUrl: finalCoverImage,
+              profileImageUrl: finalProfileImage,
               latitude: latitude !== undefined && latitude !== null ? parseFloat(latitude) : null,
               longitude: longitude !== undefined && longitude !== null ? parseFloat(longitude) : null
             },
@@ -1197,8 +1586,8 @@ export async function POST(
               userId: auth.userId,
               name,
               location,
-              coverImageUrl,
-              profileImageUrl,
+              coverImageUrl: finalCoverImage,
+              profileImageUrl: finalProfileImage,
               latitude: latitude !== undefined && latitude !== null ? parseFloat(latitude) : null,
               longitude: longitude !== undefined && longitude !== null ? parseFloat(longitude) : null
             },
@@ -1212,14 +1601,33 @@ export async function POST(
           }
           mockProfile.name = name;
           mockProfile.location = location;
-          mockProfile.coverImageUrl = coverImageUrl || null;
-          mockProfile.profileImageUrl = profileImageUrl || null;
+          if (coverImageUrl !== undefined) mockProfile.coverImageUrl = coverImageUrl;
+          if (profileImageUrl !== undefined) mockProfile.profileImageUrl = profileImageUrl;
           mockProfile.latitude = latitude !== undefined && latitude !== null ? parseFloat(latitude) : null;
           mockProfile.longitude = longitude !== undefined && longitude !== null ? parseFloat(longitude) : null;
           return mockProfile;
         }
       );
-      return NextResponse.json({ success: true, profile });
+
+      let baseUrl = '';
+      try {
+        const url = new URL(request.url);
+        baseUrl = `${url.protocol}//${url.host}`;
+      } catch {
+        // Ignore
+      }
+
+      const resProfile = JSON.parse(JSON.stringify(profile));
+      if (baseUrl) {
+        if (resProfile.profileImageUrl && resProfile.profileImageUrl.startsWith('/')) {
+          resProfile.profileImageUrl = `${baseUrl}${resProfile.profileImageUrl}`;
+        }
+        if (resProfile.coverImageUrl && resProfile.coverImageUrl.startsWith('/')) {
+          resProfile.coverImageUrl = `${baseUrl}${resProfile.coverImageUrl}`;
+        }
+      }
+
+      return NextResponse.json({ success: true, profile: resProfile });
     } catch (err: any) {
       return NextResponse.json({ message: err.message || 'Failed to update profile' }, { status: 400 });
     }
@@ -1227,9 +1635,9 @@ export async function POST(
 
   // 16. Provider Onboarding Step 2: Set Selected Categories (/api/provider/setup/categories)
   if (path === 'provider/setup/categories') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'provider') {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
     const { categories } = body as any;
     if (!Array.isArray(categories)) {
@@ -1274,9 +1682,9 @@ export async function POST(
 
   // 17. Provider Onboarding Step 3: Set Selected Services & Pricing (/api/provider/setup/services)
   if (path === 'provider/setup/services') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'provider') {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
     const { services } = body as any; // Array of { service_id, price } or { serviceId, price }
     if (!Array.isArray(services)) {
@@ -1348,18 +1756,25 @@ export async function POST(
 
   // 18. Provider Onboarding Step 4: Set Selected Ambience & Amenities (/api/provider/setup/ambience)
   if (path === 'provider/setup/ambience') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'provider') {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    const rawAmbienceId = (body as any).ambience_id || (body as any).ambienceId || (body as any).ambience_ids || (body as any).ambienceIds || (body as any).items;
-    let ambienceIds: number[] = [];
+    let rawAmbienceId = (body as any).ambience_id || (body as any).ambienceId || (body as any).ambience_ids || (body as any).ambienceIds || (body as any).items;
+    if (Array.isArray(body)) {
+      rawAmbienceId = body;
+    }
 
-    if (typeof rawAmbienceId === 'string') {
-      ambienceIds = rawAmbienceId.split(',').map(id => parseInt(id.trim())).filter(Boolean);
-    } else if (Array.isArray(rawAmbienceId)) {
-      ambienceIds = rawAmbienceId.map(id => typeof id === 'object' ? parseInt(id.id || id.ambience_id || id.ambienceId) : parseInt(id)).filter(Boolean);
+    let ambienceIds: number[] = [];
+    if (Array.isArray(rawAmbienceId)) {
+      ambienceIds = rawAmbienceId.map((id: any) => {
+        if (id && typeof id === 'object') {
+          const target = id.id ?? id.ambience_id ?? id.ambienceId;
+          return Number(target);
+        }
+        return Number(id);
+      }).filter((n) => !isNaN(n) && n > 0);
     } else if (typeof rawAmbienceId === 'number') {
       ambienceIds = [rawAmbienceId];
     }
@@ -1423,9 +1838,9 @@ export async function POST(
 
   // 19. Provider Onboarding Step 5: Licenses & Experience (/api/provider/setup/license)
   if (path === 'provider/setup/license') {
-    const auth = getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser(request);
     if (!auth || auth.role !== 'provider') {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
     let experience: any = null;
@@ -1518,7 +1933,20 @@ export async function POST(
           return mockProfile;
         }
       );
-      return NextResponse.json({ success: true, message: 'Licenses updated. Onboarding complete!', profile: response });
+      let baseUrl = '';
+      try {
+        const url = new URL(request.url);
+        baseUrl = `${url.protocol}//${url.host}`;
+      } catch {
+        // Ignore
+      }
+
+      const resProfile = JSON.parse(JSON.stringify(response));
+      if (baseUrl && resProfile && resProfile.certificateUrl && resProfile.certificateUrl.startsWith('/')) {
+        resProfile.certificateUrl = `${baseUrl}${resProfile.certificateUrl}`;
+      }
+
+      return NextResponse.json({ success: true, message: 'Licenses updated. Onboarding complete!', profile: resProfile });
     } catch (err: any) {
       return NextResponse.json({ message: err.message || 'Failed to save licenses' }, { status: 400 });
     }
@@ -1535,16 +1963,19 @@ export async function PUT(
   const path = catchall?.join('/') || '';
   console.log(`[API PUT] /api/${path}`);
 
-  const auth = getAuthenticatedUser(request);
+  const auth = await getAuthenticatedUser(request);
   if (!auth) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
   let body = {} as any;
-  try {
-    body = await request.json();
-  } catch {
-    // Empty
+  const contentType = request.headers.get('content-type') || '';
+  if (!contentType.includes('multipart/form-data')) {
+    try {
+      body = await request.json();
+    } catch {
+      // Empty
+    }
   }
 
   // Update Client Profile (/api/clients/profile)
@@ -1662,7 +2093,7 @@ export async function PUT(
       }
     );
 
-    return NextResponse.json(sanitizeUser(updatedUser));
+    return NextResponse.json(sanitizeUser(updatedUser, request));
   }
 
 
@@ -1680,7 +2111,7 @@ export async function DELETE(
   const path = catchall?.join('/') || '';
   console.log(`[API DELETE] /api/${path}`);
 
-  const auth = getAuthenticatedUser(request);
+  const auth = await getAuthenticatedUser(request);
   if (!auth || auth.role !== 'admin') {
     return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
   }

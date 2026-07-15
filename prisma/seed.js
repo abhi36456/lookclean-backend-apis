@@ -87,11 +87,11 @@ async function main() {
 
   // 4. Seed the fixed Ambience & Amenities Settings
   const ambienceGroups = [
-    { title: 'Comfort & Atmosphere', icon: '🍃' },
-    { title: 'Convenience & Refreshments', icon: '☕' },
-    { title: 'Safety & Hygiene', icon: '🛡️' },
-    { title: 'Accessibility & Family Friendly', icon: '🚗' },
-    { title: 'Premium Add-Ons', icon: '💎' },
+    { title: 'Comfort & Atmosphere' },
+    { title: 'Convenience & Refreshments' },
+    { title: 'Safety & Hygiene' },
+    { title: 'Accessibility & Family Friendly' },
+    { title: 'Premium Add-Ons' },
   ];
 
   console.log('Seeding Ambience Groups...');
@@ -99,46 +99,46 @@ async function main() {
   for (const grp of ambienceGroups) {
     const created = await prisma.ambienceGroupSetting.upsert({
       where: { title: grp.title },
-      update: { icon: grp.icon },
-      create: { title: grp.title, icon: grp.icon },
+      update: {},
+      create: { title: grp.title },
     });
     groupMap[grp.title] = created.id;
   }
 
   const ambienceData = [
     // Comfort & Atmosphere
-    { mainType: 'Comfort & Atmosphere', title: 'Comfortable seating', icon: '🪑' },
-    { mainType: 'Comfort & Atmosphere', title: 'Relaxing music', icon: '🎵' },
-    { mainType: 'Comfort & Atmosphere', title: 'Aromatherapy scents', icon: '🕯️' },
-    { mainType: 'Comfort & Atmosphere', title: 'Natural lighting', icon: '☀️' },
-    { mainType: 'Comfort & Atmosphere', title: 'Temperature control', icon: '🌡️' },
-    { mainType: 'Comfort & Atmosphere', title: 'Private & quiet zones', icon: '🔒' },
-    { mainType: 'Comfort & Atmosphere', title: 'Luxurious décor', icon: '⚜️' },
-    { mainType: 'Comfort & Atmosphere', title: 'Eco-friendly materials', icon: '♻️' },
+    { mainType: 'Comfort & Atmosphere', title: 'Comfortable seating', icon: '/assets/ambience/icons/comfortable-seating.svg' },
+    { mainType: 'Comfort & Atmosphere', title: 'Relaxing music', icon: '/assets/ambience/icons/relaxing-music.svg' },
+    { mainType: 'Comfort & Atmosphere', title: 'Aromatherapy scents', icon: '/assets/ambience/icons/aromatherapy.svg' },
+    { mainType: 'Comfort & Atmosphere', title: 'Natural lighting', icon: '/assets/ambience/icons/natural-lighting.svg' },
+    { mainType: 'Comfort & Atmosphere', title: 'Temperature control', icon: '/assets/ambience/icons/temperature-control.svg' },
+    { mainType: 'Comfort & Atmosphere', title: 'Private & quiet zones', icon: '/assets/ambience/icons/private-zones.svg' },
+    { mainType: 'Comfort & Atmosphere', title: 'Luxurious décor', icon: '/assets/ambience/icons/luxurious-decor.svg' },
+    { mainType: 'Comfort & Atmosphere', title: 'Eco-friendly materials', icon: '/assets/ambience/icons/eco-friendly.svg' },
 
     // Convenience & Refreshments
-    { mainType: 'Convenience & Refreshments', title: 'Complimentary beverages', icon: '☕' },
-    { mainType: 'Convenience & Refreshments', title: 'Snack bar', icon: '🍽️' },
-    { mainType: 'Convenience & Refreshments', title: 'Free Wi-Fi', icon: '📶' },
-    { mainType: 'Convenience & Refreshments', title: 'Charging stations', icon: '🔌' },
+    { mainType: 'Convenience & Refreshments', title: 'Complimentary beverages', icon: '/assets/ambience/icons/complimentary-beverages.svg' },
+    { mainType: 'Convenience & Refreshments', title: 'Snack bar', icon: '/assets/ambience/icons/snack-bar.svg' },
+    { mainType: 'Convenience & Refreshments', title: 'Free Wi-Fi', icon: '/assets/ambience/icons/free-wifi.svg' },
+    { mainType: 'Convenience & Refreshments', title: 'Charging stations', icon: '/assets/ambience/icons/charging-stations.svg' },
 
     // Safety & Hygiene
-    { mainType: 'Safety & Hygiene', title: 'Sanitized after each client', icon: '🧴' },
-    { mainType: 'Safety & Hygiene', title: 'Licensed professionals', icon: '⭐' },
-    { mainType: 'Safety & Hygiene', title: 'Security surveillance', icon: '🔐' },
-    { mainType: 'Safety & Hygiene', title: 'Safety measures', icon: '🛡️' },
+    { mainType: 'Safety & Hygiene', title: 'Sanitized after each client', icon: '/assets/ambience/icons/sanitized.svg' },
+    { mainType: 'Safety & Hygiene', title: 'Licensed professionals', icon: '/assets/ambience/icons/licensed-professionals.svg' },
+    { mainType: 'Safety & Hygiene', title: 'Security surveillance', icon: '/assets/ambience/icons/security-surveillance.svg' },
+    { mainType: 'Safety & Hygiene', title: 'Safety measures', icon: '/assets/ambience/icons/safety-measures.svg' },
 
     // Accessibility & Family Friendly
-    { mainType: 'Accessibility & Family Friendly', title: 'Parking area', icon: '🚗' },
-    { mainType: 'Accessibility & Family Friendly', title: 'Wheelchair access', icon: '♿' },
-    { mainType: 'Accessibility & Family Friendly', title: 'Child-friendly space', icon: '👶' },
-    { mainType: 'Accessibility & Family Friendly', title: 'Pet-friendly zone', icon: '🐾' },
+    { mainType: 'Accessibility & Family Friendly', title: 'Parking area', icon: '/assets/ambience/icons/parking-area.svg' },
+    { mainType: 'Accessibility & Family Friendly', title: 'Wheelchair access', icon: '/assets/ambience/icons/wheelchair-access.svg' },
+    { mainType: 'Accessibility & Family Friendly', title: 'Child-friendly space', icon: '/assets/ambience/icons/child-friendly.svg' },
+    { mainType: 'Accessibility & Family Friendly', title: 'Pet-friendly zone', icon: '/assets/ambience/icons/pet-friendly.svg' },
 
     // Premium Add-Ons
-    { mainType: 'Premium Add-Ons', title: 'VIP waiting area', icon: '👑' },
-    { mainType: 'Premium Add-Ons', title: 'Express services', icon: '✅' },
-    { mainType: 'Premium Add-Ons', title: 'Loyalty rewards', icon: '🎁' },
-    { mainType: 'Premium Add-Ons', title: 'Express service lane', icon: '⚡' },
+    { mainType: 'Premium Add-Ons', title: 'VIP waiting area', icon: '/assets/ambience/icons/vip-waiting-area.svg' },
+    { mainType: 'Premium Add-Ons', title: 'Express services', icon: '/assets/ambience/icons/express-services.svg' },
+    { mainType: 'Premium Add-Ons', title: 'Loyalty rewards', icon: '/assets/ambience/icons/loyalty-rewards.svg' },
+    { mainType: 'Premium Add-Ons', title: 'Express service lane', icon: '/assets/ambience/icons/express-lane.svg' },
   ];
 
   console.log('Seeding Ambience Items...');
