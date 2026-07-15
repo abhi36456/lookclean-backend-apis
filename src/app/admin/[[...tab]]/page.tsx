@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldAlert, LogOut, Search, Filter, ShieldCheck, Phone, Check,
-  X, Calendar, Star, MapPin, Award, Clock, Users, Building, Activity, FileText, ChevronRight, Settings, Lock, Server, Globe, Tag, Scissors, Sparkles
+  X, Calendar, Star, MapPin, Award, Clock, Users, Building, Activity, FileText, ChevronRight, Settings, Lock, Server, Globe, Tag, Scissors, Sparkles, Database
 } from 'lucide-react';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
@@ -85,7 +85,7 @@ export default function AdminPage() {
   const [verifyLoading, setVerifyLoading] = useState(false);
 
   // Settings tab state
-  const [settingsSubTab, setSettingsSubTab] = useState<'password' | 'twilio' | 'categories' | 'services' | 'ambience'>('password');
+  const [settingsSubTab, setSettingsSubTab] = useState<'password' | 'twilio' | 'categories' | 'services' | 'ambience' | 'database'>('password');
 
   // Categories CRUD state
   const [categoriesList, setCategoriesList] = useState<{ id: number; title: string }[]>([]);
@@ -151,6 +151,45 @@ export default function AdminPage() {
   const [verifyStagingLoading, setVerifyStagingLoading] = useState(false);
   const [verifyLiveLoading, setVerifyLiveLoading] = useState(false);
 
+  // Database check states
+  const [dbChecking, setDbChecking] = useState(false);
+  const [dbStatusResult, setDbStatusResult] = useState<{
+    checked: boolean;
+    connected: boolean;
+    message: string;
+    error?: string;
+    databaseUrl?: string;
+  } | null>(null);
+
+  const handleCheckDatabaseConnection = async () => {
+    setDbChecking(true);
+    setDbStatusResult(null);
+    try {
+      const res = await fetch('/api/admin/settings/database/status', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      setDbStatusResult({
+        checked: true,
+        connected: data.connected,
+        message: data.message,
+        error: data.error,
+        databaseUrl: data.databaseUrl,
+      });
+    } catch (err: any) {
+      setDbStatusResult({
+        checked: true,
+        connected: false,
+        message: 'Could not contact the connection-checking API.',
+        error: String(err),
+      });
+    } finally {
+      setDbChecking(false);
+    }
+  };
+
   // Fetch configs dynamically on sub-tab change
   useEffect(() => {
     if (isAuthenticated && token && activeTab === 'settings') {
@@ -170,7 +209,7 @@ export default function AdminPage() {
     if (typeof window !== 'undefined') {
       const handleHashChange = () => {
         const hash = window.location.hash.replace('#', '');
-        if (['password', 'twilio', 'categories', 'services', 'ambience'].includes(hash)) {
+        if (['password', 'twilio', 'categories', 'services', 'ambience', 'database'].includes(hash)) {
           setSettingsSubTab(hash as any);
         }
       };
@@ -859,6 +898,18 @@ export default function AdminPage() {
                     <Sparkles className="w-4 h-4" />
                     <span>Ambience & Amenities</span>
                   </button>
+                  <button
+                    onClick={() => setSettingsSubTab('database')}
+                    className={`flex items-center gap-2.5 px-4 py-3 rounded-xl text-xs font-semibold text-left transition-all w-full cursor-pointer
+                      ${settingsSubTab === 'database'
+                        ? 'bg-primary/10 border border-primary/20 text-white font-bold'
+                        : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
+                      }
+                    `}
+                  >
+                    <Database className="w-4 h-4" />
+                    <span>Database Status</span>
+                  </button>
                 </div>
 
                 {/* Right side Settings content forms */}
@@ -1355,7 +1406,7 @@ export default function AdminPage() {
                         </div>
                       )}
                     </Card>
-                  ) : (
+                  ) : settingsSubTab === 'ambience' ? (
                     <Card className="border border-gray-850 p-6 space-y-4">
                       <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-primary" /> Ambience & Amenities Settings
@@ -1614,6 +1665,79 @@ export default function AdminPage() {
                           </Card>
                         </div>
                       )}
+                    </Card>
+                  ) : (
+                    <Card className="border border-gray-850 p-6 space-y-4">
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                        <Database className="w-4 h-4 text-primary" /> Database Status & Diagnostics
+                      </h3>
+                      <p className="text-xs text-gray-400">Verify connectivity to the live/local database server and view connection configuration details.</p>
+
+                      <div className="border-t border-gray-900 pt-6 space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-gray-900/30 border border-white/5">
+                          <div className="space-y-1">
+                            <h4 className="text-xs font-bold text-gray-200">Database Connection Test</h4>
+                            <p className="text-[11px] text-gray-400">Click the button to perform a direct query connection test to the database.</p>
+                          </div>
+                          <button
+                            onClick={handleCheckDatabaseConnection}
+                            disabled={dbChecking}
+                            className="px-5 py-2.5 rounded-xl bg-primary text-white text-xs font-bold uppercase hover:bg-primary/95 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                          >
+                            {dbChecking ? 'Checking Connection...' : 'Check Connection'}
+                          </button>
+                        </div>
+
+                        {dbStatusResult && (
+                          <div className={`p-5 rounded-xl border text-xs leading-relaxed space-y-3 ${
+                            dbStatusResult.connected 
+                              ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' 
+                              : 'bg-red-500/5 border-red-500/20 text-red-400'
+                          }`}>
+                            <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-[11px]">
+                              {dbStatusResult.connected ? (
+                                <Check className="w-4 h-4 text-emerald-500" />
+                              ) : (
+                                <X className="w-4 h-4 text-red-500" />
+                              )}
+                              <span>
+                                Connection Status: {dbStatusResult.connected ? 'Success' : 'Failed'}
+                              </span>
+                            </div>
+
+                            <p>{dbStatusResult.message}</p>
+
+                            {dbStatusResult.databaseUrl && (
+                              <div className="pt-2 border-t border-white/5 space-y-1.5">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400 block">Configured URL:</span>
+                                <code className="block p-3 rounded-lg bg-black/40 text-gray-300 font-mono text-[11px] break-all select-all border border-white/5">
+                                  {dbStatusResult.databaseUrl}
+                                </code>
+                              </div>
+                            )}
+
+                            {dbStatusResult.error && (
+                              <div className="pt-2 border-t border-white/5 space-y-1.5">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400 block">Error Details:</span>
+                                <pre className="block p-3 rounded-lg bg-black/40 text-red-300/80 font-mono text-[11px] overflow-x-auto whitespace-pre-wrap leading-relaxed border border-white/5">
+                                  {dbStatusResult.error}
+                                </pre>
+                              </div>
+                            )}
+
+                            {!dbStatusResult.connected && (
+                              <div className="pt-3 border-t border-white/5 text-gray-400 space-y-2">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-300 block">Troubleshooting Guide:</span>
+                                <ul className="list-disc pl-4 space-y-1 text-[11px]">
+                                  <li>Ensure the <code className="text-gray-300 font-mono">DATABASE_URL</code> in your live server's <code className="text-gray-300 font-mono">.env</code> file has <code className="text-emerald-500 font-mono">?sslaccept=accept_invalid_certs</code> appended if secure transport is required.</li>
+                                  <li>Check if the RDS Security Group Inbound Rules allow traffic on port <code className="text-gray-300 font-mono">3306</code> from the web server's IP address.</li>
+                                  <li>Verify that your RDS instance is set to <code className="text-gray-300 font-mono">Publicly Accessible = Yes</code> if connecting from outside AWS.</li>
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </Card>
                   )}
                 </div>

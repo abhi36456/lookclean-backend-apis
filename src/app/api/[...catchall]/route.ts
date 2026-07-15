@@ -353,6 +353,31 @@ export async function GET(
     return NextResponse.json(settings);
   }
 
+  // Database status check (/api/admin/settings/database/status)
+  if (path === 'admin/settings/database/status') {
+    const auth = await getAuthenticatedUser(request);
+    if (!auth || auth.role !== 'admin') {
+      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+    }
+
+    try {
+      // Test direct connection to database (bypass fallback)
+      await prisma.$queryRaw`SELECT 1`;
+      return NextResponse.json({
+        connected: true,
+        message: 'Successfully connected to the database!',
+        databaseUrl: process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/:[^:@/]+@/, ':***@') : 'Not Configured'
+      });
+    } catch (err: any) {
+      return NextResponse.json({
+        connected: false,
+        message: err.message || 'Failed to connect to the database.',
+        error: String(err),
+        databaseUrl: process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/:[^:@/]+@/, ':***@') : 'Not Configured'
+      });
+    }
+  }
+
   // 3. Admin user list (/api/admin/users)
   if (path === 'admin/users') {
     const auth = await getAuthenticatedUser(request);
