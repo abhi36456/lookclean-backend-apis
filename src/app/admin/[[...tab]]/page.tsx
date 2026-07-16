@@ -447,6 +447,32 @@ export default function AdminPage() {
     }
   }, [isAuthenticated, token, activeTab]);
 
+  const handleDeleteUser = async (userId: number) => {
+    if (!confirm('Are you sure you want to delete this user account? This will permanently delete the user and all associated profile, services, and amenities data. This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/users?id=${userId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setDrawerOpen(false);
+        setSelectedUser(null);
+        fetchUsers();
+        fetchStats();
+        alert('User account and all associated data deleted successfully.');
+      } else {
+        const data = await res.json();
+        alert(data.message || 'Failed to delete user account.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error. Failed to delete user.');
+    }
+  };
+
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
@@ -2011,6 +2037,15 @@ export default function AdminPage() {
 
               {/* Action Buttons */}
               <div className="border-t border-gray-900 pt-5 mt-6 space-y-3">
+                {selectedUser.role !== 'admin' && (
+                  <Button
+                    variant="danger"
+                    className="w-full text-white cursor-pointer"
+                    onClick={() => handleDeleteUser(selectedUser.id)}
+                  >
+                    Delete User Account
+                  </Button>
+                )}
                 <Button variant="secondary" className="w-full" onClick={() => setDrawerOpen(false)}>
                   Close Panel
                 </Button>

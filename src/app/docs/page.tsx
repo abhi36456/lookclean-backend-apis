@@ -186,6 +186,191 @@ const openApiSpec = {
         },
       },
     },
+    '/auth/social-login': {
+      post: {
+        tags: ['Authenticate'],
+        summary: 'Social login or sign up',
+        description: 'Authenticates a user via Google or iOS social credentials. Auto-creates account if the social key does not exist.',
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['social_key', 'social_type', 'email'],
+                properties: {
+                  social_key: { type: 'string', example: 'oauth_unique_key_12345' },
+                  social_type: { type: 'string', enum: ['google', 'ios'], example: 'google' },
+                  username: { type: 'string', example: 'Sarah Connor' },
+                  email: { type: 'string', example: 'sarah.connor@gmail.com' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Successfully authenticated user',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    token: { type: 'string' },
+                    user: { $ref: '#/components/schemas/User' },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Missing fields or invalid social type',
+          },
+        },
+      },
+    },
+    '/auth/forgot-password/send-otp': {
+      post: {
+        tags: ['Authenticate'],
+        summary: 'Send Forgot Password OTP',
+        description: 'Generates a 6-digit password reset verification code and sends it via Twilio SMS to the user\'s verified phone number.',
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email'],
+                properties: {
+                  email: { type: 'string', example: 'user@lookclean.com' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'OTP code sent successfully',
+          },
+          400: {
+            description: 'Invalid input or account lacks a verified phone number',
+          },
+          404: {
+            description: 'User email address not found',
+          },
+        },
+      },
+    },
+    '/auth/forgot-password/verify-otp': {
+      post: {
+        tags: ['Authenticate'],
+        summary: 'Verify Forgot Password OTP',
+        description: 'Verifies the 6-digit verification code sent to the email address. Yields a short-lived reset token.',
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email', 'code'],
+                properties: {
+                  email: { type: 'string', example: 'user@lookclean.com' },
+                  code: { type: 'string', example: '123456' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'OTP verified successfully. Yields password reset token.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    token: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Invalid or expired OTP code',
+          },
+          404: {
+            description: 'User email address not found',
+          },
+        },
+      },
+    },
+    '/auth/forgot-password/reset': {
+      post: {
+        tags: ['Authenticate'],
+        summary: 'Reset Account Password',
+        description: 'Resets the account password using the verified password reset token.',
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['token', 'password'],
+                properties: {
+                  token: { type: 'string', description: 'Token obtained from /auth/forgot-password/verify-otp' },
+                  password: { type: 'string', example: 'newsecurepassword123' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Password updated successfully',
+          },
+          400: {
+            description: 'Invalid or expired reset token',
+          },
+        },
+      },
+    },
+    '/users/change-password': {
+      post: {
+        tags: ['Authenticate'],
+        summary: 'Change Logged-In User Password',
+        description: 'Allows an authenticated user to change their account password.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['oldPassword', 'newPassword'],
+                properties: {
+                  oldPassword: { type: 'string', example: 'oldpassword123' },
+                  newPassword: { type: 'string', example: 'newpassword123' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Password changed successfully',
+          },
+          400: {
+            description: 'Invalid current password',
+          },
+          401: {
+            description: 'Unauthorized access',
+          },
+        },
+      },
+    },
     '/clients/me': {
       get: {
         tags: ['Client Profile'],
@@ -202,6 +387,22 @@ const openApiSpec = {
           },
           401: {
             description: 'Missing or expired token header',
+          },
+          403: {
+            description: 'Forbidden: Requires client role',
+          },
+        },
+      },
+      delete: {
+        tags: ['Client Profile'],
+        summary: 'Delete Logged-In Client Account',
+        description: 'Allows an authenticated client to permanently delete their own account and all associated profile, services, and amenities data.',
+        responses: {
+          200: {
+            description: 'Account deleted successfully',
+          },
+          401: {
+            description: 'Unauthorized access',
           },
           403: {
             description: 'Forbidden: Requires client role',
@@ -258,7 +459,7 @@ const openApiSpec = {
     },
     '/providers/me': {
       get: {
-        tags: ['Provider Onboarding Flow'],
+        tags: ['Providers Profile'],
         summary: 'Get current provider profile details',
         description: 'Returns provider profile details based on authenticated Bearer token. Accessible only for providers.',
         responses: {
@@ -272,6 +473,22 @@ const openApiSpec = {
           },
           401: {
             description: 'Missing or expired token header',
+          },
+          403: {
+            description: 'Forbidden: Requires provider role',
+          },
+        },
+      },
+      delete: {
+        tags: ['Providers Profile'],
+        summary: 'Delete Logged-In Provider Account',
+        description: 'Allows an authenticated provider to permanently delete their own account and all associated profile, services, and amenities data.',
+        responses: {
+          200: {
+            description: 'Account deleted successfully',
+          },
+          401: {
+            description: 'Unauthorized access',
           },
           403: {
             description: 'Forbidden: Requires provider role',

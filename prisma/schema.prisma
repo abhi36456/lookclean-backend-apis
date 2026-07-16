@@ -10,13 +10,15 @@ generator client {
 model User {
   id                  Int              @id @default(autoincrement())
   email               String           @unique
-  password            String
+  password            String           @default("")
   name                String           @default("")
   role                String           // "client" | "provider" | "admin"
   providerType        String?          // "freelancer" | "salon"
   phoneNumber         String?          @unique
   isPhoneVerified     Boolean          @default(false)
   onboardingCompleted Boolean          @default(false)
+  socialKey           String?          @unique
+  socialType          String?          // "google" | "ios"
   createdAt           DateTime         @default(now())
   providerProfile     ProviderProfile?
   clientProfile       ClientProfile?

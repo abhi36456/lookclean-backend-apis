@@ -21,6 +21,8 @@ const mockDb = {
       phoneNumber: '+15005550006',
       isPhoneVerified: true,
       onboardingCompleted: true,
+      socialKey: null,
+      socialType: null,
       createdAt: new Date(),
     },
     {
@@ -33,6 +35,8 @@ const mockDb = {
       phoneNumber: null,
       isPhoneVerified: false,
       onboardingCompleted: false,
+      socialKey: null,
+      socialType: null,
       createdAt: new Date(),
     },
     {
@@ -45,6 +49,8 @@ const mockDb = {
       phoneNumber: '+15005550006',
       isPhoneVerified: true,
       onboardingCompleted: true,
+      socialKey: null,
+      socialType: null,
       createdAt: new Date(),
     }
   ] as any[],
@@ -686,6 +692,8 @@ export async function POST(
             phoneNumber: null,
             isPhoneVerified: false,
             onboardingCompleted: false,
+            socialKey: null,
+            socialType: null,
             createdAt: new Date(),
           };
           mockDb.users.push(newUser);
@@ -713,13 +721,22 @@ export async function POST(
     try {
       const response = await executeWithDbFallback(
         async () => {
-          // Check admin hardcoded
-          if (email === 'admin@lookclean.com' && hashPassword(password) === hashPassword('admin123')) {
-            const token = generateToken(1, 'admin@lookclean.com', 'admin');
-            return {
-              token,
-              user: { id: 1, email: 'admin@lookclean.com', name: 'System Admin', role: 'admin' },
-            };
+          if (email === 'admin@lookclean.com') {
+            let adminUser = await prisma.user.findUnique({ where: { email } });
+            if (!adminUser) {
+              adminUser = await prisma.user.create({
+                data: {
+                  email: 'admin@lookclean.com',
+                  password: hashPassword('admin123'),
+                  name: 'System Admin',
+                  role: 'admin',
+                  onboardingCompleted: true,
+                },
+              });
+            }
+            if (adminUser.password !== hashPassword(password)) throw new Error('Invalid credentials');
+            const token = generateToken(adminUser.id, adminUser.email, adminUser.role);
+            return { token, user: adminUser };
           }
           const user = await prisma.user.findUnique({
             where: { email },
@@ -734,12 +751,28 @@ export async function POST(
           return { token, user };
         },
         async () => {
-          if (email === 'admin@lookclean.com' && hashPassword(password) === hashPassword('admin123')) {
-            const token = generateToken(1, 'admin@lookclean.com', 'admin');
-            return {
-              token,
-              user: { id: 1, email: 'admin@lookclean.com', name: 'System Admin', role: 'admin' },
-            };
+          if (email === 'admin@lookclean.com') {
+            let mockAdmin = mockDb.users.find((u) => u.email === email);
+            if (!mockAdmin) {
+              mockAdmin = {
+                id: 1,
+                email: 'admin@lookclean.com',
+                password: hashPassword('admin123'),
+                name: 'System Admin',
+                role: 'admin',
+                providerType: null,
+                phoneNumber: '+15005550006',
+                isPhoneVerified: true,
+                onboardingCompleted: true,
+                socialKey: null,
+                socialType: null,
+                createdAt: new Date(),
+              };
+              mockDb.users.push(mockAdmin);
+            }
+            if (mockAdmin.password !== hashPassword(password)) throw new Error('Invalid credentials');
+            const token = generateToken(mockAdmin.id, mockAdmin.email, mockAdmin.role);
+            return { token, user: mockAdmin };
           }
           const user = mockDb.users.find((u) => u.email === email && u.password === hashPassword(password));
           if (!user) throw new Error('Invalid credentials');
@@ -805,6 +838,130 @@ export async function POST(
       });
     } catch (err: any) {
       return NextResponse.json({ message: err.message || 'Error updating role' }, { status: 400 });
+    }
+  }
+
+  // 3.5. Social Login (/api/auth/social-login)
+  if (path === 'auth/social-login') {
+    const { social_key, social_type, username, email } = body as any;
+    if (!social_key || !social_type || !email) {
+      return NextResponse.json({ message: 'Missing fields: social_key, social_type, and email are required' }, { status: 400 });
+    }
+
+    if (social_type !== 'google' && social_type !== 'ios') {
+      return NextResponse.json({ message: 'Invalid social_type. Must be "google" or "ios"' }, { status: 400 });
+    }
+
+    try {
+      const response = await executeWithDbFallback(
+        async () => {
+          // Check if user with this socialKey already exists
+          let user = await prisma.user.findUnique({
+            where: { socialKey: social_key },
+            include: {
+              providerProfile: {
+                include: { services: true, amenities: true },
+              },
+            },
+          });
+
+          if (!user) {
+            // If not, check if a user with the same email already exists
+            const existingEmailUser = await prisma.user.findUnique({
+              where: { email },
+            });
+
+            if (existingEmailUser) {
+              // Link social account to existing user account
+              user = await prisma.user.update({
+                where: { id: existingEmailUser.id },
+                data: {
+                  socialKey: social_key,
+                  socialType: social_type,
+                  name: existingEmailUser.name || username || "",
+                },
+                include: {
+                  providerProfile: {
+                    include: { services: true, amenities: true },
+                  },
+                },
+              });
+            } else {
+              // Create new user account
+              user = await prisma.user.create({
+                data: {
+                  email,
+                  password: "",
+                  name: username || "",
+                  role: "",
+                  socialKey: social_key,
+                  socialType: social_type,
+                },
+                include: {
+                  providerProfile: {
+                    include: { services: true, amenities: true },
+                  },
+                },
+              });
+            }
+          }
+
+          const token = generateToken(user.id, user.email, user.role);
+          return { token, user };
+        },
+        async () => {
+          // Fallback mockDb logic
+          let user = mockDb.users.find((u) => u.socialKey === social_key);
+
+          if (!user) {
+            const existingEmailUser = mockDb.users.find((u) => u.email === email);
+            if (existingEmailUser) {
+              existingEmailUser.socialKey = social_key;
+              existingEmailUser.socialType = social_type;
+              if (!existingEmailUser.name && username) {
+                existingEmailUser.name = username;
+              }
+              user = existingEmailUser;
+            } else {
+              user = {
+                id: mockDb.users.length + 1,
+                email,
+                password: "",
+                name: username || "",
+                role: "",
+                providerType: null,
+                phoneNumber: null,
+                isPhoneVerified: false,
+                onboardingCompleted: false,
+                socialKey: social_key,
+                socialType: social_type,
+                createdAt: new Date(),
+              };
+              mockDb.users.push(user);
+            }
+          }
+
+          const token = generateToken(user.id, user.email, user.role);
+          const profile = mockDb.profiles.find((p) => p.userId === user.id);
+          let providerProfile = undefined;
+          if (profile) {
+            providerProfile = {
+              ...profile,
+              services: mockDb.services.filter((s) => s.profileId === profile.id),
+              amenities: mockDb.amenities.filter((a) => a.profileId === profile.id),
+            };
+          }
+          return { token, user: { ...user, providerProfile } };
+        }
+      );
+
+      const responseObj = response as { token: string; user: any };
+      return NextResponse.json({
+        token: responseObj.token,
+        user: sanitizeUser(responseObj.user, request),
+      });
+    } catch (err: any) {
+      return NextResponse.json({ message: err.message || 'Social login failed' }, { status: 400 });
     }
   }
 
@@ -1278,6 +1435,43 @@ export async function POST(
             throw new Error('Invalid current password');
           }
           adminUser.password = hashPassword(newPassword);
+        }
+      );
+      return NextResponse.json({ success: true, message: 'Password updated successfully.' });
+    } catch (err: any) {
+      return NextResponse.json({ message: err.message || 'Change password failed' }, { status: 400 });
+    }
+  }
+
+  // 11.5. Change User Password (/api/users/change-password)
+  if (path === 'users/change-password') {
+    const auth = await getAuthenticatedUser(request);
+    if (!auth) {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+    const { oldPassword, newPassword } = body as any;
+    if (!oldPassword || !newPassword) {
+      return NextResponse.json({ message: 'Missing fields' }, { status: 400 });
+    }
+
+    try {
+      await executeWithDbFallback(
+        async () => {
+          const user = await prisma.user.findUnique({ where: { id: auth.userId } });
+          if (!user || user.password !== hashPassword(oldPassword)) {
+            throw new Error('Invalid current password');
+          }
+          await prisma.user.update({
+            where: { id: auth.userId },
+            data: { password: hashPassword(newPassword) },
+          });
+        },
+        async () => {
+          const user = mockDb.users.find((u) => u.id === auth.userId);
+          if (!user || user.password !== hashPassword(oldPassword)) {
+            throw new Error('Invalid current password');
+          }
+          user.password = hashPassword(newPassword);
         }
       );
       return NextResponse.json({ success: true, message: 'Password updated successfully.' });
@@ -2138,7 +2332,72 @@ export async function DELETE(
   console.log(`[API DELETE] /api/${path}`);
 
   const auth = await getAuthenticatedUser(request);
-  if (!auth || auth.role !== 'admin') {
+  if (!auth) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+
+  // 1. Client Deletes Their Own Account (/api/clients/me)
+  if (path === 'clients/me') {
+    if (auth.role !== 'client') {
+      return NextResponse.json({ message: 'Forbidden: Requires client role' }, { status: 403 });
+    }
+    const userId = auth.userId;
+    try {
+      await executeWithDbFallback(
+        async () => {
+          await prisma.user.delete({ where: { id: userId } });
+        },
+        async () => {
+          const userIndex = mockDb.users.findIndex((u) => u.id === userId);
+          if (userIndex === -1) throw new Error('User not found');
+          mockDb.users.splice(userIndex, 1);
+          const profileIndex = mockDb.profiles.findIndex((p) => p.userId === userId);
+          if (profileIndex !== -1) {
+            const profileId = mockDb.profiles[profileIndex].id;
+            mockDb.services = mockDb.services.filter((s) => s.profileId !== profileId);
+            mockDb.amenities = mockDb.amenities.filter((a) => a.profileId !== profileId);
+            mockDb.profiles.splice(profileIndex, 1);
+          }
+        }
+      );
+      return NextResponse.json({ success: true, message: 'Account and all associated data deleted successfully.' });
+    } catch (err: any) {
+      return NextResponse.json({ message: err.message || 'Failed to delete account' }, { status: 400 });
+    }
+  }
+
+  // 1b. Provider Deletes Their Own Account (/api/providers/me)
+  if (path === 'providers/me') {
+    if (auth.role !== 'provider') {
+      return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+    }
+    const userId = auth.userId;
+    try {
+      await executeWithDbFallback(
+        async () => {
+          await prisma.user.delete({ where: { id: userId } });
+        },
+        async () => {
+          const userIndex = mockDb.users.findIndex((u) => u.id === userId);
+          if (userIndex === -1) throw new Error('User not found');
+          mockDb.users.splice(userIndex, 1);
+          const profileIndex = mockDb.profiles.findIndex((p) => p.userId === userId);
+          if (profileIndex !== -1) {
+            const profileId = mockDb.profiles[profileIndex].id;
+            mockDb.services = mockDb.services.filter((s) => s.profileId !== profileId);
+            mockDb.amenities = mockDb.amenities.filter((a) => a.profileId !== profileId);
+            mockDb.profiles.splice(profileIndex, 1);
+          }
+        }
+      );
+      return NextResponse.json({ success: true, message: 'Account and all associated data deleted successfully.' });
+    } catch (err: any) {
+      return NextResponse.json({ message: err.message || 'Failed to delete account' }, { status: 400 });
+    }
+  }
+
+  // Admin routes below:
+  if (auth.role !== 'admin') {
     return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
   }
 
@@ -2149,7 +2408,33 @@ export async function DELETE(
   }
   const id = parseInt(idStr);
 
-  // 1. Delete Category Setting
+  // 2. Admin Deletes Any User Account (/api/admin/users)
+  if (path === 'admin/users') {
+    try {
+      await executeWithDbFallback(
+        async () => {
+          await prisma.user.delete({ where: { id } });
+        },
+        async () => {
+          const userIndex = mockDb.users.findIndex((u) => u.id === id);
+          if (userIndex === -1) throw new Error('User not found');
+          mockDb.users.splice(userIndex, 1);
+          const profileIndex = mockDb.profiles.findIndex((p) => p.userId === id);
+          if (profileIndex !== -1) {
+            const profileId = mockDb.profiles[profileIndex].id;
+            mockDb.services = mockDb.services.filter((s) => s.profileId !== profileId);
+            mockDb.amenities = mockDb.amenities.filter((a) => a.profileId !== profileId);
+            mockDb.profiles.splice(profileIndex, 1);
+          }
+        }
+      );
+      return NextResponse.json({ success: true, message: 'User account and all associated data deleted successfully.' });
+    } catch (err: any) {
+      return NextResponse.json({ message: err.message || 'Failed to delete user account' }, { status: 400 });
+    }
+  }
+
+  // 3. Delete Category Setting
   if (path === 'admin/settings/categories') {
     try {
       await executeWithDbFallback(
@@ -2166,7 +2451,7 @@ export async function DELETE(
     }
   }
 
-  // 2. Delete Service Setting
+  // 4. Delete Service Setting
   if (path === 'admin/settings/services') {
     try {
       await executeWithDbFallback(
@@ -2183,7 +2468,7 @@ export async function DELETE(
     }
   }
 
-  // 3. Delete Ambience Setting
+  // 5. Delete Ambience Setting
   if (path === 'admin/settings/ambience') {
     try {
       await executeWithDbFallback(
