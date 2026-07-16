@@ -2195,23 +2195,45 @@ export async function PUT(
       return NextResponse.json({ message: 'Forbidden: Requires client role' }, { status: 403 });
     }
 
-    let name: any = undefined;
-    let location: any = undefined;
-    let latitude: any = undefined;
-    let longitude: any = undefined;
-    let profileImageUrl: any = undefined;
+    const toOptionalString = (value: any): string | undefined => {
+      if (value === undefined || value === null) return undefined;
+      // File/Blob values are not valid text fields
+      if (typeof value === 'object') return undefined;
+      const trimmed = String(value).trim();
+      return trimmed === '' ? undefined : trimmed;
+    };
+
+    const toOptionalFloat = (value: any): number | undefined => {
+      if (value === undefined || value === null) return undefined;
+      if (typeof value === 'object') return undefined;
+      const trimmed = String(value).trim();
+      if (!trimmed) return undefined;
+      const parsed = Number(trimmed);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    };
+
+    let name: string | undefined = undefined;
+    let location: string | undefined = undefined;
+    let latitude: number | undefined = undefined;
+    let longitude: number | undefined = undefined;
+    let profileImageUrl: string | undefined = undefined;
 
     const contentType = request.headers.get('content-type') || '';
     if (contentType.includes('multipart/form-data')) {
       try {
         const formData = await request.formData();
-        name = formData.get('name');
-        location = formData.get('location');
-        latitude = formData.get('latitude');
-        longitude = formData.get('longitude');
+        name = toOptionalString(formData.get('name'));
+        location = toOptionalString(formData.get('location'));
+        latitude = toOptionalFloat(formData.get('latitude'));
+        longitude = toOptionalFloat(formData.get('longitude'));
         const profileImageFile = formData.get('profileImage');
 
-        if (profileImageFile && typeof profileImageFile === 'object' && 'name' in profileImageFile) {
+        if (
+          profileImageFile &&
+          typeof profileImageFile === 'object' &&
+          'name' in profileImageFile &&
+          (profileImageFile as any).name
+        ) {
           const file = profileImageFile as any;
           const mimeType = file.type || '';
           const fileName = file.name || '';
@@ -2231,7 +2253,7 @@ export async function PUT(
           const buffer = Buffer.from(bytes);
           const uploadDir = nodePath.join(process.cwd(), 'public', 'uploads');
           await fs.mkdir(uploadDir, { recursive: true });
-          const uniqueFileName = `profile_${auth.userId}_${Date.now()}${fileExt || '.png'}`;
+          const uniqueFileName = `profile_${auth.userId}_${Date.now()}${fileExt || '.jpg'}`;
           const filePath = nodePath.join(uploadDir, uniqueFileName);
           await fs.writeFile(filePath, buffer);
           profileImageUrl = `/uploads/${uniqueFileName}`;
@@ -2240,80 +2262,63 @@ export async function PUT(
         return NextResponse.json({ message: 'Failed to process file upload: ' + err.message }, { status: 400 });
       }
     } else {
-      name = body.name;
-      location = body.location;
-      latitude = body.latitude;
-      longitude = body.longitude;
-      profileImageUrl = body.profileImageUrl;
+      name = toOptionalString(body.name);
+      location = toOptionalString(body.location);
+      latitude = toOptionalFloat(body.latitude);
+      longitude = toOptionalFloat(body.longitude);
+      profileImageUrl = toOptionalString(body.profileImageUrl);
     }
 
     // Automatically set onboardingCompleted to true if the client sends: name, location, latitude, and longitude
-    const hasName = name !== undefined && name !== null && String(name).trim() !== '';
-    const hasLocation = location !== undefined && location !== null && String(location).trim() !== '';
-    const hasLatitude = latitude !== undefined && latitude !== null && String(latitude).trim() !== '';
-    const hasLongitude = longitude !== undefined && longitude !== null && String(longitude).trim() !== '';
+    const autoOnboardingCompleted =
+      name !== undefined &&
+      location !== undefined &&
+      latitude !== undefined &&
+      longitude !== undefined;
 
-    const autoOnboardingCompleted = hasName && hasLocation && hasLatitude && hasLongitude;
+    try {
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (autoOnboardingCompleted) {
+        updateData.onboardingCompleted = true;
+      }
 
-    const updatedUser = await executeWithDbFallback(
-      async () => {
-        const updateData: any = {};
-        if (name !== undefined && name !== null) updateData.name = name;
-        if (autoOnboardingCompleted) {
-          updateData.onboardingCompleted = true;
-        }
+      const clientProfileData: any = {};
+      if (location !== undefined) clientProfileData.location = location;
+      if (profileImageUrl !== undefined) clientProfileData.profileImageUrl = profileImageUrl;
+      if (latitude !== undefined) clientProfileData.latitude = latitude;
+      if (longitude !== undefined) clientProfileData.longitude = longitude;
 
-        const clientProfileData: any = {};
-        if (location !== undefined && location !== null) clientProfileData.location = location;
-        if (profileImageUrl !== undefined && profileImageUrl !== null) clientProfileData.profileImageUrl = profileImageUrl;
-        if (latitude !== undefined && latitude !== null) clientProfileData.latitude = parseFloat(latitude);
-        if (longitude !== undefined && longitude !== null) clientProfileData.longitude = parseFloat(longitude);
-
+      // Only touch nested profile when there is something to write
+      if (Object.keys(clientProfileData).length > 0) {
         updateData.clientProfile = {
           upsert: {
             create: clientProfileData,
             update: clientProfileData
           }
         };
-
-        return await prisma.user.update({
-          where: { id: auth.userId },
-          data: updateData,
-          include: {
-            clientProfile: true
-          }
-        });
-      },
-      async () => {
-        const user = mockDb.users.find((u) => u.id === auth.userId);
-        if (!user) throw new Error('User not found');
-        if (name !== undefined && name !== null) user.name = name;
-        if (autoOnboardingCompleted) {
-          user.onboardingCompleted = true;
-        }
-
-        let profile = mockDb.profiles.find((p) => p.userId === auth.userId);
-        if (!profile) {
-          profile = {
-            id: mockDb.profiles.length + 1,
-            userId: auth.userId,
-          } as any;
-          mockDb.profiles.push(profile);
-        }
-        if (location !== undefined && location !== null) (profile as any).location = location;
-        if (profileImageUrl !== undefined && profileImageUrl !== null) (profile as any).profileImageUrl = profileImageUrl;
-        if (latitude !== undefined && latitude !== null) (profile as any).latitude = parseFloat(latitude);
-        if (longitude !== undefined && longitude !== null) (profile as any).longitude = parseFloat(longitude);
-
-        return { ...user, clientProfile: profile };
       }
-    );
 
-    const sanitized = sanitizeUser(updatedUser, request);
-    if (sanitized && typeof sanitized === 'object') {
-      delete (sanitized as any).onboardingCompleted;
+      const updatedUser = await prisma.user.update({
+        where: { id: auth.userId },
+        data: updateData,
+        include: {
+          clientProfile: true
+        }
+      });
+
+      const sanitized = sanitizeUser(updatedUser, request);
+      if (sanitized && typeof sanitized === 'object') {
+        delete (sanitized as any).onboardingCompleted;
+      }
+      return NextResponse.json(sanitized);
+    } catch (err: any) {
+      console.error('[clients/profile] update failed', err);
+      return NextResponse.json(
+        { message: err?.message || 'Failed to update profile' },
+        { status: 500 }
+      );
     }
-    return NextResponse.json(sanitized);
   }
 
 
