@@ -457,6 +457,200 @@ const openApiSpec = {
         },
       },
     },
+    '/clients/providers': {
+      get: {
+        tags: ['Client Profile'],
+        summary: 'Get All Providers list with category filter',
+        description: 'Returns list of all registered service providers. Can optionally filter by main category ID or name.',
+        parameters: [
+          {
+            name: 'categoryId',
+            in: 'query',
+            required: false,
+            description: 'The main category ID or name to filter providers (e.g. 1 or "Haircut")',
+            schema: {
+              type: 'string',
+              example: '1',
+            },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Providers list retrieved successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'integer' },
+                      email: { type: 'string' },
+                      name: { type: 'string' },
+                      role: { type: 'string' },
+                      providerProfile: {
+                        type: 'object',
+                        properties: {
+                          name: { type: 'string' },
+                          location: { type: 'string' },
+                          experience: { type: 'integer' },
+                          categories: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                id: { type: 'integer' },
+                                title: { type: 'string' },
+                              },
+                            },
+                          },
+                          services: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                id: { type: 'integer' },
+                                serviceId: { type: 'integer', nullable: true },
+                                name: { type: 'string' },
+                                price: { type: 'integer' },
+                              },
+                            },
+                          },
+                          reviews: { type: 'number', example: 4.9 },
+                          earliestTime: { type: 'string', example: '00:00 AM' },
+                          isWishlisted: { type: 'boolean', example: false },
+                        },
+                      },
+                      isWishlisted: { type: 'boolean', example: false },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized access',
+          },
+          403: {
+            description: 'Forbidden: Requires client role',
+          },
+        },
+      },
+    },
+    '/clients/wishlist': {
+      post: {
+        tags: ['Client Profile'],
+        summary: 'Toggle provider in client wishlist',
+        description: 'Adds a provider to the client\'s wishlist if not present, or removes them if they already exist.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['providerId'],
+                properties: {
+                  providerId: {
+                    type: 'integer',
+                    description: 'The user ID of the provider',
+                    example: 2,
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Wishlist status toggled successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    message: { type: 'string' },
+                    isWishlisted: { type: 'boolean' },
+                  },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized access',
+          },
+          403: {
+            description: 'Forbidden: Requires client role',
+          },
+        },
+      },
+      get: {
+        tags: ['Client Profile'],
+        summary: 'Get all wishlisted providers',
+        description: 'Returns list of all registered service providers currently in the authenticated client\'s wishlist.',
+        responses: {
+          200: {
+            description: 'Wishlisted providers retrieved successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'integer' },
+                      email: { type: 'string' },
+                      name: { type: 'string' },
+                      role: { type: 'string' },
+                      isWishlisted: { type: 'boolean', example: true },
+                      providerProfile: {
+                        type: 'object',
+                        properties: {
+                          name: { type: 'string' },
+                          location: { type: 'string' },
+                          experience: { type: 'integer' },
+                          isWishlisted: { type: 'boolean', example: true },
+                          categories: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                id: { type: 'integer' },
+                                title: { type: 'string' },
+                              },
+                            },
+                          },
+                          services: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                id: { type: 'integer' },
+                                serviceId: { type: 'integer', nullable: true },
+                                name: { type: 'string' },
+                                price: { type: 'integer' },
+                              },
+                            },
+                          },
+                          reviews: { type: 'number', example: 4.9 },
+                          earliestTime: { type: 'string', example: '00:00 AM' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized access',
+          },
+          403: {
+            description: 'Forbidden: Requires client role',
+          },
+        },
+      },
+    },
     '/providers/me': {
       get: {
         tags: ['Providers Profile'],
@@ -486,6 +680,112 @@ const openApiSpec = {
         responses: {
           200: {
             description: 'Account deleted successfully',
+          },
+          401: {
+            description: 'Unauthorized access',
+          },
+          403: {
+            description: 'Forbidden: Requires provider role',
+          },
+        },
+      },
+    },
+    '/providers/me/licence': {
+      put: {
+        tags: ['Providers Profile'],
+        summary: 'Update Provider License/Certificate by Index',
+        description: 'Updates the license name and/or certificate file/URL at a specific array index.',
+        parameters: [
+          {
+            name: 'index',
+            in: 'query',
+            required: true,
+            description: 'Index of the license/certificate to update',
+            schema: {
+              type: 'integer',
+            },
+          },
+        ],
+        requestBody: {
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                properties: {
+                  licenseType: {
+                    type: 'string',
+                    example: 'Cosmetology License',
+                  },
+                  certificate: {
+                    type: 'string',
+                    format: 'binary',
+                    description: 'Upload certificate file (image or PDF)',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'License/certificate updated successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: {
+                      type: 'boolean',
+                    },
+                    message: {
+                      type: 'string',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized access',
+          },
+          403: {
+            description: 'Forbidden: Requires provider role',
+          },
+        },
+      },
+      delete: {
+        tags: ['Providers Profile'],
+        summary: 'Delete Provider License/Certificate by Index',
+        description: 'Deletes the license name and certificate URL at a specific array index.',
+        parameters: [
+          {
+            name: 'index',
+            in: 'query',
+            required: true,
+            description: 'Index of the license/certificate to delete',
+            schema: {
+              type: 'integer',
+            },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'License/certificate deleted successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: {
+                      type: 'boolean',
+                    },
+                    message: {
+                      type: 'string',
+                    },
+                  },
+                },
+              },
+            },
           },
           401: {
             description: 'Unauthorized access',
@@ -800,6 +1100,7 @@ export default function DocsPage() {
           ],
           layout: 'BaseLayout',
           deepLinking: true,
+          defaultModelsExpandDepth: -1,
           responseInterceptor: (response: any) => {
             if (response.url.includes('/auth/') && (response.url.includes('login') || response.url.includes('register'))) {
               if (response.obj && response.obj.token) {
@@ -839,6 +1140,24 @@ export default function DocsPage() {
 
   return (
     <div className="bg-gray-50 min-h-screen">
+      <style>{`
+        /* Hide the Example Value | Schema tabs bar */
+        .swagger-ui .tab {
+          display: none !important;
+        }
+        /* Hide the bottom Schemas/Models section */
+        .swagger-ui .models {
+          display: none !important;
+        }
+        /* Hide all Swagger response examples, models, and header controls */
+        .swagger-ui .response-col_description .model-example,
+        .swagger-ui .response-col_description .model-box,
+        .swagger-ui .response-col_description .response-controls,
+        .swagger-ui .response-col_description .responses-inner h5,
+        .swagger-ui .response-col_description h5 {
+          display: none !important;
+        }
+      `}</style>
       {/* Brand logo header */}
       <div className="bg-slate-900 border-b border-slate-800 text-white px-6 py-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-primary-gradient text-primary-contrast rounded-xl flex items-center justify-center text-sm font-black">

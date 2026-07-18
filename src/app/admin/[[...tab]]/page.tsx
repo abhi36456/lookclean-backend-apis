@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ShieldAlert, LogOut, Search, Filter, ShieldCheck, Phone, Check,
+  ShieldAlert, LogOut, Search, Filter, ShieldCheck, Phone, Check, Mail,
   X, Calendar, Star, MapPin, Award, Clock, Users, Building, Activity, FileText, ChevronRight, Settings, Lock, Server, Globe, Tag, Scissors, Sparkles, Database
 } from 'lucide-react';
 import Button from '@/components/Button';
@@ -17,6 +17,7 @@ interface UserData {
   name: string;
   role: 'client' | 'provider' | 'admin';
   providerType?: 'freelancer' | 'salon' | null;
+  phoneNumber?: string | null;
   isPhoneVerified: boolean;
   onboardingCompleted: boolean;
   createdAt: string;
@@ -27,6 +28,8 @@ interface UserData {
     experience: number;
     licenseType?: string;
     certificateUrl?: string;
+    licenseTypes?: string[];
+    certificateUrls?: string[];
     coverImageUrl?: string;
     services?: { name: string; price: number; category: string }[];
     amenities?: { name: string }[];
@@ -36,6 +39,7 @@ interface UserData {
     profileImageUrl?: string | null;
     latitude?: number | null;
     longitude?: number | null;
+    createdAt?: string | null;
   } | null;
 }
 
@@ -1848,7 +1852,17 @@ export default function AdminPage() {
                                 )}
                               </div>
                             </td>
-                            <td className="p-4 font-bold text-white">{user.name || ''}</td>
+                            <td className="p-4">
+                              <span
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setDrawerOpen(true);
+                                }}
+                                className="font-bold text-white hover:text-primary cursor-pointer transition-colors"
+                              >
+                                {(user.name || user.email.split('@')[0]).toUpperCase()}
+                              </span>
+                            </td>
                             <td className="p-4 text-gray-300">{user.email}</td>
                             <td className="p-4">
                               {user.role ? (
@@ -1924,6 +1938,16 @@ export default function AdminPage() {
                   <div>
                     <span className="text-xs text-primary font-bold uppercase tracking-wider">User details</span>
                     <h2 className="text-xl font-bold text-white mt-0.5">{selectedUser.name}</h2>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[9px] text-slate-300 font-extrabold uppercase px-1.5 py-0.5 rounded bg-slate-900 border border-gray-800">
+                        {selectedUser.role}
+                      </span>
+                      {selectedUser.role === 'provider' && selectedUser.providerType && (
+                        <span className="text-[9px] text-primary font-extrabold uppercase px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
+                          {selectedUser.providerType}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <button
                     onClick={() => setDrawerOpen(false)}
@@ -1934,105 +1958,192 @@ export default function AdminPage() {
                 </div>
 
                 {/* Profile Meta Cards */}
-                <div className="space-y-4 text-sm text-gray-400">
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <div className="p-3 bg-gray-900/50 rounded-xl border border-gray-850">
-                      <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Email Address</span>
-                      <span className="text-white font-semibold block mt-0.5 break-all">{selectedUser.email}</span>
+                <div className="flex justify-between items-start gap-4 text-sm text-gray-400">
+                  <div className="space-y-3 flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      <span className="break-all">{selectedUser.email}</span>
                     </div>
-                    <div className="p-3 bg-gray-900/50 rounded-xl border border-gray-850">
-                      <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Registry ID</span>
-                      <span className="text-white font-semibold block mt-0.5">#{selectedUser.id}</span>
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      <span>{selectedUser.phoneNumber || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      <span>Registered on {new Date(selectedUser.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div className="text-[11px] text-gray-550 mt-1">
+                      Registry ID: #{selectedUser.id}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-gray-500" />
-                    <span>Registered on {new Date(selectedUser.createdAt).toLocaleDateString()}</span>
+                  {/* Profile Image Avatar */}
+                  <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-900 border border-gray-850 flex-shrink-0 flex items-center justify-center">
+                    {(() => {
+                      const imgUrl = (selectedUser.role === 'provider' ? selectedUser.providerProfile?.profileImageUrl : selectedUser.clientProfile?.profileImageUrl) || undefined;
+                      return imgUrl ? (
+                        <img 
+                          src={imgUrl} 
+                          alt={selectedUser.name} 
+                          className="w-full h-full object-cover" 
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 text-slate-400 flex items-center justify-center font-bold text-2xl uppercase">
+                          {selectedUser.name ? selectedUser.name.charAt(0) : 'U'}
+                        </div>
+                      );
+                    })()}
                   </div>
+                </div>
 
-                  {/* Provider Specific Profile Data */}
-                  {selectedUser.role === 'provider' && (
-                    <div className="space-y-5 pt-4 border-t border-gray-900">
+                {/* Provider Specific Profile Data */}
+                {selectedUser.role === 'provider' && (
+                  <div className="space-y-5 pt-4 border-t border-gray-900">
 
-                      {selectedUser.providerProfile?.coverImageUrl && (
-                        <div className="h-32 rounded-xl overflow-hidden bg-gray-900 relative">
-                          <img src={selectedUser.providerProfile.coverImageUrl} alt="Cover" className="w-full h-full object-cover" />
+                    {selectedUser.providerProfile?.coverImageUrl && (
+                      <div className="h-32 rounded-xl overflow-hidden bg-gray-900 relative">
+                        <img src={selectedUser.providerProfile.coverImageUrl} alt="Cover" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-primary" />
+                        <span className="text-white font-semibold">{selectedUser.providerProfile?.location || 'No Location Set'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-amber-500" />
+                        <span>{selectedUser.providerProfile?.experience || 0} years experience</span>
+                      </div>
+                    </div>
+
+                    {/* Licenses & Certificates */}
+                    <div className="space-y-2">
+                      <h4 className="font-bold text-white text-sm uppercase tracking-wider">Licenses & Certificates</h4>
+                      <div className="bg-gray-900/40 border border-gray-850 rounded-xl p-3.5 space-y-2">
+                        {selectedUser.providerProfile?.licenseTypes && selectedUser.providerProfile.licenseTypes.length > 0 ? (
+                          selectedUser.providerProfile.licenseTypes.map((lic, idx) => {
+                            const certUrl = selectedUser.providerProfile?.certificateUrls?.[idx];
+                            return (
+                              <div key={idx} className="flex justify-between items-center text-xs py-1.5 border-b last:border-0 border-gray-850/40">
+                                <div className="flex items-center gap-2">
+                                  <Award className="w-4 h-4 text-purple-500" />
+                                  <span className="font-semibold text-gray-350">{lic || 'Unnamed License'}</span>
+                                </div>
+                                {certUrl && (
+                                  <div className="flex items-center gap-2">
+                                    <a
+                                      href={certUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-[10px] text-primary hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
+                                    >
+                                      View
+                                    </a>
+                                    <a
+                                      href={certUrl}
+                                      download
+                                      className="text-[10px] text-gray-400 hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-gray-850 border border-gray-850/50 hover:bg-gray-750 transition-all cursor-pointer"
+                                    >
+                                      Download
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="flex justify-between items-center text-xs py-1.5">
+                            <div className="flex items-center gap-2">
+                              <Award className="w-4 h-4 text-purple-500" />
+                              <span className="font-semibold text-gray-350">{selectedUser.providerProfile?.licenseType || 'N/A'}</span>
+                            </div>
+                            {selectedUser.providerProfile?.certificateUrl && (
+                              <div className="flex items-center gap-2">
+                                <a
+                                  href={selectedUser.providerProfile.certificateUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[10px] text-primary hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
+                                >
+                                  View
+                                </a>
+                                <a
+                                  href={selectedUser.providerProfile.certificateUrl}
+                                  download
+                                  className="text-[10px] text-gray-400 hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-gray-850 border border-gray-850/50 hover:bg-gray-750 transition-all cursor-pointer"
+                                >
+                                  Download
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Offered Services */}
+                    <div className="space-y-2">
+                      <h4 className="font-bold text-white text-sm uppercase tracking-wider">Services Catalog</h4>
+                      <div className="bg-gray-900/40 border border-gray-850 rounded-xl p-3.5 space-y-2">
+                        {selectedUser.providerProfile?.services && selectedUser.providerProfile.services.length > 0 ? (
+                          selectedUser.providerProfile.services.map((srv, idx) => (
+                            <div key={idx} className="flex justify-between items-center text-xs py-1.5 border-b last:border-0 border-gray-850/40">
+                              <span className="font-semibold text-gray-350">{srv.name} ({srv.category})</span>
+                              <span className="font-bold text-white">${srv.price}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-gray-500 py-1">No services registered</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Amenities */}
+                    <div className="space-y-2">
+                      <h4 className="font-bold text-white text-sm uppercase tracking-wider">Ambience & Amenities</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedUser.providerProfile?.amenities && selectedUser.providerProfile.amenities.length > 0 ? (
+                          selectedUser.providerProfile.amenities.map((am) => (
+                            <span key={am.name} className="px-2.5 py-1 rounded-lg border border-gray-850 text-xs text-gray-300 font-semibold bg-gray-900/40">
+                              {am.name}
+                            </span>
+                          ))
+                        ) : (
+                          <p className="text-xs text-gray-500 py-1">No amenities declared</p>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+
+                {/* Client Specific Profile Data */}
+                {selectedUser.role === 'client' && (
+                  <div className="space-y-5 pt-4 border-t border-gray-900">
+                    <div className="space-y-3.5">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-primary" />
+                        <span className="text-white font-semibold">{selectedUser.clientProfile?.location || 'No Location Set'}</span>
+                      </div>
+                      
+                      {selectedUser.clientProfile?.latitude !== undefined && selectedUser.clientProfile?.latitude !== null && (
+                        <div className="p-3 bg-gray-900/50 rounded-xl border border-gray-850 space-y-1.5">
+                          <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Coordinates</span>
+                          <span className="text-white font-mono text-xs block">
+                            Lat: {selectedUser.clientProfile?.latitude}, Lon: {selectedUser.clientProfile?.longitude}
+                          </span>
                         </div>
                       )}
 
-                      <div className="space-y-2.5">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-primary" />
-                          <span className="text-white font-semibold">{selectedUser.providerProfile?.location || 'No Location Set'}</span>
+                      {selectedUser.clientProfile?.createdAt && (
+                        <div className="text-xs text-gray-500">
+                          Profile created: {new Date(selectedUser.clientProfile.createdAt).toLocaleString()}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-amber-500" />
-                          <span>{selectedUser.providerProfile?.experience || 0} years experience</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Award className="w-4 h-4 text-purple-500" />
-                            <span>License: {selectedUser.providerProfile?.licenseType || 'N/A'}</span>
-                          </div>
-                          {selectedUser.providerProfile?.certificateUrl && (
-                            <div className="flex items-center gap-2">
-                              <a
-                                href={selectedUser.providerProfile.certificateUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[10px] text-primary hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
-                              >
-                                View
-                              </a>
-                              <a
-                                href={selectedUser.providerProfile.certificateUrl}
-                                download
-                                className="text-[10px] text-gray-400 hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-gray-850 border border-gray-800 hover:bg-gray-750 transition-all cursor-pointer"
-                              >
-                                Download
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Offered Services */}
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-white text-sm uppercase tracking-wider">Services Catalog</h4>
-                        <div className="bg-gray-900/40 border border-gray-850 rounded-xl p-3.5 space-y-2">
-                          {selectedUser.providerProfile?.services && selectedUser.providerProfile.services.length > 0 ? (
-                            selectedUser.providerProfile.services.map((srv, idx) => (
-                              <div key={idx} className="flex justify-between items-center text-xs py-1.5 border-b last:border-0 border-gray-850/40">
-                                <span className="font-semibold text-gray-350">{srv.name} ({srv.category})</span>
-                                <span className="font-bold text-white">${srv.price}</span>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-xs text-gray-500 py-1">No services registered</p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Amenities */}
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-white text-sm uppercase tracking-wider">Ambience & Amenities</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {selectedUser.providerProfile?.amenities && selectedUser.providerProfile.amenities.length > 0 ? (
-                            selectedUser.providerProfile.amenities.map((am) => (
-                              <span key={am.name} className="px-2.5 py-1 rounded-lg border border-gray-850 text-xs text-gray-300 font-semibold bg-gray-900/40">
-                                {am.name}
-                              </span>
-                            ))
-                          ) : (
-                            <p className="text-xs text-gray-500 py-1">No amenities declared</p>
-                          )}
-                        </div>
-                      </div>
-
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}
