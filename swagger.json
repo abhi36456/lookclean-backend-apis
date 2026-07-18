@@ -681,6 +681,21 @@
               "type": "string",
               "example": "1"
             }
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "required": false,
+            "description": "Sort providers by Nearest, Earliest, or Ratings (Nearest calculates distance using lat/long coordinates)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "Nearest",
+                "Earliest",
+                "Ratings"
+              ],
+              "example": "Nearest"
+            }
           }
         ],
         "responses": {

@@ -498,6 +498,7 @@ export async function GET(
 
       const { searchParams } = new URL(request.url);
       const categoryId = searchParams.get('categoryId') || searchParams.get('category');
+      const sortBy = searchParams.get('sortBy') || searchParams.get('sort');
 
       try {
         const providersList = await executeWithDbFallback(
@@ -535,6 +536,7 @@ export async function GET(
             const isWishlisted = wishlistStore.some(
               (item) => item.clientId === auth.userId && item.providerId === u.id
             );
+            u.isWishlisted = isWishlisted;
 
             if (u.providerProfile) {
               await enrichProviderProfile(u.providerProfile, request);
@@ -557,6 +559,44 @@ export async function GET(
               cat.id === targetId || cat.title.toLowerCase() === targetName
             );
           });
+        }
+
+        if (sortBy === 'nearest' || sortBy === 'Nearest') {
+          let clientLat: number | null = null;
+          let clientLon: number | null = null;
+
+          const qLat = searchParams.get('latitude') || searchParams.get('lat');
+          const qLon = searchParams.get('longitude') || searchParams.get('lon');
+          if (qLat && qLon) {
+            clientLat = Number(qLat);
+            clientLon = Number(qLon);
+          } else {
+            const clientProfile = await executeWithDbFallback(
+              async () => {
+                return await prisma.clientProfile.findUnique({ where: { userId: auth.userId } });
+              },
+              async () => {
+                return mockDb.profiles.find((p) => p.userId === auth.userId) || null;
+              }
+            );
+            if (clientProfile) {
+              clientLat = clientProfile.latitude;
+              clientLon = clientProfile.longitude;
+            }
+          }
+
+          if (clientLat !== null && clientLon !== null && !isNaN(clientLat) && !isNaN(clientLon)) {
+            filteredProviders.sort((a: any, b: any) => {
+              const latA = a.providerProfile?.latitude ?? 0;
+              const lonA = a.providerProfile?.longitude ?? 0;
+              const latB = b.providerProfile?.latitude ?? 0;
+              const lonB = b.providerProfile?.longitude ?? 0;
+
+              const distA = Math.sqrt(Math.pow(latA - clientLat!, 2) + Math.pow(lonA - clientLon!, 2));
+              const distB = Math.sqrt(Math.pow(latB - clientLat!, 2) + Math.pow(lonB - clientLon!, 2));
+              return distA - distB;
+            });
+          }
         }
 
         return NextResponse.json(filteredProviders);
@@ -1672,13 +1712,13 @@ export async function POST(
     if (path === 'auth/forgot-password/send-otp') {
       const { phoneNumber } = body as any;
       if (!phoneNumber) {
-        return NextResponse.json({ message: 'Phone number is required' }, { status: 400 });
+        return NextResponse.json({ success: false, message: 'Phone number is required' });
       }
 
       try {
         const user = await executeWithDbFallback(
           async () => {
-            return await prisma.user.findUnique({ where: { phoneNumber } });
+            return await prisma.user.findFirst({ where: { phoneNumber } });
           },
           async () => {
             return mockDb.users.find((u) => u.phoneNumber === phoneNumber) || null;
@@ -1686,7 +1726,7 @@ export async function POST(
         );
 
         if (!user) {
-          return NextResponse.json({ message: 'No registered user found with this phone number' }, { status: 404 });
+          return NextResponse.json({ success: false, message: 'Phone number not registered' });
         }
 
         // Generate a random 6-digit OTP
