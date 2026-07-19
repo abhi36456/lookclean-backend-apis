@@ -58,11 +58,13 @@ export default function AdminPage() {
   const router = useRouter();
 
   // Derive activeTab from pathname
-  const activeTab = pathname.endsWith('/users') ? 'users' : (pathname.endsWith('/settings') ? 'settings' : 'dashboard');
+  const activeTab = pathname.endsWith('/users') ? 'users' : (pathname.endsWith('/vouchers') ? 'vouchers' : (pathname.endsWith('/settings') ? 'settings' : 'dashboard'));
 
-  const handleTabChange = (tab: 'dashboard' | 'users' | 'settings') => {
+  const handleTabChange = (tab: 'dashboard' | 'users' | 'settings' | 'vouchers') => {
     if (tab === 'users') {
       router.push('/admin/users');
+    } else if (tab === 'vouchers') {
+      router.push('/admin/vouchers');
     } else if (tab === 'settings') {
       router.push('/admin/settings');
     } else {
@@ -90,6 +92,22 @@ export default function AdminPage() {
 
   // Settings tab state
   const [settingsSubTab, setSettingsSubTab] = useState<'password' | 'twilio' | 'categories' | 'services' | 'ambience' | 'database'>('password');
+
+  // Vouchers CRUD state
+  const [vouchersList, setVouchersList] = useState<{ id: number; code: string; title: string; amount: number; isActive: boolean; createdAt: string }[]>([]);
+  const [vouchersLoading, setVouchersLoading] = useState(false);
+  const [newVoucherCode, setNewVoucherCode] = useState('');
+  const [newVoucherTitle, setNewVoucherTitle] = useState('');
+  const [newVoucherAmount, setNewVoucherAmount] = useState('');
+  const [newVoucherIsActive, setNewVoucherIsActive] = useState(true);
+  
+  // Edit Voucher Modal state
+  const [editVoucherModalOpen, setEditVoucherModalOpen] = useState(false);
+  const [editingVoucherId, setEditingVoucherId] = useState<number | null>(null);
+  const [editVoucherCode, setEditVoucherCode] = useState('');
+  const [editVoucherTitle, setEditVoucherTitle] = useState('');
+  const [editVoucherAmount, setEditVoucherAmount] = useState('');
+  const [editVoucherIsActive, setEditVoucherIsActive] = useState(true);
 
   // Categories CRUD state
   const [categoriesList, setCategoriesList] = useState<{ id: number; title: string }[]>([]);
@@ -194,16 +212,20 @@ export default function AdminPage() {
     }
   };
 
-  // Fetch configs dynamically on sub-tab change
+  // Fetch configs dynamically on tab or sub-tab change
   useEffect(() => {
-    if (isAuthenticated && token && activeTab === 'settings') {
-      if (settingsSubTab === 'categories') {
-        fetchCategories();
-      } else if (settingsSubTab === 'services') {
-        fetchCategories();
-        fetchServices();
-      } else if (settingsSubTab === 'ambience') {
-        fetchAmbience();
+    if (isAuthenticated && token) {
+      if (activeTab === 'vouchers') {
+        fetchVouchers();
+      } else if (activeTab === 'settings') {
+        if (settingsSubTab === 'categories') {
+          fetchCategories();
+        } else if (settingsSubTab === 'services') {
+          fetchCategories();
+          fetchServices();
+        } else if (settingsSubTab === 'ambience') {
+          fetchAmbience();
+        }
       }
     }
   }, [isAuthenticated, token, activeTab, settingsSubTab]);
@@ -232,6 +254,117 @@ export default function AdminPage() {
       }
     }
   }, [settingsSubTab]);
+
+  const fetchVouchers = async () => {
+    setVouchersLoading(true);
+    try {
+      const res = await fetch('/api/admin/settings/vouchers', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVouchersList(data);
+      }
+    } catch (err) {
+      console.error('Fetch vouchers failed', err);
+    } finally {
+      setVouchersLoading(false);
+    }
+  };
+
+  const handleAddVoucher = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newVoucherCode.trim() || !newVoucherTitle.trim() || !newVoucherAmount) return;
+    setVouchersLoading(true);
+    try {
+      const res = await fetch('/api/admin/settings/vouchers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          code: newVoucherCode.toUpperCase().trim(),
+          title: newVoucherTitle,
+          amount: parseFloat(newVoucherAmount),
+          isActive: newVoucherIsActive
+        }),
+      });
+      if (res.ok) {
+        setNewVoucherCode('');
+        setNewVoucherTitle('');
+        setNewVoucherAmount('');
+        setNewVoucherIsActive(true);
+        fetchVouchers();
+      } else {
+        const errData = await res.json();
+        alert(errData.message || 'Failed to add voucher');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error occurred');
+    } finally {
+      setVouchersLoading(false);
+    }
+  };
+
+  const handleUpdateVoucher = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVoucherId || !editVoucherCode.trim() || !editVoucherTitle.trim() || !editVoucherAmount) return;
+    setVouchersLoading(true);
+    try {
+      const res = await fetch('/api/admin/settings/vouchers', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          id: editingVoucherId,
+          code: editVoucherCode.toUpperCase().trim(),
+          title: editVoucherTitle,
+          amount: parseFloat(editVoucherAmount),
+          isActive: editVoucherIsActive
+        }),
+      });
+      if (res.ok) {
+        setEditVoucherModalOpen(false);
+        setEditingVoucherId(null);
+        setEditVoucherCode('');
+        setEditVoucherTitle('');
+        setEditVoucherAmount('');
+        setEditVoucherIsActive(true);
+        fetchVouchers();
+      } else {
+        const errData = await res.json();
+        alert(errData.message || 'Failed to update voucher');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error occurred');
+    } finally {
+      setVouchersLoading(false);
+    }
+  };
+
+  const handleDeleteVoucher = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this voucher?')) return;
+    setVouchersLoading(true);
+    try {
+      const res = await fetch(`/api/admin/settings/vouchers?id=${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        fetchVouchers();
+      } else {
+        const errData = await res.json();
+        alert(errData.message || 'Failed to delete voucher');
+      }
+    } catch (err) {
+      console.error('Delete voucher failed', err);
+    } finally {
+      setVouchersLoading(false);
+    }
+  };
 
   const fetchCategories = async () => {
     try {
@@ -757,6 +890,18 @@ export default function AdminPage() {
               <Users className="w-4 h-4" />
               <span>Users</span>
             </button>
+            <button
+              onClick={() => handleTabChange('vouchers')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-left cursor-pointer transition-all
+                ${activeTab === 'vouchers'
+                  ? 'bg-primary/10 border border-primary/20 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }
+              `}
+            >
+              <Tag className="w-4 h-4" />
+              <span>Voucher Codes</span>
+            </button>
           </nav>
         </div>
 
@@ -809,7 +954,228 @@ export default function AdminPage() {
 
         {/* Main Content Area */}
         <main className="flex-grow w-full py-8 px-4 sm:px-8 space-y-8 z-10">
-          {activeTab === 'dashboard' ? (
+          {activeTab === 'vouchers' ? (
+            <div className="space-y-6">
+              <div className="border-b border-gray-900 pb-4">
+                <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-primary" /> Voucher Codes Settings
+                </h2>
+                <p className="text-xs text-gray-400">Create, update, activate/deactivate, and delete customer discount voucher codes.</p>
+              </div>
+
+              <Card className="border border-gray-850 p-6 space-y-4">
+                <form onSubmit={handleAddVoucher} className="border border-gray-905 bg-gray-900/10 p-5 rounded-2xl space-y-4 pt-2">
+                  <h4 className="text-[10px] font-extrabold text-primary uppercase tracking-wider mb-2">Create New Voucher</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                    <Input
+                      label="Voucher Code"
+                      type="text"
+                      placeholder="e.g. SAVE20"
+                      value={newVoucherCode}
+                      onChange={(e) => setNewVoucherCode(e.target.value)}
+                      required
+                    />
+                    <Input
+                      label="Title/Description"
+                      type="text"
+                      placeholder="e.g. 20 Dollars Off"
+                      value={newVoucherTitle}
+                      onChange={(e) => setNewVoucherTitle(e.target.value)}
+                      required
+                    />
+                    <Input
+                      label="Discount Amount ($)"
+                      type="number"
+                      placeholder="e.g. 20.00"
+                      value={newVoucherAmount}
+                      onChange={(e) => setNewVoucherAmount(e.target.value)}
+                      required
+                    />
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-gray-450 uppercase tracking-wider block">Status</label>
+                      <select
+                        value={newVoucherIsActive ? 'active' : 'inactive'}
+                        onChange={(e) => setNewVoucherIsActive(e.target.value === 'active')}
+                        className="w-full text-xs text-gray-200 bg-gray-950 border border-gray-850 rounded-xl p-3 focus:border-primary transition-all focus:outline-none cursor-pointer"
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-2">
+                    <Button type="submit" isLoading={vouchersLoading} className="px-6 py-2.5">
+                      Add Voucher Code
+                    </Button>
+                  </div>
+                </form>
+
+                <div className="border-t border-gray-900 pt-6">
+                  <h4 className="text-xs font-bold text-gray-450 uppercase tracking-wider mb-3">All Vouchers</h4>
+                  {vouchersList.length === 0 ? (
+                    <p className="text-xs text-gray-500 italic py-4 text-center">No voucher codes created yet.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-gray-850 text-gray-400 text-[10px] uppercase font-bold tracking-wider">
+                            <th className="pb-3 pr-4">Code</th>
+                            <th className="pb-3 pr-4">Title</th>
+                            <th className="pb-3 pr-4">Amount</th>
+                            <th className="pb-3 pr-4">Status</th>
+                            <th className="pb-3 pr-4">Created At</th>
+                            <th className="pb-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-900">
+                          {vouchersList.map((voucher) => (
+                            <tr key={voucher.id} className="text-xs text-gray-300 hover:bg-white/2 transition-colors">
+                              <td className="py-3.5 pr-4 font-bold text-white tracking-wider">{voucher.code}</td>
+                              <td className="py-3.5 pr-4 text-gray-450">{voucher.title}</td>
+                              <td className="py-3.5 pr-4 font-semibold text-gray-200">${voucher.amount.toFixed(2)}</td>
+                              <td className="py-3.5 pr-4">
+                                <button
+                                  onClick={async () => {
+                                    setVouchersLoading(true);
+                                    try {
+                                      const res = await fetch('/api/admin/settings/vouchers', {
+                                        method: 'PUT',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                          Authorization: `Bearer ${token}`
+                                        },
+                                        body: JSON.stringify({
+                                          id: voucher.id,
+                                          code: voucher.code,
+                                          title: voucher.title,
+                                          amount: voucher.amount,
+                                          isActive: !voucher.isActive
+                                        })
+                                      });
+                                      if (res.ok) {
+                                        fetchVouchers();
+                                      } else {
+                                        alert('Failed to toggle voucher status');
+                                      }
+                                    } catch (err) {
+                                      console.error(err);
+                                    } finally {
+                                      setVouchersLoading(false);
+                                    }
+                                  }}
+                                  className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border cursor-pointer select-none transition-all
+                                    ${voucher.isActive 
+                                      ? 'bg-emerald-500/10 text-emerald-450 border-emerald-500/20 hover:bg-emerald-500/20' 
+                                      : 'bg-red-500/10 text-red-450 border-red-500/20 hover:bg-red-500/20'
+                                    }
+                                  `}
+                                >
+                                  {voucher.isActive ? 'Active' : 'Inactive'}
+                                </button>
+                              </td>
+                              <td className="py-3.5 pr-4 text-[10px] text-gray-500">
+                                {new Date(voucher.createdAt).toLocaleDateString(undefined, {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </td>
+                              <td className="py-3.5 text-right space-x-2.5">
+                                <button
+                                  onClick={() => {
+                                    setEditingVoucherId(voucher.id);
+                                    setEditVoucherCode(voucher.code);
+                                    setEditVoucherTitle(voucher.title);
+                                    setEditVoucherAmount(String(voucher.amount));
+                                    setEditVoucherIsActive(voucher.isActive);
+                                    setEditVoucherModalOpen(true);
+                                  }}
+                                  className="text-[10px] text-primary hover:text-white font-extrabold uppercase transition-colors cursor-pointer"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteVoucher(voucher.id)}
+                                  className="text-[10px] text-red-400 hover:text-red-300 font-extrabold uppercase transition-colors cursor-pointer"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {editVoucherModalOpen && (
+                  <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <Card className="border border-gray-850 p-6 space-y-4 max-w-md w-full bg-gray-950 shadow-2xl">
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                        <Tag className="w-4 h-4 text-primary" /> Edit Voucher Code
+                      </h3>
+                      <p className="text-xs text-gray-450">Modify the settings and status for the selected voucher.</p>
+
+                      <form onSubmit={handleUpdateVoucher} className="space-y-4">
+                        <Input
+                          label="Voucher Code"
+                          type="text"
+                          placeholder="e.g. SAVE20"
+                          value={editVoucherCode}
+                          onChange={(e) => setEditVoucherCode(e.target.value)}
+                          required
+                        />
+                        <Input
+                          label="Title/Description"
+                          type="text"
+                          placeholder="e.g. 20 Dollars Off"
+                          value={editVoucherTitle}
+                          onChange={(e) => setEditVoucherTitle(e.target.value)}
+                          required
+                        />
+                        <Input
+                          label="Discount Amount ($)"
+                          type="number"
+                          placeholder="e.g. 20.00"
+                          value={editVoucherAmount}
+                          onChange={(e) => setEditVoucherAmount(e.target.value)}
+                          required
+                        />
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-gray-450 uppercase tracking-wider block">Status</label>
+                          <select
+                            value={editVoucherIsActive ? 'active' : 'inactive'}
+                            onChange={(e) => setEditVoucherIsActive(e.target.value === 'active')}
+                            className="w-full text-xs text-gray-200 bg-gray-950 border border-gray-850 rounded-xl p-3 focus:border-primary transition-all focus:outline-none cursor-pointer"
+                          >
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                          </select>
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditVoucherModalOpen(false);
+                              setEditingVoucherId(null);
+                            }}
+                            className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <Button type="submit" isLoading={vouchersLoading} className="px-5 py-2">
+                            Save Changes
+                          </Button>
+                        </div>
+                      </form>
+                    </Card>
+                  </div>
+                )}
+              </Card>
+            </div>
+          ) : activeTab === 'dashboard' ? (
             <>
               {/* Statistics Grid */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

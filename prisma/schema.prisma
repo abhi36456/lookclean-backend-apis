@@ -22,6 +22,10 @@ model User {
   createdAt           DateTime         @default(now())
   providerProfile     ProviderProfile?
   clientProfile       ClientProfile?
+  bookingsAsClient    Booking[]                 @relation("ClientBookings")
+  bookingsAsProvider  Booking[]                 @relation("ProviderBookings")
+  availabilityConfig  ProviderAvailabilityConfig?
+  activeSlots         ProviderActiveSlot[]
 
   @@map("users")
 }
@@ -67,7 +71,8 @@ model ProviderService {
   name        String
   price       Int
   category    String
-  createdAt   DateTime        @default(now())
+  createdAt   DateTime         @default(now())
+  bookingServices BookingService[]
 
   @@map("provider_service")
 }
@@ -130,4 +135,72 @@ model AmbienceSetting {
 
   @@unique([ambienceGroupId, title])
   @@map("setting_ambience")
+}
+
+model Booking {
+  id              Int              @id @default(autoincrement())
+  clientId        Int
+  client          User             @relation("ClientBookings", fields: [clientId], references: [id], onDelete: Cascade)
+  providerId      Int
+  provider        User             @relation("ProviderBookings", fields: [providerId], references: [id], onDelete: Cascade)
+  numberOfPeople  Int              @default(1)
+  date            DateTime
+  timeSlot        String           @db.VarChar(20)
+  status          String           @default("pending") // "pending", "confirmed", "completed", "cancelled"
+  tipAmount       Float            @default(0)
+  tipPercentage   Float?
+  voucherCode     String?          @db.VarChar(50)
+  voucherDiscount Float            @default(0)
+  serviceAmount   Float
+  grandTotal      Float
+  createdAt       DateTime         @default(now())
+  services        BookingService[]
+
+  @@map("bookings")
+}
+
+model BookingService {
+  id        Int             @id @default(autoincrement())
+  bookingId Int
+  booking   Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  serviceId Int
+  service   ProviderService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@map("booking_services")
+}
+
+model ProviderAvailabilityConfig {
+  id           Int      @id @default(autoincrement())
+  providerId   Int      @unique
+  provider     User     @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  startTime    String   @default("09:00 AM") @db.VarChar(20)
+  endTime      String   @default("06:00 PM") @db.VarChar(20)
+  slotDuration Int      @default(60) // in minutes
+  createdAt    DateTime @default(now())
+
+  @@map("provider_availability_config")
+}
+
+model ProviderActiveSlot {
+  id          Int      @id @default(autoincrement())
+  providerId  Int
+  provider    User     @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  dayOfWeek   String   @db.VarChar(20) // "Monday", "Tuesday", ..., "Sunday"
+  timeSlot    String   @db.VarChar(20) // "09:00 AM", "10:00 AM", etc.
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@unique([providerId, dayOfWeek, timeSlot])
+  @@map("provider_active_slots")
+}
+
+model Voucher {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(50)
+  title     String
+  amount    Float
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("vouchers")
 }

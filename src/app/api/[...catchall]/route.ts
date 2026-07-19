@@ -8,6 +8,43 @@ function hashPassword(password: string) {
   return crypto.createHash('sha256').update(password).digest('hex');
 }
 
+function parseTime(timeStr: string) {
+  const [time, modifier] = timeStr.split(' ');
+  let [hours, minutes] = time.split(':').map(Number);
+  if (hours === 12) {
+    hours = 0;
+  }
+  if (modifier && modifier.toUpperCase() === 'PM') {
+    hours += 12;
+  }
+  return hours * 60 + minutes;
+}
+
+function formatTime(minutesTotal: number) {
+  let hours = Math.floor(minutesTotal / 60);
+  const minutes = minutesTotal % 60;
+  const modifier = hours >= 12 ? 'PM' : 'AM';
+  if (hours > 12) {
+    hours -= 12;
+  }
+  if (hours === 0) {
+    hours = 12;
+  }
+  const hStr = String(hours).padStart(2, '0');
+  const mStr = String(minutes).padStart(2, '0');
+  return `${hStr}:${mStr} ${modifier}`;
+}
+
+function getSlotsRange(start: string, end: string, duration: number) {
+  const startMin = parseTime(start);
+  const endMin = parseTime(end);
+  const slots: string[] = [];
+  for (let time = startMin; time + duration <= endMin; time += duration) {
+    slots.push(formatTime(time));
+  }
+  return slots;
+}
+
 // A mock in-memory store for fallback if MySQL connection is unavailable
 const mockDb = {
   users: [
@@ -57,6 +94,11 @@ const mockDb = {
   profiles: [] as any[],
   services: [] as any[],
   amenities: [] as any[],
+  bookings: [] as any[],
+  bookingServices: [] as any[],
+  availabilityConfigs: [] as any[],
+  activeSlots: [] as any[],
+  vouchers: [] as any[],
   twilioSettings: {
     activeMode: 'staging',
     staging: {
@@ -1040,6 +1082,235 @@ export async function GET(
       return NextResponse.json(list);
     }
 
+    // GET Availability slots for provider
+    if (path === 'providers/me/availability/slots' || path === 'provider/me/availability/slots') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+      if (auth.role !== 'provider') {
+        return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      try {
+        const result = await executeWithDbFallback(
+          async () => {
+            const config = await prisma.providerAvailabilityConfig.findUnique({
+              where: { providerId: auth.userId }
+            });
+            const activeSlots = await prisma.providerActiveSlot.findMany({
+              where: { providerId: auth.userId }
+            });
+            return { config, activeSlots };
+          },
+          async () => {
+            const config = mockDb.availabilityConfigs.find((c) => c.providerId === auth.userId) || null;
+            const activeSlots = mockDb.activeSlots.filter((s) => s.providerId === auth.userId);
+            return { config, activeSlots };
+          }
+        );
+
+        const startTime = result.config?.startTime || '09:00 AM';
+        const endTime = result.config?.endTime || '06:00 PM';
+        const slotDuration = result.config?.slotDuration || 60;
+
+        const slotTimes = getSlotsRange(startTime, endTime, slotDuration);
+        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        const slotsResponse: Record<string, { timeSlot: string; isAvailable: boolean }[]> = {};
+
+        for (const day of days) {
+          slotsResponse[day] = slotTimes.map((time) => {
+            const match = result.activeSlots.find((s) => s.dayOfWeek.toLowerCase() === day.toLowerCase() && s.timeSlot === time);
+            return {
+              timeSlot: time,
+              isAvailable: match ? match.isAvailable : true
+            };
+          });
+        }
+
+        return NextResponse.json({
+          startTime,
+          endTime,
+          slotDuration,
+          slots: slotsResponse
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to fetch slots' }, { status: 400 });
+      }
+    }
+
+    // Client checks a provider's availability slots for a specific date
+    if (path === 'clients/providers/availability' || path === 'client/providers/availability') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+
+      const { searchParams } = new URL(request.url);
+      const providerIdStr = searchParams.get('providerId');
+      const dateStr = searchParams.get('date');
+
+      if (!providerIdStr || !dateStr) {
+        return NextResponse.json({ message: 'Missing providerId or date parameter' }, { status: 400 });
+      }
+
+      const providerId = parseInt(providerIdStr, 10);
+      const bookingDate = new Date(dateStr);
+      if (isNaN(bookingDate.getTime())) {
+        return NextResponse.json({ message: 'Invalid date format' }, { status: 400 });
+      }
+
+      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayName = daysOfWeek[bookingDate.getDay()];
+
+      try {
+        const result = await executeWithDbFallback(
+          async () => {
+            const config = await prisma.providerAvailabilityConfig.findUnique({
+              where: { providerId }
+            });
+            const activeSlots = await prisma.providerActiveSlot.findMany({
+              where: { providerId, dayOfWeek: dayName }
+            });
+            const bookings = await prisma.booking.findMany({
+              where: {
+                providerId,
+                status: { not: 'cancelled' },
+                date: {
+                  gte: new Date(dateStr + 'T00:00:00.000Z'),
+                  lte: new Date(dateStr + 'T23:59:59.999Z')
+                }
+              }
+            });
+            return { config, activeSlots, bookings };
+          },
+          async () => {
+            const config = mockDb.availabilityConfigs.find((c) => c.providerId === providerId) || null;
+            const activeSlots = mockDb.activeSlots.filter((s) => s.providerId === providerId && s.dayOfWeek.toLowerCase() === dayName.toLowerCase());
+            
+            const targetDateStr = bookingDate.toISOString().split('T')[0];
+            const bookings = mockDb.bookings.filter((b) => {
+              const bDateStr = new Date(b.date).toISOString().split('T')[0];
+              return b.providerId === providerId && bDateStr === targetDateStr && b.status !== 'cancelled';
+            });
+            return { config, activeSlots, bookings };
+          }
+        );
+
+        const startTime = result.config?.startTime || '09:00 AM';
+        const endTime = result.config?.endTime || '06:00 PM';
+        const slotDuration = result.config?.slotDuration || 60;
+
+        const slotTimes = getSlotsRange(startTime, endTime, slotDuration);
+
+        const availableSlots = slotTimes.filter((time) => {
+          const slotStatus = result.activeSlots.find((s) => s.timeSlot === time);
+          if (slotStatus && !slotStatus.isAvailable) {
+            return false;
+          }
+          const isBooked = result.bookings.some((b) => b.timeSlot === time);
+          return !isBooked;
+        });
+
+        return NextResponse.json({
+          providerId,
+          date: dateStr,
+          dayOfWeek: dayName,
+          startTime,
+          endTime,
+          slotDuration,
+          availableSlots
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to fetch availability' }, { status: 400 });
+      }
+    }
+
+    // Admin Voucher CRUD - GET list or single
+    if (path === 'admin/settings/vouchers') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
+      }
+
+      const { searchParams } = new URL(request.url);
+      const voucherIdStr = searchParams.get('id');
+
+      try {
+        if (voucherIdStr) {
+          const voucherId = parseInt(voucherIdStr, 10);
+          const voucher = await executeWithDbFallback(
+            async () => await prisma.voucher.findUnique({ where: { id: voucherId } }),
+            async () => mockDb.vouchers.find((v) => v.id === voucherId) || null
+          );
+          if (!voucher) {
+            return NextResponse.json({ message: 'Voucher not found' }, { status: 404 });
+          }
+          return NextResponse.json(voucher);
+        } else {
+          const list = await executeWithDbFallback(
+            async () => await prisma.voucher.findMany({ orderBy: { createdAt: 'desc' } }),
+            async () => [...mockDb.vouchers].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+          );
+          return NextResponse.json(list);
+        }
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to fetch vouchers' }, { status: 400 });
+      }
+    }
+
+    // GET Bookings for Client
+    if (path === 'clients/bookings' || path === 'client/bookings') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'client') {
+        return NextResponse.json({ message: 'Forbidden: Requires client role' }, { status: 403 });
+      }
+      const list = await executeWithDbFallback(
+        async () => await prisma.booking.findMany({ where: { clientId: auth.userId }, include: { services: { include: { service: true } } }, orderBy: { date: 'desc' } }),
+        async () => {
+          return mockDb.bookings
+            .filter((b) => b.clientId === auth.userId)
+            .map((b) => {
+              const services = mockDb.bookingServices
+                .filter((bs) => bs.bookingId === b.id)
+                .map((bs) => {
+                  const service = mockDb.services.find((s) => s.id === bs.serviceId);
+                  return { id: bs.id, serviceId: bs.serviceId, service };
+                });
+              return { ...b, services };
+            })
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        }
+      );
+      return NextResponse.json(list);
+    }
+
+    // GET Bookings for Provider
+    if (path === 'providers/bookings' || path === 'provider/bookings') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'provider') {
+        return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+      const list = await executeWithDbFallback(
+        async () => await prisma.booking.findMany({ where: { providerId: auth.userId }, include: { services: { include: { service: true } } }, orderBy: { date: 'desc' } }),
+        async () => {
+          return mockDb.bookings
+            .filter((b) => b.providerId === auth.userId)
+            .map((b) => {
+              const services = mockDb.bookingServices
+                .filter((bs) => bs.bookingId === b.id)
+                .map((bs) => {
+                  const service = mockDb.services.find((s) => s.id === bs.serviceId);
+                  return { id: bs.id, serviceId: bs.serviceId, service };
+                });
+              return { ...b, services };
+            })
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        }
+      );
+      return NextResponse.json(list);
+    }
+
     return NextResponse.json({ message: 'Endpoint not found' }, { status: 404 });
   } catch (err: any) {
     console.error(`[API GET Error]`, err);
@@ -1109,6 +1380,91 @@ export async function POST(
         message,
         isWishlisted
       });
+    }
+
+    // Update Provider Experience (/api/providers/me/experiences or /api/provider/me/experiences or /api/providers/me/experience or /api/provider/me/experience)
+    if (
+      path === 'providers/me/experiences' ||
+      path === 'provider/me/experiences' ||
+      path === 'providers/me/experience' ||
+      path === 'provider/me/experience'
+    ) {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+      if (auth.role !== 'provider') {
+        return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      let experienceInput: any = null;
+      if (contentType.includes('multipart/form-data')) {
+        try {
+          const formData = await request.formData();
+          experienceInput = formData.get('experience');
+        } catch (err: any) {
+          return NextResponse.json({ message: 'Failed to parse form data: ' + err.message }, { status: 400 });
+        }
+      } else {
+        experienceInput = (body as any).experience;
+      }
+
+      if (experienceInput === null || experienceInput === undefined) {
+        return NextResponse.json({ message: 'experience is required' }, { status: 400 });
+      }
+
+      const experienceVal = parseInt(experienceInput, 10);
+      if (isNaN(experienceVal) || experienceVal < 0) {
+        return NextResponse.json({ message: 'Invalid experience value. Must be a non-negative integer.' }, { status: 400 });
+      }
+
+      try {
+        const response = await executeWithDbFallback(
+          async () => {
+            let profile = await prisma.providerProfile.findUnique({ where: { userId: auth.userId } });
+            if (!profile) {
+              profile = await prisma.providerProfile.create({
+                data: {
+                  userId: auth.userId,
+                  name: '',
+                  location: '',
+                  experience: experienceVal
+                }
+              });
+            } else {
+              profile = await prisma.providerProfile.update({
+                where: { userId: auth.userId },
+                data: { experience: experienceVal }
+              });
+            }
+            return profile;
+          },
+          async () => {
+            let mockProfile = mockDb.profiles.find((p) => p.userId === auth.userId);
+            if (!mockProfile) {
+              mockProfile = {
+                id: mockDb.profiles.length + 1,
+                userId: auth.userId,
+                name: '',
+                location: '',
+                experience: experienceVal
+              };
+              mockDb.profiles.push(mockProfile);
+            } else {
+              mockProfile.experience = experienceVal;
+            }
+            return mockProfile;
+          }
+        );
+
+        return NextResponse.json({
+          success: true,
+          message: 'Experience updated successfully',
+          experience: response.experience
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to update experience' }, { status: 400 });
+      }
     }
 
     // Check if it's the license/licence endpoint
@@ -3033,6 +3389,475 @@ export async function POST(
       }
     }
 
+    // POST Availability Config for Provider
+    if (path === 'providers/me/availability/config' || path === 'provider/me/availability/config') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'provider') {
+        return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      const { startTime, endTime, slotDuration } = body as any;
+      if (!startTime || !endTime || !slotDuration) {
+        return NextResponse.json({ message: 'Missing startTime, endTime, or slotDuration' }, { status: 400 });
+      }
+
+      const durationVal = parseInt(slotDuration, 10);
+      if (isNaN(durationVal) || durationVal <= 0) {
+        return NextResponse.json({ message: 'Invalid slotDuration. Must be a positive integer.' }, { status: 400 });
+      }
+
+      try {
+        const result = await executeWithDbFallback(
+          async () => {
+            return await prisma.providerAvailabilityConfig.upsert({
+              where: { providerId: auth.userId },
+              update: { startTime, endTime, slotDuration: durationVal },
+              create: { providerId: auth.userId, startTime, endTime, slotDuration: durationVal }
+            });
+          },
+          async () => {
+            let config = mockDb.availabilityConfigs.find((c) => c.providerId === auth.userId);
+            if (!config) {
+              config = { id: mockDb.availabilityConfigs.length + 1, providerId: auth.userId };
+              mockDb.availabilityConfigs.push(config);
+            }
+            config.startTime = startTime;
+            config.endTime = endTime;
+            config.slotDuration = durationVal;
+            return config;
+          }
+        );
+
+        return NextResponse.json({
+          success: true,
+          message: 'Availability configuration saved successfully',
+          config: result
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to save configuration' }, { status: 400 });
+      }
+    }
+
+    // POST Availability Slots selection (pick slots)
+    if (path === 'providers/me/availability/slots' || path === 'provider/me/availability/slots') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'provider') {
+        return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      const { slots } = body as any;
+      if (!Array.isArray(slots)) {
+        return NextResponse.json({ message: 'Invalid payload: slots array is required' }, { status: 400 });
+      }
+
+      try {
+        await executeWithDbFallback(
+          async () => {
+            for (const slot of slots) {
+              const { dayOfWeek, timeSlot, isAvailable } = slot;
+              if (!dayOfWeek || !timeSlot || isAvailable === undefined) continue;
+
+              await prisma.providerActiveSlot.upsert({
+                where: {
+                  providerId_dayOfWeek_timeSlot: {
+                    providerId: auth.userId,
+                    dayOfWeek,
+                    timeSlot
+                  }
+                },
+                update: { isAvailable: Boolean(isAvailable) },
+                create: {
+                  providerId: auth.userId,
+                  dayOfWeek,
+                  timeSlot,
+                  isAvailable: Boolean(isAvailable)
+                }
+              });
+            }
+          },
+          async () => {
+            for (const slot of slots) {
+              const { dayOfWeek, timeSlot, isAvailable } = slot;
+              if (!dayOfWeek || !timeSlot || isAvailable === undefined) continue;
+
+              let match = mockDb.activeSlots.find(
+                (s) => s.providerId === auth.userId &&
+                s.dayOfWeek.toLowerCase() === dayOfWeek.toLowerCase() &&
+                s.timeSlot === timeSlot
+              );
+
+              if (match) {
+                match.isAvailable = Boolean(isAvailable);
+              } else {
+                mockDb.activeSlots.push({
+                  id: mockDb.activeSlots.length + 1,
+                  providerId: auth.userId,
+                  dayOfWeek,
+                  timeSlot,
+                  isAvailable: Boolean(isAvailable)
+                });
+              }
+            }
+          }
+        );
+
+        return NextResponse.json({
+          success: true,
+          message: 'Slots availability updated successfully'
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to update slots availability' }, { status: 400 });
+      }
+    }
+
+    // POST Admin Voucher - Create
+    if (path === 'admin/settings/vouchers') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
+      }
+
+      const { code, title, amount, isActive } = body as any;
+      if (!code || !title || amount === undefined) {
+        return NextResponse.json({ message: 'Missing code, title, or amount' }, { status: 400 });
+      }
+
+      const amountVal = parseFloat(amount);
+      if (isNaN(amountVal) || amountVal < 0) {
+        return NextResponse.json({ message: 'Invalid amount' }, { status: 400 });
+      }
+
+      const activeVal = isActive !== undefined ? Boolean(isActive) : true;
+
+      try {
+        const result = await executeWithDbFallback(
+          async () => {
+            return await prisma.voucher.create({
+              data: {
+                code: String(code).toUpperCase().trim(),
+                title,
+                amount: amountVal,
+                isActive: activeVal
+              }
+            });
+          },
+          async () => {
+            const normalizedCode = String(code).toUpperCase().trim();
+            const exists = mockDb.vouchers.some((v) => v.code === normalizedCode);
+            if (exists) throw new Error('Voucher code already exists');
+
+            const newVoucher = {
+              id: mockDb.vouchers.length + 1,
+              code: normalizedCode,
+              title,
+              amount: amountVal,
+              isActive: activeVal,
+              createdAt: new Date()
+            };
+            mockDb.vouchers.push(newVoucher);
+            return newVoucher;
+          }
+        );
+
+        return NextResponse.json({
+          success: true,
+          message: 'Voucher created successfully',
+          voucher: result
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to create voucher' }, { status: 400 });
+      }
+    }
+
+    // POST Order Summary Calculation
+    if (path === 'orders/calculate' || path === 'client/bookings/calculate') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+
+      const { serviceIds, tipType, tipAmount, voucherCode } = body as any;
+      if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
+        return NextResponse.json({ message: 'At least one service is required' }, { status: 400 });
+      }
+
+      try {
+        const servicesList = await executeWithDbFallback(
+          async () => await prisma.providerService.findMany({ where: { id: { in: serviceIds.map(Number) } } }),
+          async () => mockDb.services.filter((s) => serviceIds.map(Number).includes(s.id))
+        );
+
+        const serviceAmount = servicesList.reduce((sum, s) => sum + s.price, 0);
+
+        let calculatedTip = 0;
+        const normalizedTipType = String(tipType).toLowerCase();
+        if (normalizedTipType === '10%') {
+          calculatedTip = serviceAmount * 0.10;
+        } else if (normalizedTipType === '15%') {
+          calculatedTip = serviceAmount * 0.15;
+        } else if (normalizedTipType === '20%') {
+          calculatedTip = serviceAmount * 0.20;
+        } else if (normalizedTipType === 'custom') {
+          calculatedTip = parseFloat(tipAmount) || 0;
+        }
+
+        let discount = 0;
+        let isValidVoucher = false;
+        let voucherMessage = 'No voucher applied';
+
+        if (voucherCode) {
+          const normCode = String(voucherCode).toUpperCase().trim();
+          const voucher = await executeWithDbFallback(
+            async () => await prisma.voucher.findUnique({ where: { code: normCode } }),
+            async () => mockDb.vouchers.find((v) => v.code === normCode) || null
+          );
+
+          if (voucher) {
+            if (voucher.isActive) {
+              discount = voucher.amount;
+              isValidVoucher = true;
+              voucherMessage = `Voucher '${voucher.code}' applied successfully.`;
+            } else {
+              voucherMessage = 'Voucher code is inactive';
+            }
+          } else {
+            voucherMessage = 'Invalid voucher code';
+          }
+        }
+
+        if (discount > serviceAmount) {
+          discount = serviceAmount;
+        }
+
+        const grandTotal = Math.max(0, serviceAmount + calculatedTip - discount);
+
+        return NextResponse.json({
+          success: true,
+          serviceAmount,
+          tipAmount: calculatedTip,
+          voucherDiscount: discount,
+          grandTotal,
+          isValidVoucher,
+          voucherMessage
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to calculate summary' }, { status: 400 });
+      }
+    }
+
+    // POST Client Booking
+    if (path === 'clients/bookings' || path === 'client/bookings') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+      if (auth.role !== 'client') {
+        return NextResponse.json({ message: 'Forbidden: Requires client role' }, { status: 403 });
+      }
+
+      const { providerId, serviceIds, numberOfPeople, date, timeSlot, tipType, tipAmount, voucherCode } = body as any;
+
+      if (!providerId || !Array.isArray(serviceIds) || serviceIds.length === 0 || !date || !timeSlot) {
+        return NextResponse.json({ message: 'Missing required booking fields' }, { status: 400 });
+      }
+
+      const numPeople = parseInt(numberOfPeople, 10) || 1;
+      if (numPeople < 1 || numPeople > 10) {
+        return NextResponse.json({ message: 'Number of people must be between 1 and 10' }, { status: 400 });
+      }
+
+      const providerIdInt = parseInt(providerId, 10);
+      const bookingDate = new Date(date);
+      if (isNaN(bookingDate.getTime())) {
+        return NextResponse.json({ message: 'Invalid date format' }, { status: 400 });
+      }
+
+      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayName = daysOfWeek[bookingDate.getDay()];
+
+      try {
+        const check = await executeWithDbFallback(
+          async () => {
+            const config = await prisma.providerAvailabilityConfig.findUnique({
+              where: { providerId: providerIdInt }
+            });
+            const activeSlots = await prisma.providerActiveSlot.findMany({
+              where: { providerId: providerIdInt, dayOfWeek: dayName }
+            });
+            const existingBookings = await prisma.booking.findMany({
+              where: {
+                providerId: providerIdInt,
+                timeSlot,
+                status: { not: 'cancelled' },
+                date: {
+                  gte: new Date(date + 'T00:00:00.000Z'),
+                  lte: new Date(date + 'T23:59:59.999Z')
+                }
+              }
+            });
+            return { config, activeSlots, existingBookings };
+          },
+          async () => {
+            const config = mockDb.availabilityConfigs.find((c) => c.providerId === providerIdInt) || null;
+            const activeSlots = mockDb.activeSlots.filter((s) => s.providerId === providerIdInt && s.dayOfWeek.toLowerCase() === dayName.toLowerCase());
+            
+            const targetDateStr = bookingDate.toISOString().split('T')[0];
+            const existingBookings = mockDb.bookings.filter((b) => {
+              const bDateStr = new Date(b.date).toISOString().split('T')[0];
+              return b.providerId === providerIdInt && b.timeSlot === timeSlot && bDateStr === targetDateStr && b.status !== 'cancelled';
+            });
+            return { config, activeSlots, existingBookings };
+          }
+        );
+
+        const startTime = check.config?.startTime || '09:00 AM';
+        const endTime = check.config?.endTime || '06:00 PM';
+        const slotDuration = check.config?.slotDuration || 60;
+        const validSlots = getSlotsRange(startTime, endTime, slotDuration);
+
+        if (!validSlots.includes(timeSlot)) {
+          return NextResponse.json({ message: 'Selected time slot is out of provider working hours' }, { status: 400 });
+        }
+
+        const activeStatus = check.activeSlots.find((s) => s.timeSlot === timeSlot);
+        if (activeStatus && !activeStatus.isAvailable) {
+          return NextResponse.json({ message: 'Provider is not available at the selected time slot' }, { status: 400 });
+        }
+
+        if (check.existingBookings.length > 0) {
+          return NextResponse.json({ message: 'Selected time slot is already booked' }, { status: 400 });
+        }
+
+        const servicesList = await executeWithDbFallback(
+          async () => await prisma.providerService.findMany({ where: { id: { in: serviceIds.map(Number) } } }),
+          async () => mockDb.services.filter((s) => serviceIds.map(Number).includes(s.id))
+        );
+
+        if (servicesList.length === 0) {
+          return NextResponse.json({ message: 'No valid services selected' }, { status: 400 });
+        }
+
+        const serviceAmount = servicesList.reduce((sum, s) => sum + s.price, 0);
+
+        let calculatedTip = 0;
+        const normalizedTipType = String(tipType).toLowerCase();
+        let tipPct: number | null = null;
+        if (normalizedTipType === '10%') {
+          calculatedTip = serviceAmount * 0.10;
+          tipPct = 10;
+        } else if (normalizedTipType === '15%') {
+          calculatedTip = serviceAmount * 0.15;
+          tipPct = 15;
+        } else if (normalizedTipType === '20%') {
+          calculatedTip = serviceAmount * 0.20;
+          tipPct = 20;
+        } else if (normalizedTipType === 'custom') {
+          calculatedTip = parseFloat(tipAmount) || 0;
+        }
+
+        let discount = 0;
+        if (voucherCode) {
+          const normCode = String(voucherCode).toUpperCase().trim();
+          const voucher = await executeWithDbFallback(
+            async () => await prisma.voucher.findUnique({ where: { code: normCode } }),
+            async () => mockDb.vouchers.find((v) => v.code === normCode) || null
+          );
+          if (voucher) {
+            if (voucher.isActive) {
+              discount = voucher.amount;
+            } else {
+              return NextResponse.json({ message: 'Voucher code is inactive' }, { status: 400 });
+            }
+          } else {
+            return NextResponse.json({ message: 'Invalid voucher code' }, { status: 400 });
+          }
+        }
+        if (discount > serviceAmount) {
+          discount = serviceAmount;
+        }
+
+        const grandTotal = Math.max(0, serviceAmount + calculatedTip - discount);
+
+        const booking = await executeWithDbFallback(
+          async () => {
+            return await prisma.booking.create({
+              data: {
+                clientId: auth.userId,
+                providerId: providerIdInt,
+                numberOfPeople: numPeople,
+                date: bookingDate,
+                timeSlot,
+                status: 'pending',
+                tipAmount: calculatedTip,
+                tipPercentage: tipPct,
+                voucherCode: voucherCode ? String(voucherCode).toUpperCase().trim() : null,
+                voucherDiscount: discount,
+                serviceAmount,
+                grandTotal,
+                services: {
+                  create: serviceIds.map((sId) => ({
+                    serviceId: Number(sId)
+                  }))
+                }
+              },
+              include: {
+                services: {
+                  include: {
+                    service: true
+                  }
+                }
+              }
+            });
+          },
+          async () => {
+            const bId = mockDb.bookings.length + 1;
+            const newBooking = {
+              id: bId,
+              clientId: auth.userId,
+              providerId: providerIdInt,
+              numberOfPeople: numPeople,
+              date: bookingDate,
+              timeSlot,
+              status: 'pending',
+              tipAmount: calculatedTip,
+              tipPercentage: tipPct,
+              voucherCode: voucherCode ? String(voucherCode).toUpperCase().trim() : null,
+              voucherDiscount: discount,
+              serviceAmount,
+              grandTotal,
+              createdAt: new Date()
+            };
+            mockDb.bookings.push(newBooking);
+
+            serviceIds.forEach((sId) => {
+              mockDb.bookingServices.push({
+                id: mockDb.bookingServices.length + 1,
+                bookingId: bId,
+                serviceId: Number(sId)
+              });
+            });
+
+            const services = mockDb.bookingServices
+              .filter((bs) => bs.bookingId === bId)
+              .map((bs) => {
+                const service = mockDb.services.find((s) => s.id === bs.serviceId);
+                return { id: bs.id, serviceId: bs.serviceId, service };
+              });
+
+            return { ...newBooking, services };
+          }
+        );
+
+        return NextResponse.json({
+          success: true,
+          message: 'Booking created successfully',
+          booking
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to create booking' }, { status: 400 });
+      }
+    }
+
     return NextResponse.json({ message: 'Endpoint not found' }, { status: 404 });
   } catch (err: any) {
     console.error(`[API POST Error]`, err);
@@ -3635,6 +4460,65 @@ export async function PUT(
 
 
 
+    // PUT Admin Voucher - Update
+    if (path === 'admin/settings/vouchers') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
+      }
+
+      const { id, code, title, amount, isActive } = body as any;
+      if (!id || !code || !title || amount === undefined) {
+        return NextResponse.json({ message: 'Missing id, code, title, or amount' }, { status: 400 });
+      }
+
+      const voucherId = parseInt(id, 10);
+      const amountVal = parseFloat(amount);
+      if (isNaN(amountVal) || amountVal < 0) {
+        return NextResponse.json({ message: 'Invalid amount' }, { status: 400 });
+      }
+
+      const activeVal = isActive !== undefined ? Boolean(isActive) : true;
+
+      try {
+        const result = await executeWithDbFallback(
+          async () => {
+            return await prisma.voucher.update({
+              where: { id: voucherId },
+              data: {
+                code: String(code).toUpperCase().trim(),
+                title,
+                amount: amountVal,
+                isActive: activeVal
+              }
+            });
+          },
+          async () => {
+            const voucher = mockDb.vouchers.find((v) => v.id === voucherId);
+            if (!voucher) throw new Error('Voucher not found');
+
+            const normalizedCode = String(code).toUpperCase().trim();
+            const exists = mockDb.vouchers.some((v) => v.code === normalizedCode && v.id !== voucherId);
+            if (exists) throw new Error('Voucher code already exists');
+
+            voucher.code = normalizedCode;
+            voucher.title = title;
+            voucher.amount = amountVal;
+            voucher.isActive = activeVal;
+            return voucher;
+          }
+        );
+
+        return NextResponse.json({
+          success: true,
+          message: 'Voucher updated successfully',
+          voucher: result
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to update voucher' }, { status: 400 });
+      }
+    }
+
     return NextResponse.json({ message: 'Endpoint not found' }, { status: 404 });
   } catch (err: any) {
     console.error(`[API PUT Error]`, err);
@@ -3975,6 +4859,37 @@ export async function DELETE(
         return NextResponse.json({ success: true, message: 'Ambience setting deleted successfully.' });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to delete' }, { status: 400 });
+      }
+    }
+
+    // DELETE Admin Voucher
+    if (path === 'admin/settings/vouchers') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
+      }
+
+      const { searchParams } = new URL(request.url);
+      const voucherIdStr = searchParams.get('id');
+      if (!voucherIdStr) {
+        return NextResponse.json({ message: 'Missing voucher id' }, { status: 400 });
+      }
+
+      const voucherId = parseInt(voucherIdStr, 10);
+      try {
+        await executeWithDbFallback(
+          async () => {
+            await prisma.voucher.delete({ where: { id: voucherId } });
+          },
+          async () => {
+            const index = mockDb.vouchers.findIndex((v) => v.id === voucherId);
+            if (index === -1) throw new Error('Voucher not found');
+            mockDb.vouchers.splice(index, 1);
+          }
+        );
+        return NextResponse.json({ success: true, message: 'Voucher deleted successfully.' });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to delete voucher' }, { status: 400 });
       }
     }
 

@@ -1010,6 +1010,372 @@
         }
       }
     },
+    "/providers/me/experiences": {
+      "post": {
+        "tags": [
+          "Providers Profile"
+        ],
+        "summary": "Update Provider Experience (Years)",
+        "description": "Updates the provider profile experience field. Accessible only for providers.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "experience"
+                ],
+                "properties": {
+                  "experience": {
+                    "type": "integer",
+                    "description": "Years of experience",
+                    "example": 8
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "experience"
+                ],
+                "properties": {
+                  "experience": {
+                    "type": "integer",
+                    "description": "Years of experience",
+                    "example": 8
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Experience updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Experience updated successfully"
+                    },
+                    "experience": {
+                      "type": "integer",
+                      "example": 8
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input or bad request"
+          },
+          "401": {
+            "description": "Unauthorized access"
+          },
+          "403": {
+            "description": "Forbidden: Requires provider role"
+          }
+        }
+      }
+    },
+    "/providers/me/availability/config": {
+      "post": {
+        "tags": [
+          "Provider Schedule & Availability"
+        ],
+        "summary": "Set Provider Working Hours & Slot Duration",
+        "description": "Allows a provider to set their default working hours and slot duration (in minutes).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "startTime",
+                  "endTime",
+                  "slotDuration"
+                ],
+                "properties": {
+                  "startTime": {
+                    "type": "string",
+                    "example": "09:00 AM"
+                  },
+                  "endTime": {
+                    "type": "string",
+                    "example": "06:00 PM"
+                  },
+                  "slotDuration": {
+                    "type": "integer",
+                    "example": 60
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuration saved successfully"
+          }
+        }
+      }
+    },
+    "/providers/me/availability/slots": {
+      "get": {
+        "tags": [
+          "Provider Schedule & Availability"
+        ],
+        "summary": "Get Provider Availability Slots (Monday to Sunday)",
+        "description": "Generates time slots according to the configuration and returns status (active or inactive) for Monday through Sunday.",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Provider Schedule & Availability"
+        ],
+        "summary": "Save Active Availability Slots",
+        "description": "Allows provider to select/pick which slots they are active or inactive for.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "slots"
+                ],
+                "properties": {
+                  "slots": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "dayOfWeek",
+                        "timeSlot",
+                        "isAvailable"
+                      ],
+                      "properties": {
+                        "dayOfWeek": {
+                          "type": "string",
+                          "example": "Monday"
+                        },
+                        "timeSlot": {
+                          "type": "string",
+                          "example": "09:00 AM"
+                        },
+                        "isAvailable": {
+                          "type": "boolean",
+                          "example": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Slots updated successfully"
+          }
+        }
+      }
+    },
+    "/clients/providers/availability": {
+      "get": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Get Provider Available Slots for Specific Date",
+        "description": "Returns only the available (non-booked, active) slots for a provider on a specific date.",
+        "parameters": [
+          {
+            "name": "providerId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "description": "YYYY-MM-DD format",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/orders/calculate": {
+      "post": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Calculate Order Summary (Totals, Tips, Vouchers)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "serviceIds",
+                  "tipType"
+                ],
+                "properties": {
+                  "serviceIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "example": [
+                      1,
+                      2
+                    ]
+                  },
+                  "tipType": {
+                    "type": "string",
+                    "example": "10%"
+                  },
+                  "tipAmount": {
+                    "type": "number",
+                    "example": 0
+                  },
+                  "voucherCode": {
+                    "type": "string",
+                    "example": "SAVE10"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/clients/bookings": {
+      "get": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "List Bookings for Client",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Create Provider Booking",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "providerId",
+                  "serviceIds",
+                  "numberOfPeople",
+                  "date",
+                  "timeSlot",
+                  "tipType"
+                ],
+                "properties": {
+                  "providerId": {
+                    "type": "integer",
+                    "example": 2
+                  },
+                  "serviceIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "example": [
+                      1
+                    ]
+                  },
+                  "numberOfPeople": {
+                    "type": "integer",
+                    "example": 2
+                  },
+                  "date": {
+                    "type": "string",
+                    "example": "2026-07-20"
+                  },
+                  "timeSlot": {
+                    "type": "string",
+                    "example": "10:00 AM"
+                  },
+                  "tipType": {
+                    "type": "string",
+                    "example": "15%"
+                  },
+                  "tipAmount": {
+                    "type": "number",
+                    "example": 0
+                  },
+                  "voucherCode": {
+                    "type": "string",
+                    "example": "SAVE10"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Booking created successfully"
+          }
+        }
+      }
+    },
+    "/providers/bookings": {
+      "get": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "List Bookings for Provider",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
     "/providers/me/licence": {
       "put": {
         "tags": [
