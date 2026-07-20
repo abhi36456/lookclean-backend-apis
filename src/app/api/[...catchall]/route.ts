@@ -2268,6 +2268,25 @@ export async function POST(
         return NextResponse.json({ message: 'Phone number is required' }, { status: 400 });
       }
 
+      // Check if phone number is already registered to another user account
+      const existingUser = await executeWithDbFallback(
+        async () => {
+          return await prisma.user.findFirst({
+            where: {
+              phoneNumber,
+              id: { not: auth.userId },
+            },
+          });
+        },
+        async () => {
+          return mockDb.users.find((u) => u.phoneNumber === phoneNumber && u.id !== auth.userId) || null;
+        }
+      );
+
+      if (existingUser) {
+        return NextResponse.json({ message: 'This phone number is already registered to another account' }, { status: 400 });
+      }
+
       // Generate a random 6-digit OTP
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       otpStore.set(phoneNumber, { code: otp, exp: Date.now() + 1000 * 60 * 10 }); // 10 minutes expiry
