@@ -4757,8 +4757,71 @@ export async function DELETE(
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if it's the license/licence endpoint for DELETE
+    // Check if it's the wishlist endpoint for DELETE
     const pathParts = path.split('/');
+    const isWishlistRoute =
+      path === 'clients/wishlist' ||
+      path === 'client/wishlist' ||
+      (pathParts.length === 3 && (pathParts[0] === 'clients' || pathParts[0] === 'client') && pathParts[1] === 'wishlist');
+
+    if (isWishlistRoute) {
+      if (auth.role !== 'client' && auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires client role' }, { status: 403 });
+      }
+
+      let providerId: number | null = null;
+      if (pathParts.length === 3) {
+        const parsed = parseInt(pathParts[2], 10);
+        if (!isNaN(parsed)) {
+          providerId = parsed;
+        }
+      }
+
+      const { searchParams } = new URL(request.url);
+      const queryProviderId = searchParams.get('providerId') || searchParams.get('providerProfileId') || searchParams.get('id');
+      if (providerId === null && queryProviderId) {
+        const parsed = parseInt(queryProviderId, 10);
+        if (!isNaN(parsed)) {
+          providerId = parsed;
+        }
+      }
+
+      try {
+        const tempBody = await request.json();
+        if (providerId === null) {
+          const bodyId = tempBody.providerId || tempBody.providerProfileId || tempBody.id;
+          if (bodyId) {
+            const parsed = parseInt(String(bodyId), 10);
+            if (!isNaN(parsed)) {
+              providerId = parsed;
+            }
+          }
+        }
+      } catch {
+        // No body or not JSON
+      }
+
+      if (!providerId) {
+        return NextResponse.json({ message: 'Missing or invalid providerId' }, { status: 400 });
+      }
+
+      const existingIndex = wishlistStore.findIndex(
+        (item) => item.clientId === auth.userId && item.providerId === providerId
+      );
+
+      if (existingIndex > -1) {
+        wishlistStore.splice(existingIndex, 1);
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Provider removed from wishlist successfully',
+        providerId,
+        isWishlisted: false
+      });
+    }
+
+    // Check if it's the license/licence endpoint for DELETE
     const isLicenceRoute =
       path === 'providers/me/licence' ||
       path === 'provider/me/licence' ||

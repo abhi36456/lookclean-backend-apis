@@ -963,6 +963,38 @@
             "description": "Forbidden: Requires client role"
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Client Profile"
+        ],
+        "summary": "Delete provider from wishlist by ID",
+        "description": "Removes a service provider from the client's wishlist by provider ID.",
+        "parameters": [
+          {
+            "name": "providerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "example": 2
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider removed from wishlist successfully"
+          },
+          "400": {
+            "description": "Missing or invalid providerId"
+          },
+          "401": {
+            "description": "Unauthorized access"
+          },
+          "403": {
+            "description": "Forbidden: Requires client role"
+          }
+        }
       }
     },
     "/providers/me": {

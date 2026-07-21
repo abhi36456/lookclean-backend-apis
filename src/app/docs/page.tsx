@@ -701,6 +701,41 @@ const openApiSpec = {
           },
         },
       },
+      delete: {
+        tags: ['Client Profile'],
+        summary: 'Delete provider from wishlist by ID',
+        description: "Removes a service provider from the client's wishlist by provider ID (via path /clients/wishlist/{providerId}, query ?providerId=2, or body).",
+        parameters: [
+          {
+            name: 'providerId',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', example: 2 },
+            description: 'Provider user ID to remove from wishlist'
+          }
+        ],
+        responses: {
+          200: {
+            description: 'Provider removed from wishlist successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Provider removed from wishlist successfully' },
+                    providerId: { type: 'integer', example: 2 },
+                    isWishlisted: { type: 'boolean', example: false }
+                  }
+                }
+              }
+            }
+          },
+          400: { description: 'Missing or invalid providerId' },
+          401: { description: 'Unauthorized access' },
+          403: { description: 'Forbidden: Requires client role' }
+        }
+      }
     },
     '/providers/me': {
       get: {
