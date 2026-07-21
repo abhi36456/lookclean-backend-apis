@@ -935,7 +935,7 @@ export async function GET(
       if (path === 'admin/settings/categories' && auth.role !== 'admin') {
         return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
       }
-      if (path === 'provider/setup/categories' && auth.role !== 'provider' && auth.role !== 'admin') {
+      if (path === 'provider/setup/categories' && auth.role !== 'provider' && auth.role !== 'admin' && auth.role !== 'client') {
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
       }
       const list = await executeWithDbFallback(
@@ -1294,8 +1294,51 @@ export async function GET(
       if (!auth || auth.role !== 'client') {
         return NextResponse.json({ message: 'Forbidden: Requires client role' }, { status: 403 });
       }
+      const baseUrl = getBaseUrl(request);
       const list = await executeWithDbFallback(
-        async () => await prisma.booking.findMany({ where: { clientId: auth.userId }, include: { services: { include: { service: true } } }, orderBy: { date: 'desc' } }),
+        async () => {
+          const dbBookings = await prisma.booking.findMany({
+            where: { clientId: auth.userId },
+            include: {
+              provider: {
+                include: { providerProfile: true }
+              },
+              services: { include: { service: true } }
+            },
+            orderBy: { date: 'desc' }
+          });
+          return dbBookings.map((b: any) => {
+            const providerUser = b.provider;
+            const profile = providerUser?.providerProfile;
+            let profileImageUrl = profile?.profileImageUrl || null;
+            if (baseUrl && profileImageUrl && profileImageUrl.startsWith('/')) {
+              profileImageUrl = `${baseUrl}${profileImageUrl}`;
+            }
+            let coverImageUrl = profile?.coverImageUrl || null;
+            if (baseUrl && coverImageUrl && coverImageUrl.startsWith('/')) {
+              coverImageUrl = `${baseUrl}${coverImageUrl}`;
+            }
+
+            const providerDetails = providerUser ? {
+              id: providerUser.id,
+              name: profile?.name || providerUser.name || '',
+              email: providerUser.email,
+              phoneNumber: providerUser.phoneNumber || null,
+              providerType: providerUser.providerType || null,
+              location: profile?.location || null,
+              profileImageUrl,
+              coverImageUrl,
+              latitude: profile?.latitude || null,
+              longitude: profile?.longitude || null,
+            } : null;
+
+            const { provider, ...rest } = b;
+            return {
+              ...rest,
+              providerDetails
+            };
+          });
+        },
         async () => {
           return mockDb.bookings
             .filter((b) => b.clientId === auth.userId)
@@ -1306,7 +1349,31 @@ export async function GET(
                   const service = mockDb.services.find((s) => s.id === bs.serviceId);
                   return { id: bs.id, serviceId: bs.serviceId, service };
                 });
-              return { ...b, services };
+              const providerUser = mockDb.users.find((u) => u.id === b.providerId);
+              const profile = mockDb.profiles.find((p) => p.userId === b.providerId);
+              let profileImageUrl = profile?.profileImageUrl || null;
+              if (baseUrl && profileImageUrl && profileImageUrl.startsWith('/')) {
+                profileImageUrl = `${baseUrl}${profileImageUrl}`;
+              }
+              let coverImageUrl = profile?.coverImageUrl || null;
+              if (baseUrl && coverImageUrl && coverImageUrl.startsWith('/')) {
+                coverImageUrl = `${baseUrl}${coverImageUrl}`;
+              }
+
+              const providerDetails = providerUser ? {
+                id: providerUser.id,
+                name: profile?.name || providerUser.name || '',
+                email: providerUser.email,
+                phoneNumber: providerUser.phoneNumber || null,
+                providerType: providerUser.providerType || null,
+                location: profile?.location || null,
+                profileImageUrl,
+                coverImageUrl,
+                latitude: profile?.latitude || null,
+                longitude: profile?.longitude || null,
+              } : null;
+
+              return { ...b, services, providerDetails };
             })
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         }
@@ -1320,8 +1387,45 @@ export async function GET(
       if (!auth || auth.role !== 'provider') {
         return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
       }
+      const baseUrl = getBaseUrl(request);
       const list = await executeWithDbFallback(
-        async () => await prisma.booking.findMany({ where: { providerId: auth.userId }, include: { services: { include: { service: true } } }, orderBy: { date: 'desc' } }),
+        async () => {
+          const dbBookings = await prisma.booking.findMany({
+            where: { providerId: auth.userId },
+            include: {
+              client: {
+                include: { clientProfile: true }
+              },
+              services: { include: { service: true } }
+            },
+            orderBy: { date: 'desc' }
+          });
+          return dbBookings.map((b: any) => {
+            const clientUser = b.client;
+            const profile = clientUser?.clientProfile;
+            let profileImageUrl = profile?.profileImageUrl || null;
+            if (baseUrl && profileImageUrl && profileImageUrl.startsWith('/')) {
+              profileImageUrl = `${baseUrl}${profileImageUrl}`;
+            }
+
+            const clientDetails = clientUser ? {
+              id: clientUser.id,
+              name: clientUser.name || '',
+              email: clientUser.email,
+              phoneNumber: clientUser.phoneNumber || null,
+              location: profile?.location || null,
+              profileImageUrl,
+              latitude: profile?.latitude || null,
+              longitude: profile?.longitude || null,
+            } : null;
+
+            const { client, ...rest } = b;
+            return {
+              ...rest,
+              clientDetails
+            };
+          });
+        },
         async () => {
           return mockDb.bookings
             .filter((b) => b.providerId === auth.userId)
@@ -1332,7 +1436,25 @@ export async function GET(
                   const service = mockDb.services.find((s) => s.id === bs.serviceId);
                   return { id: bs.id, serviceId: bs.serviceId, service };
                 });
-              return { ...b, services };
+              const clientUser = mockDb.users.find((u) => u.id === b.clientId);
+              const profile = mockDb.profiles.find((p) => p.userId === b.clientId);
+              let profileImageUrl = profile?.profileImageUrl || null;
+              if (baseUrl && profileImageUrl && profileImageUrl.startsWith('/')) {
+                profileImageUrl = `${baseUrl}${profileImageUrl}`;
+              }
+
+              const clientDetails = clientUser ? {
+                id: clientUser.id,
+                name: clientUser.name || '',
+                email: clientUser.email,
+                phoneNumber: clientUser.phoneNumber || null,
+                location: profile?.location || null,
+                profileImageUrl,
+                latitude: profile?.latitude || null,
+                longitude: profile?.longitude || null,
+              } : null;
+
+              return { ...b, services, clientDetails };
             })
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         }
@@ -1775,16 +1897,35 @@ export async function POST(
     // 1. Sign Up (Common Register /api/auth/register)
     if (path === 'auth/register') {
       const { email, password } = body as any;
-      if (!email || !password) {
-        return NextResponse.json({ message: 'Missing fields' }, { status: 400 });
+      if (!email || typeof email !== 'string' || !email.trim()) {
+        return NextResponse.json({ message: 'Email is required' }, { status: 400 });
+      }
+      if (!password || typeof password !== 'string' || !password.trim()) {
+        return NextResponse.json({ message: 'Password is required' }, { status: 400 });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(cleanEmail)) {
+        return NextResponse.json({ message: 'Invalid email address format' }, { status: 400 });
+      }
+      if (password.length < 6) {
+        return NextResponse.json({ message: 'Password must be at least 6 characters long' }, { status: 400 });
       }
 
       try {
         const response = await executeWithDbFallback(
           async () => {
+            const existingUser = await prisma.user.findUnique({
+              where: { email: cleanEmail },
+            });
+            if (existingUser) {
+              throw new Error('User with this email already exists');
+            }
+
             const user = await prisma.user.create({
               data: {
-                email,
+                email: cleanEmail,
                 password: hashPassword(password),
                 name: "",
                 role: "",
@@ -1794,11 +1935,11 @@ export async function POST(
             return { token, user };
           },
           async () => {
-            const exists = mockDb.users.find((u) => u.email === email);
-            if (exists) throw new Error('User already exists');
+            const exists = mockDb.users.find((u) => u.email.toLowerCase() === cleanEmail);
+            if (exists) throw new Error('User with this email already exists');
             const newUser = {
               id: mockDb.users.length + 1,
-              email,
+              email: cleanEmail,
               password: hashPassword(password),
               name: "",
               role: "",
@@ -1821,7 +1962,11 @@ export async function POST(
           user: sanitizeUser(responseObj.user, request),
         });
       } catch (err: any) {
-        return NextResponse.json({ message: err.message || 'Error occurred' }, { status: 400 });
+        let msg = err.message || 'Registration failed';
+        if (err.code === 'P2002' || msg.includes('Unique constraint failed') || msg.includes('users_email_key')) {
+          msg = 'User with this email already exists';
+        }
+        return NextResponse.json({ message: msg }, { status: 400 });
       }
     }
 
@@ -2284,7 +2429,7 @@ export async function POST(
       );
 
       if (existingUser) {
-        return NextResponse.json({ message: 'This phone number is already registered to another account' }, { status: 400 });
+        return NextResponse.json({ message: 'This phone number is already registered.' }, { status: 400 });
       }
 
       // Generate a random 6-digit OTP
@@ -2393,7 +2538,7 @@ export async function POST(
                 },
               });
               if (existingUser) {
-                throw new Error('This phone number is already registered to another user account.');
+                throw new Error('This phone number is already registered.');
               }
             }
 
@@ -3643,10 +3788,12 @@ export async function POST(
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
       }
 
-      const { serviceIds, tipType, tipAmount, voucherCode } = body as any;
+      const { serviceIds, numberOfPeople, tipType, tipAmount, voucherCode } = body as any;
       if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
         return NextResponse.json({ message: 'At least one service is required' }, { status: 400 });
       }
+
+      const numPeople = Math.max(1, parseInt(numberOfPeople, 10) || 1);
 
       try {
         const servicesList = await executeWithDbFallback(
@@ -3654,7 +3801,8 @@ export async function POST(
           async () => mockDb.services.filter((s) => serviceIds.map(Number).includes(s.id))
         );
 
-        const serviceAmount = servicesList.reduce((sum, s) => sum + s.price, 0);
+        const baseServiceAmount = servicesList.reduce((sum, s) => sum + s.price, 0);
+        const serviceAmount = baseServiceAmount * numPeople;
 
         let calculatedTip = 0;
         const normalizedTipType = String(tipType).toLowerCase();
@@ -3681,9 +3829,9 @@ export async function POST(
 
           if (voucher) {
             if (voucher.isActive) {
-              discount = voucher.amount;
+              discount = Math.round((serviceAmount * (voucher.amount / 100)) * 100) / 100;
               isValidVoucher = true;
-              voucherMessage = `Voucher '${voucher.code}' applied successfully.`;
+              voucherMessage = `Voucher '${voucher.code}' (${voucher.amount}%) applied successfully.`;
             } else {
               voucherMessage = 'Voucher code is inactive';
             }
@@ -3700,6 +3848,7 @@ export async function POST(
 
         return NextResponse.json({
           success: true,
+          numberOfPeople: numPeople,
           serviceAmount,
           tipAmount: calculatedTip,
           voucherDiscount: discount,
@@ -3804,7 +3953,8 @@ export async function POST(
           return NextResponse.json({ message: 'No valid services selected' }, { status: 400 });
         }
 
-        const serviceAmount = servicesList.reduce((sum, s) => sum + s.price, 0);
+        const baseServiceAmount = servicesList.reduce((sum, s) => sum + s.price, 0);
+        const serviceAmount = baseServiceAmount * numPeople;
 
         let calculatedTip = 0;
         const normalizedTipType = String(tipType).toLowerCase();
@@ -3831,7 +3981,7 @@ export async function POST(
           );
           if (voucher) {
             if (voucher.isActive) {
-              discount = voucher.amount;
+              discount = Math.round((serviceAmount * (voucher.amount / 100)) * 100) / 100;
             } else {
               return NextResponse.json({ message: 'Voucher code is inactive' }, { status: 400 });
             }

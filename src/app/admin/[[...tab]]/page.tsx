@@ -984,9 +984,9 @@ export default function AdminPage() {
                       required
                     />
                     <Input
-                      label="Discount Amount ($)"
+                      label="Discount Percentage (%)"
                       type="number"
-                      placeholder="e.g. 20.00"
+                      placeholder="e.g. 10"
                       value={newVoucherAmount}
                       onChange={(e) => setNewVoucherAmount(e.target.value)}
                       required
@@ -1021,7 +1021,7 @@ export default function AdminPage() {
                           <tr className="border-b border-gray-850 text-gray-400 text-[10px] uppercase font-bold tracking-wider">
                             <th className="pb-3 pr-4">Code</th>
                             <th className="pb-3 pr-4">Title</th>
-                            <th className="pb-3 pr-4">Amount</th>
+                            <th className="pb-3 pr-4">Discount (%)</th>
                             <th className="pb-3 pr-4">Status</th>
                             <th className="pb-3 pr-4">Created At</th>
                             <th className="pb-3 text-right">Actions</th>
@@ -1032,7 +1032,7 @@ export default function AdminPage() {
                             <tr key={voucher.id} className="text-xs text-gray-300 hover:bg-white/2 transition-colors">
                               <td className="py-3.5 pr-4 font-bold text-white tracking-wider">{voucher.code}</td>
                               <td className="py-3.5 pr-4 text-gray-450">{voucher.title}</td>
-                              <td className="py-3.5 pr-4 font-semibold text-gray-200">${voucher.amount.toFixed(2)}</td>
+                              <td className="py-3.5 pr-4 font-semibold text-gray-200">{voucher.amount}%</td>
                               <td className="py-3.5 pr-4">
                                 <button
                                   onClick={async () => {
@@ -1135,9 +1135,9 @@ export default function AdminPage() {
                           required
                         />
                         <Input
-                          label="Discount Amount ($)"
+                          label="Discount Percentage (%)"
                           type="number"
-                          placeholder="e.g. 20.00"
+                          placeholder="e.g. 10"
                           value={editVoucherAmount}
                           onChange={(e) => setEditVoucherAmount(e.target.value)}
                           required

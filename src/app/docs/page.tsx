@@ -910,6 +910,7 @@ const openApiSpec = {
                 required: ['serviceIds', 'tipType'],
                 properties: {
                   serviceIds: { type: 'array', items: { type: 'integer' }, example: [1, 2] },
+                  numberOfPeople: { type: 'integer', example: 2 },
                   tipType: { type: 'string', example: '10%' },
                   tipAmount: { type: 'number', example: 0 },
                   voucherCode: { type: 'string', example: 'SAVE10' }
