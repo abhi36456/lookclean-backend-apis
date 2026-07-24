@@ -23,9 +23,9 @@ export default function PaymentPolicyPage() {
       <header className="border-b border-gray-900 bg-gray-950/80 backdrop-blur sticky top-0 z-30 px-6 py-4 flex justify-between items-center">
         <Link href="/" className="flex items-center gap-3">
           <div className="h-10 w-auto">
-            <img src="/assets/images/Look_Clean_New_Logo.png" alt="LookClean Logo" className="h-full object-contain" />
+            <img src="/assets/images/Look_Clean_New_Logo.png" alt="Look Clean Logo" className="h-full object-contain" />
           </div>
-          <span className="font-extrabold text-white text-lg tracking-tight">LookClean</span>
+          <span className="font-extrabold text-white text-lg tracking-tight">Look Clean</span>
         </Link>
         <Link
           href="/"
@@ -59,7 +59,7 @@ export default function PaymentPolicyPage() {
 
       {/* Footer */}
       <footer className="border-t border-gray-900 bg-gray-950 py-6 text-center text-xs text-gray-500">
-        &copy; {new Date().getFullYear()} LookClean. All rights reserved.
+        &copy; {new Date().getFullYear()} Look Clean. All rights reserved.
       </footer>
     </div>
   );

@@ -104,12 +104,12 @@ const mockDb = {
     {
       slug: 'terms',
       title: 'Terms & Conditions',
-      content: '<h1>Terms & Conditions</h1><p>Welcome to LookClean. By using our platform, you agree to comply with and be bound by the following terms and conditions.</p><p>1. Services provided by independent providers.<br>2. Bookings and cancellations subject to provider rules.</p>'
+      content: '<h1>Terms & Conditions</h1><p>Welcome to Look Clean. By using our platform, you agree to comply with and be bound by the following terms and conditions.</p><p>1. Services provided by independent providers.<br>2. Bookings and cancellations subject to provider rules.</p>'
     },
     {
       slug: 'privacy-policy',
       title: 'Privacy Policy',
-      content: '<h1>Privacy Policy</h1><p>Your privacy is important to us. LookClean respects your privacy regarding any information we may collect while operating our app and website.</p>'
+      content: '<h1>Privacy Policy</h1><p>Your privacy is important to us. Look Clean respects your privacy regarding any information we may collect while operating our app and website.</p>'
     },
     {
       slug: 'refund-policy',
@@ -2640,7 +2640,7 @@ export async function POST(
 
         // Connect to Twilio API to send the SMS
         const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${cleanAccountSid}/Messages.json`;
-        const messageBody = `Your LookClean password reset verification code is: ${otp}`;
+        const messageBody = `Your Look Clean password reset verification code is: ${otp}`;
         const authString = Buffer.from(`${cleanAccountSid}:${cleanAuthToken}`).toString('base64');
 
         const params = new URLSearchParams();
@@ -2813,7 +2813,7 @@ export async function POST(
 
       // Connect to Twilio API to send the SMS
       const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${cleanAccountSid}/Messages.json`;
-      const messageBody = `Your LookClean mobile verification code is: ${otp}`;
+      const messageBody = `Your Look Cleann mobile verification code is: ${otp}`;
       const authString = Buffer.from(`${cleanAccountSid}:${cleanAuthToken}`).toString('base64');
 
       const params = new URLSearchParams();
@@ -3016,7 +3016,7 @@ export async function POST(
 
       // Connect to Twilio API to send the test SMS
       const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${cleanAccountSid}/Messages.json`;
-      const messageBody = `Your LookClean Twilio ${mode.toUpperCase()} gateway verification was successful!`;
+      const messageBody = `Your Look Clean Twilio ${mode.toUpperCase()} gateway verification was successful!`;
       const authString = Buffer.from(`${cleanAccountSid}:${cleanAuthToken}`).toString('base64');
 
       const params = new URLSearchParams();
@@ -4715,7 +4715,7 @@ export async function POST(
           const uploadsDir = nodePath.join(process.cwd(), 'public', 'uploads', 'reports');
           try {
             await fs.mkdir(uploadsDir, { recursive: true });
-          } catch {}
+          } catch { }
 
           for (const file of files) {
             if (file && typeof file === 'object' && 'arrayBuffer' in file) {

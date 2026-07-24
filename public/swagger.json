@@ -1,8 +1,8 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "LookClean Mobile App API",
-    "description": "API specifications for Client and Provider clients interacting with LookClean backend services.",
+    "title": "Look Clean Mobile App API",
+    "description": "API specifications for Client and Provider clients interacting with Look Clean backend services.",
     "version": "1.0.0"
   },
   "servers": [
@@ -20,7 +20,6 @@
       "name": "Client Profile",
       "description": "Client profile details and settings"
     },
-
     {
       "name": "Verification",
       "description": "Phone OTP verification APIs"

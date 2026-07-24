@@ -8,8 +8,13 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "LookClean - Salon & Styling Booking App",
+  title: "Look Clean - Salon & Styling Booking App",
   description: "Discover & book top-rated salons, barbers, and mobile stylists, or grow your styling business.",
+  icons: {
+    icon: "/assets/images/look_clean_new_fev_logo.png",
+    shortcut: "/assets/images/look_clean_new_fev_logo.png",
+    apple: "/assets/images/look_clean_new_fev_logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -27,7 +32,7 @@ export default function RootLayout({
         {/* Decorative background glows */}
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-500/10 rounded-full blur-[120px] pointer-events-none" />
-        
+
         <main className="flex-1 flex flex-col z-10">{children}</main>
       </body>
     </html>

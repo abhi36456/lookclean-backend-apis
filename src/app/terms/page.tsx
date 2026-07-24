@@ -23,9 +23,9 @@ export default function TermsPage() {
       <header className="border-b border-gray-900 bg-gray-950/80 backdrop-blur sticky top-0 z-30 px-6 py-4 flex justify-between items-center">
         <Link href="/" className="flex items-center gap-3">
           <div className="h-10 w-auto">
-            <img src="/assets/images/Look_Clean_New_Logo.png" alt="LookClean Logo" className="h-full object-contain" />
+            <img src="/assets/images/Look_Clean_New_Logo.png" alt="Look Clean Logo" className="h-full object-contain" />
           </div>
-          <span className="font-extrabold text-white text-lg tracking-tight">LookClean</span>
+          <span className="font-extrabold text-white text-lg tracking-tight">Look Clean</span>
         </Link>
         <Link
           href="/"
@@ -50,7 +50,7 @@ export default function TermsPage() {
               dangerouslySetInnerHTML={{
                 __html:
                   data?.content ||
-                  '<h1>Terms & Conditions</h1><p>Welcome to LookClean. By using our platform, you agree to comply with and be bound by the following terms and conditions.</p><p>1. Services provided by independent providers.<br>2. Bookings and cancellations subject to provider rules.</p>'
+                  '<h1>Terms & Conditions</h1><p>Welcome to Look Clean. By using our platform, you agree to comply with and be bound by the following terms and conditions.</p><p>1. Services provided by independent providers.<br>2. Bookings and cancellations subject to provider rules.</p>'
               }}
             />
           )}
@@ -59,7 +59,7 @@ export default function TermsPage() {
 
       {/* Footer */}
       <footer className="border-t border-gray-900 bg-gray-950 py-6 text-center text-xs text-gray-500">
-        &copy; {new Date().getFullYear()} LookClean. All rights reserved.
+        &copy; {new Date().getFullYear()} Look Clean. All rights reserved.
       </footer>
     </div>
   );

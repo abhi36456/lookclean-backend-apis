@@ -2,12 +2,12 @@
 
 import React, { useEffect } from 'react';
 
-// OpenAPI Spec definition for LookClean Mobile API
-const openApiSpec = {
-  openapi: '3.0.0',
+// OpenAPI Spec definition for Look Clean Mobile API
+export const openApiSpec = {
+  openapi: '3.0.3',
   info: {
-    title: 'LookClean Mobile App API',
-    description: 'API specifications for Client and Provider clients interacting with LookClean backend services.',
+    title: 'Look Clean Mobile App API',
+    description: 'API specifications for Client and Provider clients interacting with Look Clean backend services.',
     version: '1.0.0',
   },
   servers: [
@@ -1774,7 +1774,7 @@ export default function DocsPage() {
           LC
         </div>
         <span className="text-lg font-bold tracking-tight">
-          LookClean <span className="text-primary font-medium">Developer API Specification</span>
+          Look Clean <span className="text-primary font-medium">Developer API Specification</span>
         </span>
       </div>
 

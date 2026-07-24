@@ -1038,7 +1038,7 @@ export default function AdminPage() {
         >
           <div className="flex flex-col items-center mb-8">
             <div className="w-42 h-42">
-              <img src="/assets/images/Look_Clean_New_Logo.png" alt="LookClean Logo" className="w-full h-full object-cover" />
+              <img src="/assets/images/Look_Clean_New_Logo.png" alt="Look Clean Logo" className="w-full h-full object-cover" />
             </div>
 
           </div>
@@ -1094,7 +1094,7 @@ export default function AdminPage() {
           {/* Logo */}
           <div className="flex justify-center pt-2">
             <div className="h-[95px]">
-              <img src="/assets/images/Look_Clean_New_Logo.png" alt="LookClean Logo" className="w-full h-full object-cover" />
+              <img src="/assets/images/Look_Clean_New_Logo.png" alt="Look Clean Logo" className="w-full h-full object-cover" />
             </div>
           </div>
 
@@ -1200,10 +1200,10 @@ export default function AdminPage() {
         <header className="md:hidden border-b border-gray-900 bg-gray-950/80 backdrop-blur px-6 py-4 flex justify-between items-center z-20">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center overflow-hidden bg-gray-950/40 border border-gray-900">
-              <img src="/assets/images/Look_Clean_New_Logo.png" alt="LookClean Logo" className="w-full h-full object-cover" />
+              <img src="/assets/images/Look_Clean_New_Logo.png" alt="Look Clean Logo" className="w-full h-full object-cover" />
             </div>
             <span className="font-extrabold text-white text-lg">
-              LookClean Admin
+              Look Clean Admin
             </span>
           </div>
           <Button variant="secondary" size="sm" onClick={handleLogout} rightIcon={<LogOut className="w-4 h-4" />}>
@@ -1778,7 +1778,7 @@ export default function AdminPage() {
 
               {/* Greeting Card */}
               <Card className="border border-gray-850 p-6 bg-gradient-to-r from-primary-dark/10 to-purple-950/20">
-                <h3 className="text-lg font-bold text-white mb-2">Welcome to LookClean Admin Center</h3>
+                <h3 className="text-lg font-bold text-white mb-2">Welcome to Look Clean Admin Center</h3>
                 <p className="text-xs text-gray-400 max-w-xl leading-relaxed">
                   Use this control dashboard to track total registered users, verify stylists credentials, analyze mobile OTP activations, and manage bookings and salon listings. Select the <strong>Users</strong> tab in the sidebar to browse individual clients and provider directory grids.
                 </p>
@@ -2715,8 +2715,8 @@ export default function AdminPage() {
 
                         {dbStatusResult && (
                           <div className={`p-5 rounded-xl border text-xs leading-relaxed space-y-3 ${dbStatusResult.connected
-                              ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400'
-                              : 'bg-red-500/5 border-red-500/20 text-red-400'
+                            ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400'
+                            : 'bg-red-500/5 border-red-500/20 text-red-400'
                             }`}>
                             <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-[11px]">
                               {dbStatusResult.connected ? (
