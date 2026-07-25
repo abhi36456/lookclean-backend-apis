@@ -105,6 +105,106 @@
     }
   ],
   "paths": {
+    "/providers/daily/transections": {
+      "post": {
+        "tags": [
+          "Providers Profile"
+        ],
+        "summary": "Get daily transactions",
+        "description": "Returns daily aggregated transactions (bookings, service amounts) for the authenticated provider.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sortBy": {
+                    "type": "string",
+                    "enum": [
+                      "currently month",
+                      "all"
+                    ],
+                    "example": "currently month",
+                    "description": "Filter mode: 'currently month' or 'all'"
+                  },
+                  "page": {
+                    "type": "integer",
+                    "example": 1,
+                    "description": "Page number for pagination when sortBy is 'all'"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Daily transactions retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "date": {
+                        "type": "string",
+                        "format": "date",
+                        "example": "2026-07-25"
+                      },
+                      "totalServiceAmount": {
+                        "type": "number",
+                        "example": 25
+                      },
+                      "transactions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "integer"
+                            },
+                            "client": {
+                              "$ref": "#/components/schemas/User"
+                            },
+                            "services": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/Service"
+                              }
+                            },
+                            "rating": {
+                              "type": "object",
+                              "nullable": true,
+                              "properties": {
+                                "rating": {
+                                  "type": "number"
+                                },
+                                "comment": {
+                                  "type": "string",
+                                  "nullable": true
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized access"
+          },
+          "403": {
+            "description": "Forbidden: Requires provider role"
+          }
+        }
+      }
+    },
     "/auth/register": {
       "post": {
         "tags": [
@@ -1928,6 +2028,97 @@
         "responses": {
           "200": {
             "description": "Onboarding complete and profile finalized"
+          }
+        }
+      }
+    },
+    "/providers/customer-profile": {
+      "get": {
+        "tags": [
+          "Providers Profile"
+        ],
+        "summary": "Get customer profile and transactions",
+        "description": "Returns the client information and all past transactions (with ratings) in descending order.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID of the client"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer profile retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "client": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "clientProfile": {
+                          "type": "object"
+                        },
+                        "transactions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "date": {
+                                "type": "string",
+                                "format": "date"
+                              },
+                              "serviceAmount": {
+                                "type": "number"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "services": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object"
+                                }
+                              },
+                              "rating": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "rating": {
+                                    "type": "number"
+                                  },
+                                  "comment": {
+                                    "type": "string",
+                                    "nullable": true
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

@@ -585,6 +585,125 @@ export async function GET(
     const path = rawPath.replace(/^api\//i, '').replace(/\/$/, '').trim();
     console.log(`[API GET] rawPath='${rawPath}' -> path='${path}'`);
 
+    if (path === 'providers/customer-profile') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+      if (auth.role !== 'provider' && auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      const url = new URL(request.url);
+      const clientIdStr = url.searchParams.get('clientId');
+      if (!clientIdStr) {
+        return NextResponse.json({ message: 'Missing clientId' }, { status: 400 });
+      }
+      const clientId = parseInt(clientIdStr, 10);
+
+      try {
+        const result = await executeWithDbFallback(
+          async () => {
+            const client = await prisma.user.findUnique({
+              where: { id: clientId, role: 'client' },
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                clientProfile: true
+              }
+            });
+
+            if (!client) {
+               throw new Error('Client not found');
+            }
+
+            const bookings = await prisma.booking.findMany({
+              where: {
+                providerId: auth.userId,
+                clientId: clientId,
+                status: 'completed'
+              },
+              include: {
+                services: {
+                  include: { service: true }
+                }
+              },
+              orderBy: {
+                date: 'desc'
+              }
+            });
+
+            const reviews = await prisma.review.findMany({
+              where: {
+                providerId: auth.userId,
+                clientId: clientId
+              }
+            });
+
+            const transactions = bookings.map(b => {
+              const serviceIds = b.services.map(bs => bs.serviceId);
+              let ratingObj = null;
+              
+              const matchedReview = reviews.find(r => r.serviceId !== null && serviceIds.includes(r.serviceId));
+              if (matchedReview) {
+                 ratingObj = { rating: matchedReview.rating, comment: matchedReview.comment };
+              } else if (reviews.length > 0) {
+                 ratingObj = { rating: reviews[0].rating, comment: reviews[0].comment };
+              }
+
+              return {
+                 ...b,
+                 services: b.services.map(bs => bs.service),
+                 rating: ratingObj
+              };
+            });
+
+            return {
+              client,
+              transactions
+            };
+          },
+          async () => {
+            const clientUser = mockDb.users.find((u: any) => u.id === clientId && u.role === 'client');
+            if (!clientUser) throw new Error('Client not found');
+            const clientProfile = mockDb.profiles.find((p: any) => p.userId === clientId) || null;
+            const client = { id: clientUser.id, name: clientUser.name, email: clientUser.email, clientProfile };
+
+            const bookings = mockDb.bookings.filter((b: any) => b.providerId === auth.userId && b.clientId === clientId && b.status === 'completed');
+            bookings.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+            const reviews = mockDb.reviews.filter((r: any) => r.providerId === auth.userId && r.clientId === clientId);
+
+            const transactions = bookings.map((b: any) => {
+              const bServices = mockDb.bookingServices.filter((bs: any) => bs.bookingId === b.id);
+              const mappedServices = bServices.map((bs: any) => mockDb.services.find((s: any) => s.id === bs.serviceId) || { name: 'Unknown' });
+              
+              const serviceIds = bServices.map((bs: any) => bs.serviceId);
+              let ratingObj = null;
+              const matchedReview = reviews.find((r: any) => r.serviceId !== null && serviceIds.includes(r.serviceId));
+              if (matchedReview) {
+                 ratingObj = { rating: matchedReview.rating, comment: matchedReview.comment };
+              } else if (reviews.length > 0) {
+                 ratingObj = { rating: reviews[0].rating, comment: reviews[0].comment };
+              }
+
+              return {
+                 ...b,
+                 services: mappedServices,
+                 rating: ratingObj
+              };
+            });
+
+            return { client, transactions };
+          }
+        );
+        return NextResponse.json(result);
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to fetch customer profile' }, { status: 400 });
+      }
+    }
+
     // 1. Fetch client profile (/api/clients/me or /api/client/me)
     if (path === 'clients/me' || path === 'client/me') {
       const auth = await getAuthenticatedUser(request);
@@ -1791,15 +1910,209 @@ export async function POST(
     const path = rawPath.replace(/^api\//i, '').replace(/\/$/, '').trim();
     console.log(`[API POST] rawPath='${rawPath}' -> path='${path}'`);
 
-    let body = {};
+    let body: any = {};
     const contentType = request.headers.get('content-type') || '';
-    if (!contentType.includes('multipart/form-data')) {
+    if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
+      try {
+        const formData = await request.formData();
+        formData.forEach((value, key) => {
+          body[key] = value;
+        });
+      } catch (err) {
+        console.error('Failed to parse form data', err);
+      }
+    } else {
       try {
         body = await request.json();
       } catch {
         // Empty body or not JSON
       }
     }
+
+    if (path === 'providers/daily/transections') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+      if (auth.role !== 'provider' && auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      
+      const sortBy = (body as any).sortBy || 'currently month';
+      const pageStr = (body as any).page;
+      let page = 1;
+      if (pageStr) {
+        page = parseInt(pageStr, 10);
+        if (isNaN(page) || page < 1) page = 1;
+      }
+      const limit = 50;
+      const skip = (page - 1) * limit;
+
+      try {
+        const result = await executeWithDbFallback(
+          async () => {
+            const where: any = {
+              providerId: auth.userId,
+              status: 'completed',
+            };
+
+            if (sortBy === 'currently month' || sortBy === 'currentMonth') {
+              const now = new Date();
+              const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+              const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+              where.date = {
+                gte: startOfMonth,
+                lte: endOfMonth
+              };
+            }
+
+            const bookings = await prisma.booking.findMany({
+              where,
+              include: {
+                client: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    clientProfile: true
+                  }
+                },
+                services: {
+                  include: {
+                    service: true
+                  }
+                }
+              },
+              orderBy: {
+                date: 'desc'
+              },
+              ...(sortBy === 'all' ? { skip, take: limit } : {})
+            });
+
+            const reviews = await prisma.review.findMany({
+              where: { providerId: auth.userId }
+            });
+
+            const dailyData: Record<string, { date: string; totalServiceAmount: number; transactions: any[] }> = {};
+            
+            for (const b of bookings) {
+              const dateStr = b.date.toISOString().split('T')[0];
+              if (!dailyData[dateStr]) {
+                dailyData[dateStr] = {
+                  date: dateStr,
+                  totalServiceAmount: 0,
+                  transactions: []
+                };
+              }
+              dailyData[dateStr].totalServiceAmount += b.serviceAmount;
+
+              const serviceIds = b.services.map(bs => bs.serviceId);
+              let ratingObj = null;
+              const matchedReviews = reviews.filter(r => r.clientId === b.clientId);
+              const exactReview = matchedReviews.find(r => r.serviceId !== null && serviceIds.includes(r.serviceId));
+              if (exactReview) {
+                 ratingObj = { rating: exactReview.rating, comment: exactReview.comment };
+              } else if (matchedReviews.length > 0) {
+                 ratingObj = { rating: matchedReviews[0].rating, comment: matchedReviews[0].comment };
+              }
+              
+              dailyData[dateStr].transactions.push({
+                ...b,
+                client: b.client,
+                services: b.services.map(bs => bs.service),
+                rating: ratingObj
+              });
+            }
+            
+            const groupedList = Object.values(dailyData).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+            if (sortBy === 'all') {
+              const total = await prisma.booking.count({ where });
+              return {
+                data: groupedList,
+                meta: {
+                  total,
+                  page,
+                  limit,
+                  totalPages: Math.ceil(total / limit)
+                }
+              };
+            }
+
+            return groupedList;
+          },
+          async () => {
+            let bookings = mockDb.bookings.filter((b: any) => b.providerId === auth.userId && b.status === 'completed');
+
+            if (sortBy === 'currently month' || sortBy === 'currentMonth') {
+              const now = new Date();
+              const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+              const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+              bookings = bookings.filter((b: any) => {
+                const bDate = new Date(b.date);
+                return bDate >= startOfMonth && bDate <= endOfMonth;
+              });
+            }
+
+            bookings.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+            let total = bookings.length;
+            if (sortBy === 'all') {
+              bookings = bookings.slice(skip, skip + limit);
+            }
+
+            const reviews = mockDb.reviews.filter((r: any) => r.providerId === auth.userId);
+            const dailyData: Record<string, any> = {};
+            for (const b of bookings) {
+              const dateObj = new Date(b.date);
+              const dateStr = dateObj.toISOString().split('T')[0];
+              if (!dailyData[dateStr]) {
+                dailyData[dateStr] = { date: dateStr, totalServiceAmount: 0, transactions: [] };
+              }
+              dailyData[dateStr].totalServiceAmount += b.serviceAmount;
+
+              const client = mockDb.users.find((u: any) => u.id === b.clientId) || { name: 'Unknown' };
+              const bServices = mockDb.bookingServices.filter((bs: any) => bs.bookingId === b.id);
+              const mappedServices = bServices.map((bs: any) => mockDb.services.find((s: any) => s.id === bs.serviceId) || { name: 'Unknown' });
+
+              const serviceIds = bServices.map((bs: any) => bs.serviceId);
+              let ratingObj = null;
+              const matchedReviews = reviews.filter((r: any) => r.clientId === b.clientId);
+              const exactReview = matchedReviews.find((r: any) => r.serviceId !== null && serviceIds.includes(r.serviceId));
+              if (exactReview) {
+                 ratingObj = { rating: exactReview.rating, comment: exactReview.comment };
+              } else if (matchedReviews.length > 0) {
+                 ratingObj = { rating: matchedReviews[0].rating, comment: matchedReviews[0].comment };
+              }
+
+              dailyData[dateStr].transactions.push({
+                ...b,
+                client,
+                services: mappedServices,
+                rating: ratingObj
+              });
+            }
+
+            const groupedList = Object.values(dailyData).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+            if (sortBy === 'all') {
+              return {
+                data: groupedList,
+                meta: { total, page, limit, totalPages: Math.ceil(total / limit) }
+              };
+            }
+
+            return groupedList;
+          }
+        );
+        return NextResponse.json(result);
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to fetch daily transactions' }, { status: 400 });
+      }
+    }
+
+    
 
     // 0a. Toggle client provider wishlist (/api/clients/wishlist or /api/client/wishlist)
     if (path === 'clients/wishlist' || path === 'client/wishlist') {

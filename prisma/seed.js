@@ -27,12 +27,12 @@ async function main() {
 
   // 2. Seed a demo provider with complete provider profile, services, and amenities
   const provider = await prisma.user.upsert({
-    where: { email: 'provider@lookclean.com' },
+    where: { email: 'provider.user@lookclean.com' },
     update: {
       password: hashPassword('123456'),
     },
     create: {
-      email: 'provider@lookclean.com',
+      email: 'provider.user@lookclean.com',
       password: hashPassword('123456'),
       name: 'Maison Lumière',
       role: 'provider',
@@ -68,12 +68,12 @@ async function main() {
 
   // 3. Seed a demo client with a client profile
   const client = await prisma.user.upsert({
-    where: { email: 'client@lookclean.com' },
+    where: { email: 'client.user@lookclean.com' },
     update: {
       password: hashPassword('123456'),
     },
     create: {
-      email: 'client@lookclean.com',
+      email: 'client.user@lookclean.com',
       password: hashPassword('123456'),
       name: 'Sarah Connor',
       role: 'client',
@@ -203,6 +203,79 @@ async function main() {
         title: svc.title,
       },
     });
+  }
+
+  // 6. Generate Dummy Bookings for June and July 2026
+  console.log('Generating dummy bookings and reviews for June and July...');
+  const providerProfile = await prisma.providerProfile.findUnique({
+    where: { userId: provider.id },
+    include: { services: true }
+  });
+
+  if (providerProfile && providerProfile.services.length > 0) {
+    const services = providerProfile.services;
+    const bookingDates = [];
+
+    // Add 4 bookings for June
+    for (let i = 0; i < 4; i++) {
+      const day = Math.floor(Math.random() * 28) + 1;
+      bookingDates.push(new Date(`2026-06-${String(day).padStart(2, '0')}T10:00:00Z`));
+    }
+
+    // Add 25 bookings for July
+    for (let i = 0; i < 25; i++) {
+      const day = Math.floor(Math.random() * 28) + 1;
+      const hour = Math.floor(Math.random() * 8) + 9; // 9 AM to 4 PM
+      bookingDates.push(new Date(`2026-07-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:00:00Z`));
+    }
+
+    let bCount = 0;
+    for (const date of bookingDates) {
+      bCount++;
+      const service = services[Math.floor(Math.random() * services.length)];
+      
+      const b = await prisma.booking.create({
+        data: {
+          clientId: client.id,
+          providerId: provider.id,
+          date: date,
+          timeSlot: `${date.getUTCHours() > 12 ? date.getUTCHours() - 12 : date.getUTCHours()}:00 ${date.getUTCHours() >= 12 ? 'PM' : 'AM'}`,
+          status: 'completed',
+          serviceAmount: service.price,
+          grandTotal: service.price,
+          services: {
+            create: [
+              {
+                serviceId: service.id
+              }
+            ]
+          }
+        }
+      });
+
+      // Add a review
+      const ratings = [4, 5, 5, 4.5, 5];
+      const rating = ratings[Math.floor(Math.random() * ratings.length)];
+      const comments = [
+        "Great service!", 
+        "Loved the " + service.name.toLowerCase() + "!", 
+        "Very professional and clean.", 
+        "Best experience, highly recommend.", 
+        "Will definitely book again."
+      ];
+      
+      await prisma.review.create({
+        data: {
+          clientId: client.id,
+          providerId: provider.id,
+          serviceId: service.id,
+          rating: rating,
+          comment: comments[Math.floor(Math.random() * comments.length)],
+          createdAt: date
+        }
+      });
+    }
+    console.log(`Created ${bCount} dummy bookings with reviews.`);
   }
 
   console.log('Seed completed successfully! Default admin:', admin.email);
