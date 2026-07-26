@@ -33,6 +33,8 @@ interface UserData {
     licenseTypes?: string[];
     certificateUrls?: string[];
     coverImageUrl?: string;
+    isFeatured?: boolean;
+    featured?: boolean;
     services?: { name: string; price: number; category: string }[];
     amenities?: { name: string }[];
   };
@@ -842,6 +844,52 @@ export default function AdminPage() {
     } catch (err) {
       console.error(err);
       alert('Network error. Failed to delete user.');
+    }
+  };
+
+  const toggleFeatured = async (userId: number, currentStatus?: boolean) => {
+    const newStatus = !currentStatus;
+
+    setUsers((prevUsers) =>
+      prevUsers.map((u) => {
+        if (u.id === userId) {
+          return {
+            ...u,
+            isFeatured: newStatus,
+            providerProfile: u.providerProfile
+              ? { ...u.providerProfile, isFeatured: newStatus, featured: newStatus }
+              : { isFeatured: newStatus, featured: newStatus, name: '', location: '', experience: 0 },
+          };
+        }
+        return u;
+      })
+    );
+
+    if (selectedUser && selectedUser.id === userId) {
+      setSelectedUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              isFeatured: newStatus,
+              providerProfile: prev.providerProfile
+                ? { ...prev.providerProfile, isFeatured: newStatus, featured: newStatus }
+                : { isFeatured: newStatus, featured: newStatus, name: '', location: '', experience: 0 },
+            }
+          : null
+      );
+    }
+
+    try {
+      await fetch('/api/admin/users/featured', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({ userId, isFeatured: newStatus }),
+      });
+    } catch (err) {
+      console.error('Failed to toggle featured status', err);
     }
   };
 
@@ -2817,6 +2865,7 @@ export default function AdminPage() {
                           <th className="p-4 w-12 text-center">Photo</th>
                           <th className="p-4">Name</th>
                           <th className="p-4">Email</th>
+                          <th className="p-4 text-center">Featured</th>
                           <th className="p-4">Role</th>
                           <th className="p-4 text-center">SMS Phone</th>
                           <th className="p-4 text-right">View Detail</th>
@@ -2858,6 +2907,28 @@ export default function AdminPage() {
                               </span>
                             </td>
                             <td className="p-4 text-gray-300">{user.email}</td>
+                            <td className="p-4 text-center">
+                              {user.role === 'provider' ? (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const curr = user.providerProfile?.isFeatured ?? user.providerProfile?.featured ?? user.isFeatured ?? false;
+                                    toggleFeatured(user.id, curr);
+                                  }}
+                                  title="Toggle Featured Status"
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border inline-flex items-center gap-1.5 ${
+                                    user.providerProfile?.isFeatured || user.providerProfile?.featured || user.isFeatured
+                                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                                      : 'bg-gray-800/60 text-gray-400 border-gray-700/50 hover:bg-gray-700/60'
+                                  }`}
+                                >
+                                  <Sparkles className={`w-3 h-3 ${user.providerProfile?.isFeatured || user.providerProfile?.featured || user.isFeatured ? 'text-amber-400 fill-amber-400' : 'text-gray-500'}`} />
+                                  <span>{user.providerProfile?.isFeatured || user.providerProfile?.featured || user.isFeatured ? 'Yes' : 'No'}</span>
+                                </button>
+                              ) : (
+                                <span className="text-xs text-gray-600">—</span>
+                              )}
+                            </td>
                             <td className="p-4">
                               {user.role ? (
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border
@@ -3001,6 +3072,26 @@ export default function AdminPage() {
                     )}
 
                     <div className="space-y-2.5">
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-gray-900/60 border border-gray-850">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-amber-400" />
+                          <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">Featured Status</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const curr = selectedUser.providerProfile?.isFeatured ?? selectedUser.providerProfile?.featured ?? selectedUser.isFeatured ?? false;
+                            toggleFeatured(selectedUser.id, curr);
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all inline-flex items-center gap-1.5 ${
+                            selectedUser.providerProfile?.isFeatured || selectedUser.providerProfile?.featured || selectedUser.isFeatured
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                              : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-750'
+                          }`}
+                        >
+                          <span>{selectedUser.providerProfile?.isFeatured || selectedUser.providerProfile?.featured || selectedUser.isFeatured ? 'Yes (Featured)' : 'No (Regular)'}</span>
+                        </button>
+                      </div>
+
                       <div className="flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-primary" />
                         <span className="text-white font-semibold">{selectedUser.providerProfile?.location || 'No Location Set'}</span>

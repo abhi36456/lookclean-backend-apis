@@ -644,10 +644,10 @@ export const openApiSpec = {
             name: 'sortBy',
             in: 'query',
             required: false,
-            description: 'Sort providers by Nearest, Earliest, or Ratings',
+            description: 'Sort providers by Nearest, Earliest, Ratings, or Featured',
             schema: {
               type: 'string',
-              enum: ['Nearest', 'Earliest', 'Ratings'],
+              enum: ['Nearest', 'Earliest', 'Ratings', 'Featured'],
               example: 'Nearest',
             },
           },

@@ -91,7 +91,19 @@ const mockDb = {
       createdAt: new Date(),
     }
   ] as any[],
-  profiles: [] as any[],
+  profiles: [
+    {
+      id: 1,
+      userId: 2,
+      name: 'Maison Lumière',
+      location: 'Downtown, Main St 123',
+      experience: 5,
+      isFeatured: true,
+      categories: JSON.stringify([1, 2]),
+      latitude: 40.7128,
+      longitude: -74.0060,
+    }
+  ] as any[],
   services: [] as any[],
   amenities: [] as any[],
   bookings: [] as any[],
@@ -373,7 +385,22 @@ function sanitizeUser(user: unknown, request?: any) {
 
   const baseUrl = getBaseUrl(request);
 
+  if (plainUser.role === 'provider' && (!plainUser.providerProfile || typeof plainUser.providerProfile !== 'object')) {
+    plainUser.providerProfile = {
+      name: plainUser.name || 'Provider',
+      location: 'Location',
+      isFeatured: false,
+      featured: false,
+    };
+  }
+
   if (plainUser.providerProfile && typeof plainUser.providerProfile === 'object') {
+    const featVal = plainUser.providerProfile.isFeatured ?? plainUser.providerProfile.featured ?? plainUser.isFeatured ?? false;
+    const isFeatBool = featVal === true || featVal === 'true' || featVal === 1 || featVal === '1';
+    plainUser.providerProfile.isFeatured = isFeatBool;
+    plainUser.providerProfile.featured = isFeatBool;
+    plainUser.isFeatured = isFeatBool;
+
     // Parse categories if stringified
     const cats = plainUser.providerProfile.categories;
     if (typeof cats === 'string') {
@@ -763,6 +790,8 @@ export async function GET(
                 providerProfile: {
                   include: { services: true, amenities: true },
                 },
+                availabilityConfig: true,
+                activeSlots: true,
               },
             });
           },
@@ -771,6 +800,8 @@ export async function GET(
               .filter((u) => u.role === 'provider')
               .map((user) => {
                 const profile = mockDb.profiles.find((p) => p.userId === user.id);
+                const config = mockDb.availabilityConfigs.find((c) => c.providerId === user.id);
+                const slots = mockDb.activeSlots.filter((s) => s.providerId === user.id);
                 let providerProfile = undefined;
                 if (profile) {
                   providerProfile = {
@@ -779,7 +810,7 @@ export async function GET(
                     amenities: mockDb.amenities.filter((a) => a.profileId === profile.id),
                   };
                 }
-                return { ...user, providerProfile };
+                return { ...user, providerProfile, availabilityConfig: config, activeSlots: slots };
               });
           }
         );
@@ -819,7 +850,26 @@ export async function GET(
                 u.providerProfile.reviews = DEFAULT_DUMMY_REVIEWS;
               }
 
-              u.providerProfile.earliestTime = '00:00 AM';
+              u.providerProfile.rating = u.providerProfile.reviews?.rating ?? 4.9;
+
+              // Determine earliest available time slot or start time
+              let earliest = '09:00 AM';
+              if (u.activeSlots && Array.isArray(u.activeSlots) && u.activeSlots.length > 0) {
+                const activeAvailable = u.activeSlots.filter((s: any) => s.isAvailable !== false && s.timeSlot);
+                if (activeAvailable.length > 0) {
+                  activeAvailable.sort((a: any, b: any) => {
+                    try { return parseTime(a.timeSlot) - parseTime(b.timeSlot); } catch { return 0; }
+                  });
+                  earliest = activeAvailable[0].timeSlot;
+                }
+              } else if (u.availabilityConfig?.startTime) {
+                earliest = u.availabilityConfig.startTime;
+              } else {
+                const sampleTimes = ['08:00 AM', '09:00 AM', '10:00 AM', '08:30 AM', '09:30 AM'];
+                earliest = sampleTimes[Math.abs(u.id || 0) % sampleTimes.length];
+              }
+
+              u.providerProfile.earliestTime = earliest;
               u.providerProfile.isWishlisted = isWishlisted;
             }
           }
@@ -878,7 +928,28 @@ export async function GET(
           });
         }
 
-        if (sortBy === 'nearest' || sortBy === 'Nearest') {
+        // Filter by explicit isFeatured / featured parameter
+        const isFeaturedParam = (searchParams.get('isFeatured') || searchParams.get('featured') || '').toLowerCase();
+        if (isFeaturedParam === 'true' || isFeaturedParam === '1') {
+          filteredProviders = filteredProviders.filter((u: any) =>
+            u.providerProfile?.isFeatured === true || u.providerProfile?.featured === true || u.isFeatured === true
+          );
+        }
+
+        const sortKey = (sortBy || '').trim().toLowerCase();
+
+        if (sortKey === 'featured' || sortKey === 'isfeatured' || sortKey === 'top_featured' || sortKey === 'featured_first') {
+          // Filter to ONLY return providers that are featured (isFeatured: true)
+          filteredProviders = filteredProviders.filter((u: any) =>
+            u.providerProfile?.isFeatured === true || u.providerProfile?.featured === true || u.isFeatured === true
+          );
+
+          filteredProviders.sort((a: any, b: any) => {
+            const ratingA = Number(a.providerProfile?.reviews?.rating ?? a.providerProfile?.rating ?? 0);
+            const ratingB = Number(b.providerProfile?.reviews?.rating ?? b.providerProfile?.rating ?? 0);
+            return ratingB - ratingA;
+          });
+        } else if (sortKey === 'nearest' || sortKey === 'distance') {
           let clientLat: number | null = null;
           let clientLon: number | null = null;
 
@@ -914,6 +985,31 @@ export async function GET(
               return distA - distB;
             });
           }
+        } else if (sortKey === 'earliest' || sortKey === 'earliest_time' || sortKey === 'time' || sortKey === 'earliesttime') {
+          filteredProviders.sort((a: any, b: any) => {
+            const timeStrA = a.providerProfile?.earliestTime || '09:00 AM';
+            const timeStrB = b.providerProfile?.earliestTime || '09:00 AM';
+            let minsA = 24 * 60;
+            let minsB = 24 * 60;
+            try { minsA = parseTime(timeStrA); } catch {}
+            try { minsB = parseTime(timeStrB); } catch {}
+            return minsA - minsB;
+          });
+        } else if (sortKey === 'ratings' || sortKey === 'rating' || sortKey === 'top_rated' || sortKey === 'highest_rated' || sortKey === 'toprated' || sortKey === 'highestrated') {
+          filteredProviders.sort((a: any, b: any) => {
+            const ratingA = Number(a.providerProfile?.reviews?.rating ?? a.providerProfile?.rating ?? a.rating ?? 0);
+            const ratingB = Number(b.providerProfile?.reviews?.rating ?? b.providerProfile?.rating ?? b.rating ?? 0);
+            if (ratingB !== ratingA) {
+              return ratingB - ratingA;
+            }
+            const countA = Number(a.providerProfile?.reviews?.totalReviews ?? 0);
+            const countB = Number(b.providerProfile?.reviews?.totalReviews ?? 0);
+            return countB - countA;
+          });
+        }
+
+        if (!filteredProviders || filteredProviders.length === 0) {
+          return NextResponse.json({ message: 'No providers found' }, { status: 404 });
         }
 
         return NextResponse.json(filteredProviders);
@@ -5150,6 +5246,59 @@ export async function PUT(
         body = await request.json();
       } catch {
         // Empty
+      }
+    }
+
+    // Admin toggles/updates provider featured status (/api/admin/users/featured or /api/admin/users)
+    if (path === 'admin/users/featured' || path === 'admin/users' || path === 'admin/users/feature') {
+      if (auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
+      }
+
+      const { userId, isFeatured, featured } = body as any;
+      const { searchParams } = new URL(request.url);
+      const targetUserId = Number(userId || searchParams.get('userId') || searchParams.get('id'));
+      const newFeatured = isFeatured !== undefined ? Boolean(isFeatured) : featured !== undefined ? Boolean(featured) : true;
+
+      if (!targetUserId || isNaN(targetUserId)) {
+        return NextResponse.json({ message: 'Missing or invalid userId' }, { status: 400 });
+      }
+
+      try {
+        const result = await executeWithDbFallback(
+          async () => {
+            const profile = await prisma.providerProfile.upsert({
+              where: { userId: targetUserId },
+              update: { isFeatured: newFeatured },
+              create: {
+                userId: targetUserId,
+                name: 'Provider Profile',
+                location: 'Location',
+                isFeatured: newFeatured,
+              },
+            });
+            return profile;
+          },
+          async () => {
+            let profile = mockDb.profiles.find((p) => p.userId === targetUserId);
+            if (!profile) {
+              profile = { id: mockDb.profiles.length + 1, userId: targetUserId, name: 'Provider Profile', location: 'Location', isFeatured: newFeatured };
+              mockDb.profiles.push(profile);
+            } else {
+              profile.isFeatured = newFeatured;
+            }
+            return profile;
+          }
+        );
+
+        return NextResponse.json({
+          success: true,
+          message: `Featured status updated to ${newFeatured}`,
+          isFeatured: newFeatured,
+          profile: result,
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to update featured status' }, { status: 400 });
       }
     }
 

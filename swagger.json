@@ -785,13 +785,14 @@
             "name": "sortBy",
             "in": "query",
             "required": false,
-            "description": "Sort providers by Nearest, Earliest, or Ratings (Nearest calculates distance using lat/long coordinates)",
+            "description": "Sort providers by Nearest, Earliest, Ratings, or Featured (Nearest calculates distance using lat/long coordinates)",
             "schema": {
               "type": "string",
               "enum": [
                 "Nearest",
                 "Earliest",
-                "Ratings"
+                "Ratings",
+                "Featured"
               ],
               "example": "Nearest"
             }
