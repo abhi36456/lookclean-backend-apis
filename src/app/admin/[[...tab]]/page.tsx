@@ -23,6 +23,8 @@ interface UserData {
   isPhoneVerified: boolean;
   onboardingCompleted: boolean;
   createdAt: string;
+  isFeatured?: boolean;
+  featured?: boolean;
   providerProfile?: {
     name: string;
     location: string;
