@@ -612,7 +612,7 @@ export async function GET(
     const path = rawPath.replace(/^api\//i, '').replace(/\/$/, '').trim();
     console.log(`[API GET] rawPath='${rawPath}' -> path='${path}'`);
 
-    if (path === 'providers/customer-profile') {
+    if (path === 'providers/client-profile' || path === 'provider/client-profile' || path === 'providers/customer-profile' || path === 'provider/customer-profile') {
       const auth = await getAuthenticatedUser(request);
       if (!auth) {
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -642,7 +642,7 @@ export async function GET(
             });
 
             if (!client) {
-               throw new Error('Client not found');
+              throw new Error('Client not found');
             }
 
             const bookings = await prisma.booking.findMany({
@@ -671,18 +671,18 @@ export async function GET(
             const transactions = bookings.map(b => {
               const serviceIds = b.services.map(bs => bs.serviceId);
               let ratingObj = null;
-              
+
               const matchedReview = reviews.find(r => r.serviceId !== null && serviceIds.includes(r.serviceId));
               if (matchedReview) {
-                 ratingObj = { rating: matchedReview.rating, comment: matchedReview.comment };
+                ratingObj = { rating: matchedReview.rating, comment: matchedReview.comment };
               } else if (reviews.length > 0) {
-                 ratingObj = { rating: reviews[0].rating, comment: reviews[0].comment };
+                ratingObj = { rating: reviews[0].rating, comment: reviews[0].comment };
               }
 
               return {
-                 ...b,
-                 services: b.services.map(bs => bs.service),
-                 rating: ratingObj
+                ...b,
+                services: b.services.map(bs => bs.service),
+                rating: ratingObj
               };
             });
 
@@ -705,20 +705,20 @@ export async function GET(
             const transactions = bookings.map((b: any) => {
               const bServices = mockDb.bookingServices.filter((bs: any) => bs.bookingId === b.id);
               const mappedServices = bServices.map((bs: any) => mockDb.services.find((s: any) => s.id === bs.serviceId) || { name: 'Unknown' });
-              
+
               const serviceIds = bServices.map((bs: any) => bs.serviceId);
               let ratingObj = null;
               const matchedReview = reviews.find((r: any) => r.serviceId !== null && serviceIds.includes(r.serviceId));
               if (matchedReview) {
-                 ratingObj = { rating: matchedReview.rating, comment: matchedReview.comment };
+                ratingObj = { rating: matchedReview.rating, comment: matchedReview.comment };
               } else if (reviews.length > 0) {
-                 ratingObj = { rating: reviews[0].rating, comment: reviews[0].comment };
+                ratingObj = { rating: reviews[0].rating, comment: reviews[0].comment };
               }
 
               return {
-                 ...b,
-                 services: mappedServices,
-                 rating: ratingObj
+                ...b,
+                services: mappedServices,
+                rating: ratingObj
               };
             });
 
@@ -991,8 +991,8 @@ export async function GET(
             const timeStrB = b.providerProfile?.earliestTime || '09:00 AM';
             let minsA = 24 * 60;
             let minsB = 24 * 60;
-            try { minsA = parseTime(timeStrA); } catch {}
-            try { minsB = parseTime(timeStrB); } catch {}
+            try { minsA = parseTime(timeStrA); } catch { }
+            try { minsB = parseTime(timeStrB); } catch { }
             return minsA - minsB;
           });
         } else if (sortKey === 'ratings' || sortKey === 'rating' || sortKey === 'top_rated' || sortKey === 'highest_rated' || sortKey === 'toprated' || sortKey === 'highestrated') {
@@ -2025,7 +2025,7 @@ export async function POST(
       }
     }
 
-    if (path === 'providers/daily/transections') {
+    if (path === 'providers/daily/transactions' || path === 'provider/daily/transactions' || path === 'providers/daily/transections' || path === 'provider/daily/transections') {
       const auth = await getAuthenticatedUser(request);
       if (!auth) {
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -2034,7 +2034,7 @@ export async function POST(
         return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
       }
 
-      
+
       const sortBy = (body as any).sortBy || 'currently month';
       const pageStr = (body as any).page;
       let page = 1;
@@ -2091,7 +2091,7 @@ export async function POST(
             });
 
             const dailyData: Record<string, { date: string; totalServiceAmount: number; transactions: any[] }> = {};
-            
+
             for (const b of bookings) {
               const dateStr = b.date.toISOString().split('T')[0];
               if (!dailyData[dateStr]) {
@@ -2108,11 +2108,11 @@ export async function POST(
               const matchedReviews = reviews.filter(r => r.clientId === b.clientId);
               const exactReview = matchedReviews.find(r => r.serviceId !== null && serviceIds.includes(r.serviceId));
               if (exactReview) {
-                 ratingObj = { rating: exactReview.rating, comment: exactReview.comment };
+                ratingObj = { rating: exactReview.rating, comment: exactReview.comment };
               } else if (matchedReviews.length > 0) {
-                 ratingObj = { rating: matchedReviews[0].rating, comment: matchedReviews[0].comment };
+                ratingObj = { rating: matchedReviews[0].rating, comment: matchedReviews[0].comment };
               }
-              
+
               dailyData[dateStr].transactions.push({
                 ...b,
                 client: b.client,
@@ -2120,7 +2120,7 @@ export async function POST(
                 rating: ratingObj
               });
             }
-            
+
             const groupedList = Object.values(dailyData).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
             if (sortBy === 'all') {
@@ -2177,9 +2177,9 @@ export async function POST(
               const matchedReviews = reviews.filter((r: any) => r.clientId === b.clientId);
               const exactReview = matchedReviews.find((r: any) => r.serviceId !== null && serviceIds.includes(r.serviceId));
               if (exactReview) {
-                 ratingObj = { rating: exactReview.rating, comment: exactReview.comment };
+                ratingObj = { rating: exactReview.rating, comment: exactReview.comment };
               } else if (matchedReviews.length > 0) {
-                 ratingObj = { rating: matchedReviews[0].rating, comment: matchedReviews[0].comment };
+                ratingObj = { rating: matchedReviews[0].rating, comment: matchedReviews[0].comment };
               }
 
               dailyData[dateStr].transactions.push({
@@ -2208,7 +2208,7 @@ export async function POST(
       }
     }
 
-    
+
 
     // 0a. Toggle client provider wishlist (/api/clients/wishlist or /api/client/wishlist)
     if (path === 'clients/wishlist' || path === 'client/wishlist') {

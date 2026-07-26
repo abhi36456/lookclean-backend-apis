@@ -64,7 +64,7 @@ export const openApiSpec = {
     },
   ],
   paths: {
-    '/providers/daily/transections': {
+    '/providers/daily/transactions': {
       post: {
         tags: ['Providers Profile'],
         summary: 'Get daily transactions',
@@ -128,7 +128,7 @@ export const openApiSpec = {
         },
       },
     },
-    '/providers/customer-profile': {
+    '/providers/client-profile': {
       get: {
         tags: ['Providers Profile'],
         summary: 'Get customer profile and transactions',
