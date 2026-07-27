@@ -2029,11 +2029,12 @@ export async function POST(
     console.log(`[API POST] rawPath='${rawPath}' -> path='${path}'`);
 
     let body: any = {};
+    let parsedFormData: FormData | null = null;
     const contentType = request.headers.get('content-type') || '';
     if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
       try {
-        const formData = await request.formData();
-        formData.forEach((value, key) => {
+        parsedFormData = await request.formData();
+        parsedFormData.forEach((value, key) => {
           body[key] = value;
         });
       } catch (err) {
@@ -2384,7 +2385,7 @@ export async function POST(
       let experienceInput: any = null;
       if (contentType.includes('multipart/form-data')) {
         try {
-          const formData = await request.formData();
+          const formData = parsedFormData || await request.formData();
           experienceInput = formData.get('experience');
         } catch (err: any) {
           return NextResponse.json({ message: 'Failed to parse form data: ' + err.message }, { status: 400 });
@@ -2494,7 +2495,7 @@ export async function POST(
 
       if (contentType.includes('multipart/form-data')) {
         try {
-          const formData = await request.formData();
+          const formData = parsedFormData || await request.formData();
           const indexForm = formData.get('index');
           if (index === null && indexForm !== null) {
             const parsedIdx = parseInt(String(indexForm), 10);
@@ -3742,7 +3743,7 @@ export async function POST(
       const contentType = request.headers.get('content-type') || '';
       if (contentType.includes('multipart/form-data')) {
         try {
-          const formData = await request.formData();
+          const formData = parsedFormData || await request.formData();
           mainType = formData.get('mainType');
           mainTypeIcon = formData.get('mainTypeIcon');
           title = formData.get('title');
@@ -3914,7 +3915,7 @@ export async function POST(
       const contentType = request.headers.get('content-type') || '';
       if (contentType.includes('multipart/form-data')) {
         try {
-          const formData = await request.formData();
+          const formData = parsedFormData || await request.formData();
           name = formData.get('name');
           location = formData.get('location');
           latitude = formData.get('latitude');
@@ -4242,7 +4243,7 @@ export async function POST(
       const contentType = request.headers.get('content-type') || '';
       if (contentType.includes('multipart/form-data')) {
         try {
-          const formData = await request.formData();
+          const formData = parsedFormData || await request.formData();
           experience = formData.get('experience');
 
           // Support multiple license names and certificates
@@ -5256,7 +5257,7 @@ export async function POST(
 
       try {
         if (contentType.includes('multipart/form-data')) {
-          const formData = await request.formData();
+          const formData = parsedFormData || await request.formData();
           title = (formData.get('title') as string) || '';
           message = (formData.get('message') as string) || '';
           const files = formData.getAll('attachments') as File[];
