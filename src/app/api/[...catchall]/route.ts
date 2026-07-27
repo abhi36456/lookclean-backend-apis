@@ -3,6 +3,28 @@ import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import nodePath from 'path';
+import { sendFcmNotification } from '@/lib/firebase-admin';
+
+async function sendNotificationToUser(userId: number, title: string, body: string, data?: Record<string, string>) {
+  try {
+    let fcmToken: string | null = null;
+    try {
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { fcmToken: true } });
+      if (user?.fcmToken) fcmToken = user.fcmToken;
+    } catch {
+      const mockUser = mockDb.users.find((u: any) => u.id === userId);
+      if (mockUser?.fcmToken) fcmToken = mockUser.fcmToken;
+    }
+
+    if (fcmToken) {
+      await sendFcmNotification({ token: fcmToken, title, body, data });
+    } else {
+      console.log(`[FCM Notification] User ${userId} has no fcmToken registered.`);
+    }
+  } catch (err) {
+    console.error(`[FCM Notification Error] Failed to send notification to user ${userId}:`, err);
+  }
+}
 
 function hashPassword(password: string) {
   return crypto.createHash('sha256').update(password).digest('hex');
@@ -2022,6 +2044,95 @@ export async function POST(
         body = await request.json();
       } catch {
         // Empty body or not JSON
+      }
+    }
+
+    // POST User FCM Token registration (/api/users/fcm-token or /api/fcm-token)
+    if (path === 'users/fcm-token' || path === 'fcm-token' || path === 'clients/fcm-token' || path === 'providers/fcm-token') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+      const { fcmToken } = body;
+      if (!fcmToken) {
+        return NextResponse.json({ message: 'Missing fcmToken' }, { status: 400 });
+      }
+      try {
+        await executeWithDbFallback(
+          async () => {
+            await prisma.user.update({
+              where: { id: auth.userId },
+              data: { fcmToken }
+            });
+          },
+          async () => {
+            const user = mockDb.users.find((u: any) => u.id === auth.userId);
+            if (user) user.fcmToken = fcmToken;
+          }
+        );
+        return NextResponse.json({ success: true, message: 'FCM Token saved successfully' });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to save FCM token' }, { status: 400 });
+      }
+    }
+
+    // POST Cron Job for Appointment Reminders (1 hour before appointment)
+    if (path === 'cron/appointment-reminders' || path === 'admin/cron/appointment-reminders') {
+      try {
+        const now = new Date();
+        const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+
+        let sentCount = 0;
+        await executeWithDbFallback(
+          async () => {
+            const upcomingBookings = await prisma.booking.findMany({
+              where: {
+                status: { in: ['pending', 'confirmed'] },
+                date: {
+                  gte: now,
+                  lte: oneHourLater
+                }
+              },
+              include: {
+                client: true,
+                provider: true
+              }
+            });
+
+            for (const b of upcomingBookings) {
+              if (b.client?.fcmToken) {
+                await sendNotificationToUser(
+                  b.clientId,
+                  'Upcoming Appointment Reminder ⏰',
+                  `Your appointment with ${b.provider?.name || 'your provider'} is scheduled in 1 hour (${b.timeSlot}).`,
+                  { bookingId: String(b.id), type: 'UPCOMING_APPOINTMENT' }
+                );
+                sentCount++;
+              }
+            }
+          },
+          async () => {
+            const upcomingBookings = mockDb.bookings.filter((b: any) => {
+              if (b.status === 'cancelled' || b.status === 'completed') return false;
+              const bDate = new Date(b.date);
+              return bDate >= now && bDate <= oneHourLater;
+            });
+            for (const b of upcomingBookings) {
+              const provider = mockDb.users.find((u: any) => u.id === b.providerId);
+              await sendNotificationToUser(
+                b.clientId,
+                'Upcoming Appointment Reminder ⏰',
+                `Your appointment with ${provider?.name || 'your provider'} is scheduled in 1 hour (${b.timeSlot}).`,
+                { bookingId: String(b.id), type: 'UPCOMING_APPOINTMENT' }
+              );
+              sentCount++;
+            }
+          }
+        );
+
+        return NextResponse.json({ success: true, message: `Processed appointment reminders. Sent: ${sentCount}` });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to process appointment reminders' }, { status: 500 });
       }
     }
 
@@ -4837,6 +4948,20 @@ export async function POST(
           }
         );
 
+        // Trigger FCM Notification to Provider (Provider Notification A: Booking Created)
+        try {
+          const clientName = auth.user?.name || auth.user?.email || 'A customer';
+          const bookingDateStr = bookingDate.toISOString().split('T')[0];
+          sendNotificationToUser(
+            providerIdInt,
+            'New Booking Received! 📅',
+            `${clientName} has booked an appointment for ${bookingDateStr} at ${timeSlot}.`,
+            { bookingId: String(booking?.id || ''), type: 'NEW_BOOKING' }
+          ).catch(err => console.error('FCM Provider Notification Error:', err));
+        } catch (fcmErr) {
+          console.error('Failed to trigger FCM booking notification:', fcmErr);
+        }
+
         return NextResponse.json({
           success: true,
           message: 'Booking created successfully',
@@ -4917,6 +5042,21 @@ export async function POST(
             return rev;
           }
         );
+
+        // Trigger FCM Notification to Provider (Provider Notification B: Review/Rating Submitted)
+        try {
+          const clientName = auth.user?.name || auth.user?.email || 'A customer';
+          const shortComment = reviewComment.length > 60 ? reviewComment.slice(0, 60) + '...' : reviewComment;
+          sendNotificationToUser(
+            numProviderId,
+            'New Rating & Review Received ⭐',
+            `${clientName} rated you ${rating} stars: "${shortComment}"`,
+            { reviewId: String(newReview?.id || ''), type: 'NEW_REVIEW' }
+          ).catch(err => console.error('FCM Provider Review Notification Error:', err));
+        } catch (fcmErr) {
+          console.error('Failed to trigger FCM review notification:', fcmErr);
+        }
+
         return NextResponse.json({ success: true, review: newReview });
       } catch (err: any) {
         let cleanMsg = err.message || 'Failed to submit review';
@@ -5237,6 +5377,58 @@ export async function PUT(
     const auth = await getAuthenticatedUser(request);
     if (!auth) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+
+    // PUT Booking Status Update (/api/providers/bookings/status or /api/bookings/status)
+    if (path === 'providers/bookings/status' || path === 'provider/bookings/status' || path === 'bookings/status' || path === 'client/bookings/status' || path === 'clients/bookings/status') {
+      let body: any = {};
+      try {
+        body = await request.json();
+      } catch {
+        return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
+      }
+
+      const { bookingId, status } = body;
+      if (!bookingId || !status) {
+        return NextResponse.json({ message: 'bookingId and status are required' }, { status: 400 });
+      }
+
+      const numBookingId = Number(bookingId);
+      try {
+        let updatedBooking: any = null;
+        await executeWithDbFallback(
+          async () => {
+            updatedBooking = await prisma.booking.update({
+              where: { id: numBookingId },
+              data: { status },
+              include: { client: true, provider: true }
+            });
+          },
+          async () => {
+            const b = mockDb.bookings.find((item: any) => item.id === numBookingId);
+            if (!b) throw new Error('Booking not found');
+            b.status = status;
+            updatedBooking = b;
+          }
+        );
+
+        // Client Notification B: Trigger when booking gets completed to share review & rating
+        if (status === 'completed' && updatedBooking) {
+          const clientId = updatedBooking.clientId;
+          if (clientId) {
+            sendNotificationToUser(
+              clientId,
+              'Booking Completed! 🎉',
+              'Your appointment is complete. Tap here to share your review and rate your provider!',
+              { bookingId: String(numBookingId), type: 'BOOKING_COMPLETED' }
+            ).catch(err => console.error('FCM Client Completed Notification Error:', err));
+          }
+        }
+
+        return NextResponse.json({ success: true, message: `Booking status updated to ${status}`, booking: updatedBooking });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to update booking status' }, { status: 400 });
+      }
     }
 
     let body = {} as any;

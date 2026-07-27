@@ -169,6 +169,18 @@ export const mockApi = {
     console.log('[Mock API] resetPassword with token', token, 'and new password length', password.length);
     await new Promise((resolve) => setTimeout(resolve, 800));
     return { success: true };
+  },
+
+  async saveFcmToken(fcmToken: string) {
+    console.log('[Mock API] saveFcmToken', fcmToken);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const storedUserStr = typeof window !== 'undefined' ? localStorage.getItem('lc_user') : null;
+    if (storedUserStr) {
+      const user = JSON.parse(storedUserStr);
+      user.fcmToken = fcmToken;
+      localStorage.setItem('lc_user', JSON.stringify(user));
+    }
+    return { success: true, message: 'FCM Token updated' };
   }
 };
 
@@ -365,6 +377,16 @@ export const settingsApi = {
     } catch (err: any) {
       if (err.response && err.response.data) return err.response.data;
       throw err;
+    }
+  },
+  saveFcmToken: async (fcmToken: string) => {
+    if (useMock) return mockApi.saveFcmToken(fcmToken);
+    try {
+      const response = await apiClient.post('/users/fcm-token', { fcmToken });
+      return response.data;
+    } catch (err: any) {
+      console.warn('Real API saveFcmToken failed, using mock API', err);
+      return mockApi.saveFcmToken(fcmToken);
     }
   }
 };
