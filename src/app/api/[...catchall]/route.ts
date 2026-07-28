@@ -930,7 +930,7 @@ export async function GET(
           filteredProviders = filteredProviders.filter((u: any) => {
             if (!u) return false;
             const uName = (u.name || '').toLowerCase();
-            const pName = (u.providerProfile?.name || '').toLowerCase();
+            const sName = (u.providerProfile?.salonName || '').toLowerCase();
             const pType = (u.providerType || '').toLowerCase();
             const serviceMatch = u.providerProfile?.services?.some((s: any) =>
               (s.name || '').toLowerCase().includes(searchStr) || (s.category || '').toLowerCase().includes(searchStr)
@@ -938,7 +938,7 @@ export async function GET(
             const categoryMatch = u.providerProfile?.categories?.some((c: any) =>
               (c.title || '').toLowerCase().includes(searchStr)
             );
-            return uName.includes(searchStr) || pName.includes(searchStr) || pType.includes(searchStr) || serviceMatch || categoryMatch;
+            return uName.includes(searchStr) || sName.includes(searchStr) || pType.includes(searchStr) || serviceMatch || categoryMatch;
           });
         }
 
@@ -2417,7 +2417,6 @@ export async function POST(
               profile = await prisma.providerProfile.create({
                 data: {
                   userId: auth.userId,
-                  name: '',
                   location: '',
                   experience: experienceVal
                 }
@@ -2574,7 +2573,6 @@ export async function POST(
               profile = await prisma.providerProfile.create({
                 data: {
                   userId: auth.userId,
-                  name: '',
                   location: '',
                   licenseType: '[]',
                   certificateUrl: '[]'
@@ -4004,10 +4002,16 @@ export async function POST(
             const finalProfileImage = profileImageUrl !== undefined ? profileImageUrl : (existing?.profileImageUrl || null);
             const finalCoverImage = coverImageUrl !== undefined ? coverImageUrl : (existing?.coverImageUrl || null);
 
+            if (name) {
+              await prisma.user.update({
+                where: { id: auth.userId },
+                data: { name: String(name) }
+              }).catch(() => {});
+            }
+
             return await prisma.providerProfile.upsert({
               where: { userId: auth.userId },
               update: {
-                name,
                 salonName: salonNameVal,
                 location: locVal,
                 city: cityVal,
@@ -4021,7 +4025,6 @@ export async function POST(
               },
               create: {
                 userId: auth.userId,
-                name,
                 salonName: salonNameVal,
                 location: locVal,
                 city: cityVal,
@@ -4036,12 +4039,15 @@ export async function POST(
             });
           },
           async () => {
+            if (name) {
+              const u = mockDb.users.find((user) => user.id === auth.userId);
+              if (u) u.name = String(name);
+            }
             let mockProfile = mockDb.profiles.find((p) => p.userId === auth.userId);
             if (!mockProfile) {
               mockProfile = { id: mockDb.profiles.length + 1, userId: auth.userId };
               mockDb.profiles.push(mockProfile);
             }
-            mockProfile.name = name;
             mockProfile.salonName = salonNameVal;
             mockProfile.location = locVal;
             mockProfile.city = cityVal;
@@ -4094,7 +4100,6 @@ export async function POST(
               return await prisma.providerProfile.create({
                 data: {
                   userId: auth.userId,
-                  name: '',
                   location: '',
                   categories: JSON.stringify(categories)
                 }
@@ -4108,7 +4113,7 @@ export async function POST(
           async () => {
             let mockProfile = mockDb.profiles.find((p) => p.userId === auth.userId);
             if (!mockProfile) {
-              mockProfile = { id: mockDb.profiles.length + 1, userId: auth.userId, name: '', location: '' };
+              mockProfile = { id: mockDb.profiles.length + 1, userId: auth.userId, location: '' };
               mockDb.profiles.push(mockProfile);
             }
             mockProfile.categories = JSON.stringify(categories);
@@ -4138,7 +4143,7 @@ export async function POST(
             if (!profile) {
               // Auto create an empty profile
               profile = await prisma.providerProfile.create({
-                data: { userId: auth.userId, name: '', location: '' }
+                data: { userId: auth.userId, location: '' }
               });
             }
             // Clear current services
@@ -4173,7 +4178,7 @@ export async function POST(
           async () => {
             let mockProfile = mockDb.profiles.find((p) => p.userId === auth.userId);
             if (!mockProfile) {
-              mockProfile = { id: mockDb.profiles.length + 1, userId: auth.userId, name: '', location: '' };
+              mockProfile = { id: mockDb.profiles.length + 1, userId: auth.userId, location: '' };
               mockDb.profiles.push(mockProfile);
             }
             mockDb.services = mockDb.services.filter((s) => s.profileId !== mockProfile.id);
@@ -4227,7 +4232,7 @@ export async function POST(
             if (!profile) {
               // Auto create empty profile
               profile = await prisma.providerProfile.create({
-                data: { userId: auth.userId, name: '', location: '' }
+                data: { userId: auth.userId, location: '' }
               });
             }
             // Clear current items
@@ -4256,7 +4261,7 @@ export async function POST(
           async () => {
             let mockProfile = mockDb.profiles.find((p) => p.userId === auth.userId);
             if (!mockProfile) {
-              mockProfile = { id: mockDb.profiles.length + 1, userId: auth.userId, name: '', location: '' };
+              mockProfile = { id: mockDb.profiles.length + 1, userId: auth.userId, location: '' };
               mockDb.profiles.push(mockProfile);
             }
             mockDb.amenities = mockDb.amenities.filter((a) => a.profileId !== mockProfile.id);
@@ -4439,7 +4444,6 @@ export async function POST(
               profile = await prisma.providerProfile.create({
                 data: {
                   userId: auth.userId,
-                  name: '',
                   location: '',
                   experience: parseInt(experience) || 0,
                   licenseType: storedLicenseType,
@@ -5513,7 +5517,6 @@ export async function PUT(
               update: { isFeatured: newFeatured },
               create: {
                 userId: targetUserId,
-                name: 'Provider Profile',
                 location: 'Location',
                 isFeatured: newFeatured,
               },
@@ -5521,10 +5524,10 @@ export async function PUT(
             return profile;
           },
           async () => {
-            let profile = mockDb.profiles.find((p) => p.userId === targetUserId);
-            if (!profile) {
-              profile = { id: mockDb.profiles.length + 1, userId: targetUserId, name: 'Provider Profile', location: 'Location', isFeatured: newFeatured };
-              mockDb.profiles.push(profile);
+            let mockProfile = mockDb.profiles.find((p) => p.userId === targetUserId);
+            if (!mockProfile) {
+              mockProfile = { id: mockDb.profiles.length + 1, userId: targetUserId, location: 'Location', isFeatured: newFeatured };
+              mockDb.profiles.push(mockProfile);
             } else {
               profile.isFeatured = newFeatured;
             }
@@ -5655,7 +5658,6 @@ export async function PUT(
               profile = await prisma.providerProfile.create({
                 data: {
                   userId: auth.userId,
-                  name: '',
                   location: '',
                   licenseType: '[]',
                   certificateUrl: '[]'
@@ -6014,11 +6016,17 @@ export async function PUT(
       try {
         const updatedUser = await executeWithDbFallback(
           async () => {
+            if (name) {
+              await prisma.user.update({
+                where: { id: auth.userId },
+                data: { name: String(name) }
+              }).catch(() => {});
+            }
+
             // 1. Upsert provider profile
             const profile = await prisma.providerProfile.upsert({
               where: { userId: auth.userId },
               update: {
-                name: name || '',
                 salonName: salonNameVal,
                 location: locVal,
                 city: cityVal,
@@ -6035,7 +6043,6 @@ export async function PUT(
               },
               create: {
                 userId: auth.userId,
-                name: name || '',
                 salonName: salonNameVal,
                 location: locVal,
                 city: cityVal,
@@ -6111,7 +6118,7 @@ export async function PUT(
               mockDb.profiles.push(profile);
             }
 
-            profile.name = name || '';
+            if (name) user.name = name;
             profile.salonName = salonNameVal;
             profile.location = locVal;
             profile.city = cityVal;

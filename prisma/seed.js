@@ -41,7 +41,6 @@ async function main() {
       onboardingCompleted: true,
       providerProfile: {
         create: {
-          name: 'Maison Lumière',
           location: '72 Fifth Ave, New York, NY',
           experience: 6,
           licenseType: 'State Cosmetology License',

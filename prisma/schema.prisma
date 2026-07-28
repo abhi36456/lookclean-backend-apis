@@ -55,7 +55,6 @@ model ProviderProfile {
   id              Int               @id @default(autoincrement())
   userId          Int               @unique
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name            String
   salonName       String?
   location        String?           @default("")
   city            String?
