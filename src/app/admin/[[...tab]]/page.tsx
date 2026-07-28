@@ -27,6 +27,7 @@ interface UserData {
   featured?: boolean;
   providerProfile?: {
     name: string;
+    salonName?: string | null;
     location: string;
     profileImageUrl?: string | null;
     experience: number;
@@ -3038,8 +3039,13 @@ export default function AdminPage() {
                       <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
                       <span>Registered on {new Date(selectedUser.createdAt).toLocaleDateString()}</span>
                     </div>
-                    <div className="text-[11px] text-gray-550 mt-1">
-                      Registry ID: #{selectedUser.id}
+                    <div className="text-[11px] text-gray-550 mt-1 space-y-1">
+                      {selectedUser.providerProfile?.salonName && (
+                        <div className="text-xs font-bold text-amber-400 flex items-center gap-1.5 pt-0.5">
+                          <Building className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                          <span>Salon: {selectedUser.providerProfile.salonName}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 

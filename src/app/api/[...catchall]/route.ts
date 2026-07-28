@@ -217,33 +217,11 @@ export const otpStore = new Map<string, { code: string; exp: number }>();
 export const wishlistStore: { clientId: number; providerId: number }[] = [];
 
 // Dummy reviews object matching screenshot specs
-export const DEFAULT_DUMMY_REVIEWS = {
-  rating: 4.9,
-  totalReviews: 312,
-  totalReviewsText: '312 reviews',
-  list: [
-    {
-      name: 'James W.',
-      initials: 'JW',
-      timeAgo: '2 days ago',
-      rating: 5,
-      comment: "Absolutely incredible experience. Best fade I've ever had."
-    },
-    {
-      name: 'Noah K.',
-      initials: 'NK',
-      timeAgo: '1 week ago',
-      rating: 5,
-      comment: 'Professional, clean, and fast. Will definitely book again!'
-    },
-    {
-      name: 'Leo M.',
-      initials: 'LM',
-      timeAgo: '2 weeks ago',
-      rating: 4,
-      comment: 'Great atmosphere and skilled hands. Highly recommend.'
-    }
-  ]
+export const DEFAULT_EMPTY_REVIEWS = {
+  rating: 0,
+  totalReviews: 0,
+  totalReviewsText: '0 reviews',
+  list: []
 };
 
 // Helper: Check if DB connection works, else use fallback
@@ -883,10 +861,10 @@ export async function GET(
                   }))
                 };
               } else {
-                u.providerProfile.reviews = DEFAULT_DUMMY_REVIEWS;
+                u.providerProfile.reviews = DEFAULT_EMPTY_REVIEWS;
               }
 
-              u.providerProfile.rating = u.providerProfile.reviews?.rating ?? 4.9;
+              u.providerProfile.rating = u.providerProfile.reviews?.rating ?? 0;
 
               // Determine earliest available time slot or start time
               let earliest = '09:00 AM';
@@ -1103,7 +1081,7 @@ export async function GET(
           if (sanitized) {
             if (sanitized.providerProfile) {
               sanitized.providerProfile.isWishlisted = true;
-              sanitized.providerProfile.reviews = DEFAULT_DUMMY_REVIEWS;
+              sanitized.providerProfile.reviews = DEFAULT_EMPTY_REVIEWS;
               sanitized.providerProfile.earliestTime = '00:00 AM';
             }
           }
@@ -3934,6 +3912,7 @@ export async function POST(
       }
 
       let name: any = undefined;
+      let salonName: any = undefined;
       let location: any = undefined;
       let address: any = undefined;
       let city: any = undefined;
@@ -3950,6 +3929,7 @@ export async function POST(
         try {
           const formData = parsedFormData || await request.formData();
           name = formData.get('name');
+          salonName = formData.get('salonName') ?? formData.get('salon_name');
           location = formData.get('location');
           address = formData.get('address');
           city = formData.get('city');
@@ -3958,8 +3938,8 @@ export async function POST(
           postalCode = formData.get('postalCode') ?? formData.get('postal_code') ?? formData.get('zipCode');
           latitude = formData.get('latitude') ?? formData.get('lat');
           longitude = formData.get('longitude') ?? formData.get('lng') ?? formData.get('long');
-          const profileImageFile = formData.get('profileImage');
-          const coverImageFile = formData.get('coverImage');
+          const profileImageFile = formData.get('profileImage') ?? formData.get('profileImageUrl');
+          const coverImageFile = formData.get('coverImage') ?? formData.get('coverImageUrl');
 
           const uploadDir = nodePath.join(process.cwd(), 'public', 'uploads');
           await fs.mkdir(uploadDir, { recursive: true });
@@ -3991,6 +3971,7 @@ export async function POST(
       } else {
         const bodyObj = body as any;
         name = bodyObj.name;
+        salonName = bodyObj.salonName ?? bodyObj.salon_name;
         location = bodyObj.location;
         address = bodyObj.address;
         city = bodyObj.city;
@@ -4004,6 +3985,7 @@ export async function POST(
       }
 
       const locVal = (location || address || [city, state, country].filter(Boolean).join(', ') || '').toString();
+      const salonNameVal = salonName ? String(salonName) : null;
       const cityVal = city ? String(city) : null;
       const stateVal = state ? String(state) : null;
       const countryVal = country ? String(country) : null;
@@ -4026,6 +4008,7 @@ export async function POST(
               where: { userId: auth.userId },
               update: {
                 name,
+                salonName: salonNameVal,
                 location: locVal,
                 city: cityVal,
                 state: stateVal,
@@ -4039,6 +4022,7 @@ export async function POST(
               create: {
                 userId: auth.userId,
                 name,
+                salonName: salonNameVal,
                 location: locVal,
                 city: cityVal,
                 state: stateVal,
@@ -4058,6 +4042,7 @@ export async function POST(
               mockDb.profiles.push(mockProfile);
             }
             mockProfile.name = name;
+            mockProfile.salonName = salonNameVal;
             mockProfile.location = locVal;
             mockProfile.city = cityVal;
             mockProfile.state = stateVal;
@@ -5993,6 +5978,8 @@ export async function PUT(
 
       const {
         name,
+        salonName,
+        salon_name,
         location,
         address,
         city,
@@ -6016,6 +6003,7 @@ export async function PUT(
       } = providerProfile;
 
       const locVal = (location || address || [city, state, country].filter(Boolean).join(', ') || '').toString();
+      const salonNameVal = (salonName || salon_name) ? String(salonName || salon_name) : null;
       const cityVal = city ? String(city) : null;
       const stateVal = state ? String(state) : null;
       const countryVal = country ? String(country) : null;
@@ -6031,6 +6019,7 @@ export async function PUT(
               where: { userId: auth.userId },
               update: {
                 name: name || '',
+                salonName: salonNameVal,
                 location: locVal,
                 city: cityVal,
                 state: stateVal,
@@ -6047,6 +6036,7 @@ export async function PUT(
               create: {
                 userId: auth.userId,
                 name: name || '',
+                salonName: salonNameVal,
                 location: locVal,
                 city: cityVal,
                 state: stateVal,
@@ -6122,6 +6112,7 @@ export async function PUT(
             }
 
             profile.name = name || '';
+            profile.salonName = salonNameVal;
             profile.location = locVal;
             profile.city = cityVal;
             profile.state = stateVal;
