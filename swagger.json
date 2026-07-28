@@ -96,6 +96,116 @@
             "type": "string"
           }
         }
+      },
+      "ClientProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "userId": {
+            "type": "integer",
+            "example": 3
+          },
+          "location": {
+            "type": "string",
+            "example": "72 Fifth Ave, New York, NY"
+          },
+          "city": {
+            "type": "string",
+            "example": "New York"
+          },
+          "state": {
+            "type": "string",
+            "example": "NY"
+          },
+          "country": {
+            "type": "string",
+            "example": "USA"
+          },
+          "postalCode": {
+            "type": "string",
+            "example": "10011"
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "example": "/uploads/profile_3.png"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 40.7128
+          },
+          "longitude": {
+            "type": "number",
+            "example": -74.006
+          }
+        }
+      },
+      "ProviderProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "userId": {
+            "type": "integer",
+            "example": 2
+          },
+          "name": {
+            "type": "string",
+            "example": "Maison Lumiere"
+          },
+          "location": {
+            "type": "string",
+            "example": "72 Fifth Ave, New York, NY"
+          },
+          "city": {
+            "type": "string",
+            "example": "New York"
+          },
+          "state": {
+            "type": "string",
+            "example": "NY"
+          },
+          "country": {
+            "type": "string",
+            "example": "USA"
+          },
+          "postalCode": {
+            "type": "string",
+            "example": "10011"
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "example": "/uploads/profile_2.png"
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "example": "https://images.unsplash.com/photo-1560066984-138dadb4c035"
+          },
+          "experience": {
+            "type": "integer",
+            "example": 6
+          },
+          "categories": {
+            "type": "string",
+            "example": "[\"Haircut & Styling\", \"Hair Colour\"]"
+          },
+          "isFeatured": {
+            "type": "boolean",
+            "example": false
+          },
+          "latitude": {
+            "type": "number",
+            "example": 40.7128
+          },
+          "longitude": {
+            "type": "number",
+            "example": -74.006
+          }
+        }
       }
     }
   },
@@ -699,22 +809,41 @@
                   },
                   "location": {
                     "type": "string",
-                    "example": "Los Angeles, CA"
+                    "example": "72 Fifth Ave, New York, NY"
                   },
                   "latitude": {
                     "type": "number",
                     "format": "float",
-                    "example": 34.0522
+                    "example": 40.7128,
+                    "description": "Latitude (accepts latitude or lat)"
                   },
                   "longitude": {
                     "type": "number",
                     "format": "float",
-                    "example": -118.2437
+                    "example": -74.006,
+                    "description": "Longitude (accepts longitude, long, or lng)"
                   },
                   "profileImage": {
                     "type": "string",
                     "format": "binary",
                     "description": "Upload client profile image file"
+                  },
+                  "city": {
+                    "type": "string",
+                    "example": "New York"
+                  },
+                  "state": {
+                    "type": "string",
+                    "example": "NY"
+                  },
+                  "country": {
+                    "type": "string",
+                    "example": "USA"
+                  },
+                  "postalCode": {
+                    "type": "string",
+                    "example": "10011",
+                    "description": "Postal code / Zip code (accepts postalCode or postal_code)"
                   }
                 }
               }
@@ -729,21 +858,40 @@
                   },
                   "location": {
                     "type": "string",
-                    "example": "Los Angeles, CA"
+                    "example": "72 Fifth Ave, New York, NY"
                   },
                   "latitude": {
                     "type": "number",
                     "format": "float",
-                    "example": 34.0522
+                    "example": 40.7128,
+                    "description": "Latitude (accepts latitude or lat)"
                   },
                   "longitude": {
                     "type": "number",
                     "format": "float",
-                    "example": -118.2437
+                    "example": -74.006,
+                    "description": "Longitude (accepts longitude, long, or lng)"
                   },
                   "profileImageUrl": {
                     "type": "string",
-                    "example": "https://..."
+                    "example": "/uploads/profile_3.png"
+                  },
+                  "city": {
+                    "type": "string",
+                    "example": "New York"
+                  },
+                  "state": {
+                    "type": "string",
+                    "example": "NY"
+                  },
+                  "country": {
+                    "type": "string",
+                    "example": "USA"
+                  },
+                  "postalCode": {
+                    "type": "string",
+                    "example": "10011",
+                    "description": "Postal code / Zip code (accepts postalCode or postal_code)"
                   }
                 }
               }
@@ -1710,33 +1858,118 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "name",
-                  "location"
+                  "name"
                 ],
                 "properties": {
                   "name": {
                     "type": "string",
-                    "example": "Glamour Cuts"
+                    "example": "Maison Lumiere"
                   },
                   "location": {
                     "type": "string",
-                    "example": "Los Angeles, CA"
+                    "example": "72 Fifth Ave, New York, NY"
+                  },
+                  "city": {
+                    "type": "string",
+                    "example": "New York"
+                  },
+                  "state": {
+                    "type": "string",
+                    "example": "NY"
+                  },
+                  "country": {
+                    "type": "string",
+                    "example": "USA"
+                  },
+                  "postalCode": {
+                    "type": "string",
+                    "example": "10011",
+                    "description": "Postal code / Zip code (accepts postalCode or postal_code)"
                   },
                   "coverImageUrl": {
                     "type": "string",
-                    "example": "https://..."
+                    "example": "https://images.unsplash.com/photo-1560066984-138dadb4c035"
                   },
                   "profileImageUrl": {
                     "type": "string",
-                    "example": "https://..."
+                    "example": "/uploads/profile_2.png"
                   },
                   "latitude": {
                     "type": "number",
-                    "example": 34.0522
+                    "format": "float",
+                    "example": 40.7128,
+                    "description": "Latitude (accepts latitude or lat)"
                   },
                   "longitude": {
                     "type": "number",
-                    "example": -118.2437
+                    "format": "float",
+                    "example": -74.006,
+                    "description": "Longitude (accepts longitude, long, or lng)"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Maison Lumiere"
+                  },
+                  "location": {
+                    "type": "string",
+                    "example": "72 Fifth Ave, New York, NY"
+                  },
+                  "city": {
+                    "type": "string",
+                    "example": "New York"
+                  },
+                  "state": {
+                    "type": "string",
+                    "example": "NY"
+                  },
+                  "country": {
+                    "type": "string",
+                    "example": "USA"
+                  },
+                  "postalCode": {
+                    "type": "string",
+                    "example": "10011",
+                    "description": "Postal code / Zip code (accepts postalCode or postal_code)"
+                  },
+                  "coverImageUrl": {
+                    "type": "string",
+                    "example": "https://images.unsplash.com/photo-1560066984-138dadb4c035"
+                  },
+                  "profileImageUrl": {
+                    "type": "string",
+                    "example": "/uploads/profile_2.png"
+                  },
+                  "latitude": {
+                    "type": "number",
+                    "format": "float",
+                    "example": 40.7128,
+                    "description": "Latitude (accepts latitude or lat)"
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "format": "float",
+                    "example": -74.006,
+                    "description": "Longitude (accepts longitude, long, or lng)"
+                  },
+                  "profileImage": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Upload provider profile avatar"
+                  },
+                  "coverImage": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Upload provider cover header image"
                   }
                 }
               }
@@ -1780,7 +2013,77 @@
                       }
                     }
                   }
-                }
+                },
+                "example": [
+                  {
+                    "id": 1,
+                    "title": "Haircut & Styling"
+                  },
+                  {
+                    "id": 2,
+                    "title": "Hair Colour"
+                  },
+                  {
+                    "id": 3,
+                    "title": "Hair Treatments"
+                  },
+                  {
+                    "id": 4,
+                    "title": "Hair Extensions"
+                  },
+                  {
+                    "id": 5,
+                    "title": "Bridal & Event Hair"
+                  },
+                  {
+                    "id": 6,
+                    "title": "Nails"
+                  },
+                  {
+                    "id": 7,
+                    "title": "Brows & Lashes"
+                  },
+                  {
+                    "id": 8,
+                    "title": "Facials & Skincare"
+                  },
+                  {
+                    "id": 9,
+                    "title": "Waxing"
+                  },
+                  {
+                    "id": 10,
+                    "title": "Threading"
+                  },
+                  {
+                    "id": 11,
+                    "title": "Makeup"
+                  },
+                  {
+                    "id": 12,
+                    "title": "Massage & Spa"
+                  },
+                  {
+                    "id": 13,
+                    "title": "Tanning"
+                  },
+                  {
+                    "id": 14,
+                    "title": "Advanced Beauty"
+                  },
+                  {
+                    "id": 15,
+                    "title": "Piercing"
+                  },
+                  {
+                    "id": 16,
+                    "title": "Mens Grooming"
+                  },
+                  {
+                    "id": 17,
+                    "title": "Kids Services"
+                  }
+                ]
               }
             }
           }
@@ -2120,6 +2423,141 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/providers/profile": {
+      "post": {
+        "tags": [
+          "Providers Profile"
+        ],
+        "summary": "Update Provider Profile Details",
+        "description": "Update comprehensive provider profile including location (location, city, state, country, postalCode, lat, long), services, categories, and amenities.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "providerProfile"
+                ],
+                "properties": {
+                  "onboardingCompleted": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "providerProfile": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "example": "Maison Lumiere"
+                      },
+                      "location": {
+                        "type": "string",
+                        "example": "72 Fifth Ave, New York, NY"
+                      },
+                      "city": {
+                        "type": "string",
+                        "example": "New York"
+                      },
+                      "state": {
+                        "type": "string",
+                        "example": "NY"
+                      },
+                      "country": {
+                        "type": "string",
+                        "example": "USA"
+                      },
+                      "postalCode": {
+                        "type": "string",
+                        "example": "10011"
+                      },
+                      "latitude": {
+                        "type": "number",
+                        "example": 40.7128
+                      },
+                      "longitude": {
+                        "type": "number",
+                        "example": -74.006
+                      },
+                      "experience": {
+                        "type": "integer",
+                        "example": 6
+                      },
+                      "categories": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "example": [
+                          "Haircut & Styling",
+                          "Hair Colour"
+                        ]
+                      },
+                      "coverImageUrl": {
+                        "type": "string",
+                        "example": "https://..."
+                      },
+                      "services": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "example": "Womens Haircut"
+                            },
+                            "price": {
+                              "type": "integer",
+                              "example": 45
+                            },
+                            "category": {
+                              "type": "string",
+                              "example": "Haircut & Styling"
+                            }
+                          }
+                        }
+                      },
+                      "amenities": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "example": "Parking area"
+                            },
+                            "type": {
+                              "type": "string",
+                              "example": "amenity"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Provider profile updated successfully"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden: Requires provider role"
           }
         }
       }

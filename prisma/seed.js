@@ -49,9 +49,9 @@ async function main() {
           coverImageUrl: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=600',
           services: {
             create: [
-              { name: 'Classic cut', price: 35, category: 'Haircut' },
-              { name: 'Skin fade', price: 45, category: 'Haircut' },
-              { name: 'Beard sculpt & hot towel', price: 25, category: 'Beard' },
+              { name: 'Women’s Haircut', price: 35, category: 'Haircut & Styling' },
+              { name: 'Men’s Haircut', price: 45, category: 'Haircut & Styling' },
+              { name: 'Beard Styling', price: 25, category: 'Men’s Grooming' },
             ],
           },
           amenities: {
@@ -162,47 +162,229 @@ async function main() {
     });
   }
 
-  // 5. Seed default Categories & Services Settings
-  const defaultCategories = ['Haircut', 'Beard', 'Hair Color'];
-  console.log('Seeding Category Settings...');
-  const catMap = {};
-  for (const cat of defaultCategories) {
-    const created = await prisma.categorySetting.upsert({
-      where: { title: cat },
-      update: {},
-      create: { title: cat },
-    });
-    catMap[cat] = created.id;
-  }
+  // 5. Seed default Categories & Services Settings (Dump current & seed new ones)
+  console.log('Dumping current Category and Service settings...');
+  await prisma.serviceSetting.deleteMany({});
+  await prisma.categorySetting.deleteMany({});
 
-  const defaultServices = [
-    { mainType: 'Haircut', title: 'Classic cut' },
-    { mainType: 'Haircut', title: 'Skin fade' },
-    { mainType: 'Haircut', title: 'Kids cut' },
-    { mainType: 'Beard', title: 'Beard trim' },
-    { mainType: 'Beard', title: 'Hot-towel shave' },
-    { mainType: 'Beard', title: 'Beard sculpt' },
-    { mainType: 'Hair Color', title: 'Root touch-up' },
-    { mainType: 'Hair Color', title: 'Full color' },
-    { mainType: 'Hair Color', title: 'Balayage' },
+  console.log('Seeding new Categories & Services Settings...');
+  const categoriesData = [
+    {
+      title: 'Haircut & Styling',
+      services: [
+        'Women’s Haircut',
+        'Men’s Haircut',
+        'Kids’ Haircut',
+        'Bang Trim',
+        'Beard Trim',
+        'Shampoo & Blow Dry',
+        'Blowout',
+        'Hair Styling',
+        'Updo',
+        'Braids',
+        'Curls',
+      ],
+    },
+    {
+      title: 'Hair Colour',
+      services: [
+        'Root Touch-Up',
+        'Full Colour',
+        'Highlights',
+        'Lowlights',
+        'Balayage',
+        'Ombre',
+        'Toner',
+        'Colour Correction',
+        'Hair Gloss',
+      ],
+    },
+    {
+      title: 'Hair Treatments',
+      services: [
+        'Deep Conditioning',
+        'Keratin Treatment',
+        'Olaplex Treatment',
+        'Hair Botox',
+        'Scalp Treatment',
+        'Hair Spa',
+        'Protein Treatment',
+      ],
+    },
+    {
+      title: 'Hair Extensions',
+      services: [
+        'Consultation',
+        'Tape-In Extensions',
+        'Clip-In Extensions',
+        'Sew-In Extensions',
+        'Fusion Extensions',
+        'Extension Removal',
+        'Extension Maintenance',
+      ],
+    },
+    {
+      title: 'Bridal & Event Hair',
+      services: [
+        'Bridal Hairstyle',
+        'Bridesmaid Hair',
+        'Party Hairstyle',
+        'Hair Trial Session',
+      ],
+    },
+    {
+      title: 'Nails',
+      services: [
+        'Classic Manicure',
+        'Gel Manicure',
+        'Acrylic Nails',
+        'Dip Powder Nails',
+        'Nail Extensions',
+        'Nail Art',
+        'Classic Pedicure',
+        'Gel Pedicure',
+      ],
+    },
+    {
+      title: 'Brows & Lashes',
+      services: [
+        'Eyebrow Shaping',
+        'Eyebrow Threading',
+        'Brow Tint',
+        'Brow Lamination',
+        'Lash Lift',
+        'Lash Tint',
+        'Eyelash Extensions',
+        'Lash Fill',
+      ],
+    },
+    {
+      title: 'Facials & Skincare',
+      services: [
+        'Express Facial',
+        'Hydrating Facial',
+        'Anti-Aging Facial',
+        'Acne Facial',
+        'Deep Cleansing Facial',
+        'Chemical Peel',
+        'Microdermabrasion',
+      ],
+    },
+    {
+      title: 'Waxing',
+      services: [
+        'Eyebrows',
+        'Upper Lip',
+        'Chin',
+        'Full Face',
+        'Underarms',
+        'Arms',
+        'Legs',
+        'Bikini Wax',
+        'Brazilian Wax',
+        'Back',
+        'Chest',
+      ],
+    },
+    {
+      title: 'Threading',
+      services: [
+        'Eyebrows',
+        'Upper Lip',
+        'Chin',
+        'Full Face',
+      ],
+    },
+    {
+      title: 'Makeup',
+      services: [
+        'Everyday Makeup',
+        'Party Makeup',
+        'Bridal Makeup',
+        'Engagement Makeup',
+        'Photoshoot Makeup',
+        'Airbrush Makeup',
+      ],
+    },
+    {
+      title: 'Massage & Spa',
+      services: [
+        'Swedish Massage',
+        'Deep Tissue Massage',
+        'Aromatherapy Massage',
+        'Hot Stone Massage',
+        'Head Massage',
+        'Foot Massage',
+      ],
+    },
+    {
+      title: 'Tanning',
+      services: [
+        'Spray Tan',
+        'Full-Body Tan',
+        'Face Tan',
+      ],
+    },
+    {
+      title: 'Advanced Beauty',
+      services: [
+        'HydraFacial',
+        'Microneedling',
+        'Dermaplaning',
+        'LED Light Therapy',
+        'Skin Consultation',
+      ],
+    },
+    {
+      title: 'Piercing',
+      services: [
+        'Ear Lobe Piercing',
+        'Cartilage Piercing',
+        'Nose Piercing',
+      ],
+    },
+    {
+      title: 'Men’s Grooming',
+      services: [
+        'Men’s Haircut',
+        'Beard Styling',
+        'Shave',
+        'Hair Colour',
+        'Men’s Facial',
+        'Scalp Treatment',
+      ],
+    },
+    {
+      title: 'Kids’ Services',
+      services: [
+        'Kids’ Haircut',
+        'Kids’ Hair Styling',
+      ],
+    },
   ];
 
-  console.log('Seeding Service Settings...');
-  for (const svc of defaultServices) {
-    const catId = catMap[svc.mainType];
-    await prisma.serviceSetting.upsert({
-      where: {
-        mainTypeId_title: {
-          mainTypeId: catId,
-          title: svc.title,
-        },
-      },
+  for (const catObj of categoriesData) {
+    const createdCat = await prisma.categorySetting.upsert({
+      where: { title: catObj.title },
       update: {},
-      create: {
-        mainTypeId: catId,
-        title: svc.title,
-      },
+      create: { title: catObj.title },
     });
+
+    for (const svcTitle of catObj.services) {
+      await prisma.serviceSetting.upsert({
+        where: {
+          mainTypeId_title: {
+            mainTypeId: createdCat.id,
+            title: svcTitle,
+          },
+        },
+        update: {},
+        create: {
+          mainTypeId: createdCat.id,
+          title: svcTitle,
+        },
+      });
+    }
   }
 
   // 6. Generate Dummy Bookings for June and July 2026

@@ -39,6 +39,10 @@ model ClientProfile {
   userId          Int      @unique
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   location        String?
+  city            String?
+  state           String?
+  country         String?
+  postalCode      String?
   profileImageUrl String?
   latitude        Float?
   longitude       Float?
@@ -52,7 +56,11 @@ model ProviderProfile {
   userId          Int               @unique
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   name            String
-  location        String
+  location        String?           @default("")
+  city            String?
+  state           String?
+  country         String?
+  postalCode      String?
   profileImageUrl String?
   latitude        Float?
   longitude       Float?

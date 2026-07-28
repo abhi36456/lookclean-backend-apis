@@ -871,12 +871,12 @@ export default function AdminPage() {
       setSelectedUser((prev) =>
         prev
           ? {
-              ...prev,
-              isFeatured: newStatus,
-              providerProfile: prev.providerProfile
-                ? { ...prev.providerProfile, isFeatured: newStatus, featured: newStatus }
-                : { isFeatured: newStatus, featured: newStatus, name: '', location: '', experience: 0 },
-            }
+            ...prev,
+            isFeatured: newStatus,
+            providerProfile: prev.providerProfile
+              ? { ...prev.providerProfile, isFeatured: newStatus, featured: newStatus }
+              : { isFeatured: newStatus, featured: newStatus, name: '', location: '', experience: 0 },
+          }
           : null
       );
     }
@@ -2918,11 +2918,10 @@ export default function AdminPage() {
                                     toggleFeatured(user.id, curr);
                                   }}
                                   title="Toggle Featured Status"
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border inline-flex items-center gap-1.5 ${
-                                    user.providerProfile?.isFeatured || user.providerProfile?.featured || user.isFeatured
-                                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
-                                      : 'bg-gray-800/60 text-gray-400 border-gray-700/50 hover:bg-gray-700/60'
-                                  }`}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border inline-flex items-center gap-1.5 ${user.providerProfile?.isFeatured || user.providerProfile?.featured || user.isFeatured
+                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                                    : 'bg-gray-800/60 text-gray-400 border-gray-700/50 hover:bg-gray-700/60'
+                                    }`}
                                 >
                                   <Sparkles className={`w-3 h-3 ${user.providerProfile?.isFeatured || user.providerProfile?.featured || user.isFeatured ? 'text-amber-400 fill-amber-400' : 'text-gray-500'}`} />
                                   <span>{user.providerProfile?.isFeatured || user.providerProfile?.featured || user.isFeatured ? 'Yes' : 'No'}</span>
@@ -3004,7 +3003,7 @@ export default function AdminPage() {
                 <div className="flex items-center justify-between border-b border-gray-900 pb-4">
                   <div>
                     <span className="text-xs text-primary font-bold uppercase tracking-wider">User details</span>
-                    <h2 className="text-xl font-bold text-white mt-0.5">{selectedUser.name}</h2>
+                    <h2 className="text-xl font-bold text-white mt-0.5">{selectedUser.name || (selectedUser.email.split('@')[0]).toUpperCase()}</h2>
                     <div className="flex items-center gap-2 mt-1.5">
                       <span className="text-[9px] text-slate-300 font-extrabold uppercase px-1.5 py-0.5 rounded bg-slate-900 border border-gray-800">
                         {selectedUser.role}
@@ -3084,11 +3083,10 @@ export default function AdminPage() {
                             const curr = selectedUser.providerProfile?.isFeatured ?? selectedUser.providerProfile?.featured ?? selectedUser.isFeatured ?? false;
                             toggleFeatured(selectedUser.id, curr);
                           }}
-                          className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all inline-flex items-center gap-1.5 ${
-                            selectedUser.providerProfile?.isFeatured || selectedUser.providerProfile?.featured || selectedUser.isFeatured
-                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
-                              : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-750'
-                          }`}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all inline-flex items-center gap-1.5 ${selectedUser.providerProfile?.isFeatured || selectedUser.providerProfile?.featured || selectedUser.isFeatured
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                            : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-750'
+                            }`}
                         >
                           <span>{selectedUser.providerProfile?.isFeatured || selectedUser.providerProfile?.featured || selectedUser.isFeatured ? 'Yes (Featured)' : 'No (Regular)'}</span>
                         </button>

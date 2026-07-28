@@ -540,14 +540,28 @@ async function enrichProviderProfile(providerProfile: any, request?: any) {
   const baseUrl = getBaseUrl(request);
 
   let categorySettings = [
-    { id: 1, title: 'Haircut' },
-    { id: 2, title: 'Beard' },
-    { id: 3, title: 'Hair Color' },
+    { id: 1, title: 'Haircut & Styling' },
+    { id: 2, title: 'Hair Colour' },
+    { id: 3, title: 'Hair Treatments' },
+    { id: 4, title: 'Hair Extensions' },
+    { id: 5, title: 'Bridal & Event Hair' },
+    { id: 6, title: 'Nails' },
+    { id: 7, title: 'Brows & Lashes' },
+    { id: 8, title: 'Facials & Skincare' },
+    { id: 9, title: 'Waxing' },
+    { id: 10, title: 'Threading' },
+    { id: 11, title: 'Makeup' },
+    { id: 12, title: 'Massage & Spa' },
+    { id: 13, title: 'Tanning' },
+    { id: 14, title: 'Advanced Beauty' },
+    { id: 15, title: 'Piercing' },
+    { id: 16, title: 'Men’s Grooming' },
+    { id: 17, title: 'Kids’ Services' },
   ];
   let serviceSettings = [
-    { id: 1, title: 'Classic cut', mainType: { title: 'Haircut' } },
-    { id: 2, title: 'Skin fade', mainType: { title: 'Haircut' } },
-    { id: 3, title: 'Beard trim', mainType: { title: 'Beard' } },
+    { id: 1, title: 'Women’s Haircut', mainType: { title: 'Haircut & Styling' } },
+    { id: 2, title: 'Men’s Haircut', mainType: { title: 'Haircut & Styling' } },
+    { id: 3, title: 'Beard Trim', mainType: { title: 'Haircut & Styling' } },
   ] as any[];
   let ambienceSettings = [
     { id: 1, title: 'Free Wi-Fi', ambienceGroup: { title: 'Amenities' } },
@@ -1307,9 +1321,23 @@ export async function GET(
         },
         async () => {
           return [
-            { id: 1, title: 'Haircut' },
-            { id: 2, title: 'Beard' },
-            { id: 3, title: 'Hair Color' },
+            { id: 1, title: 'Haircut & Styling' },
+            { id: 2, title: 'Hair Colour' },
+            { id: 3, title: 'Hair Treatments' },
+            { id: 4, title: 'Hair Extensions' },
+            { id: 5, title: 'Bridal & Event Hair' },
+            { id: 6, title: 'Nails' },
+            { id: 7, title: 'Brows & Lashes' },
+            { id: 8, title: 'Facials & Skincare' },
+            { id: 9, title: 'Waxing' },
+            { id: 10, title: 'Threading' },
+            { id: 11, title: 'Makeup' },
+            { id: 12, title: 'Massage & Spa' },
+            { id: 13, title: 'Tanning' },
+            { id: 14, title: 'Advanced Beauty' },
+            { id: 15, title: 'Piercing' },
+            { id: 16, title: 'Men’s Grooming' },
+            { id: 17, title: 'Kids’ Services' },
           ];
         }
       );
@@ -1351,9 +1379,9 @@ export async function GET(
         },
         async () => {
           return [
-            { id: 1, mainTypeId: 1, mainType: 'Haircut', title: 'Classic cut' },
-            { id: 2, mainTypeId: 1, mainType: 'Haircut', title: 'Skin fade' },
-            { id: 3, mainTypeId: 2, mainType: 'Beard', title: 'Beard trim' },
+            { id: 1, mainTypeId: 1, mainType: 'Haircut & Styling', title: 'Women’s Haircut' },
+            { id: 2, mainTypeId: 1, mainType: 'Haircut & Styling', title: 'Men’s Haircut' },
+            { id: 3, mainTypeId: 1, mainType: 'Haircut & Styling', title: 'Beard Trim' },
           ];
         }
       );
@@ -3907,6 +3935,11 @@ export async function POST(
 
       let name: any = undefined;
       let location: any = undefined;
+      let address: any = undefined;
+      let city: any = undefined;
+      let state: any = undefined;
+      let country: any = undefined;
+      let postalCode: any = undefined;
       let latitude: any = undefined;
       let longitude: any = undefined;
       let coverImageUrl: any = undefined;
@@ -3918,8 +3951,13 @@ export async function POST(
           const formData = parsedFormData || await request.formData();
           name = formData.get('name');
           location = formData.get('location');
-          latitude = formData.get('latitude');
-          longitude = formData.get('longitude');
+          address = formData.get('address');
+          city = formData.get('city');
+          state = formData.get('state');
+          country = formData.get('country');
+          postalCode = formData.get('postalCode') ?? formData.get('postal_code') ?? formData.get('zipCode');
+          latitude = formData.get('latitude') ?? formData.get('lat');
+          longitude = formData.get('longitude') ?? formData.get('lng') ?? formData.get('long');
           const profileImageFile = formData.get('profileImage');
           const coverImageFile = formData.get('coverImage');
 
@@ -3954,14 +3992,27 @@ export async function POST(
         const bodyObj = body as any;
         name = bodyObj.name;
         location = bodyObj.location;
-        latitude = bodyObj.latitude;
-        longitude = bodyObj.longitude;
+        address = bodyObj.address;
+        city = bodyObj.city;
+        state = bodyObj.state;
+        country = bodyObj.country;
+        postalCode = bodyObj.postalCode ?? bodyObj.postal_code ?? bodyObj.zipCode;
+        latitude = bodyObj.latitude ?? bodyObj.lat;
+        longitude = bodyObj.longitude ?? bodyObj.lng ?? bodyObj.long;
         coverImageUrl = bodyObj.coverImageUrl;
         profileImageUrl = bodyObj.profileImageUrl;
       }
 
-      if (!name || !location) {
-        return NextResponse.json({ message: 'Name and location are required' }, { status: 400 });
+      const locVal = (location || address || [city, state, country].filter(Boolean).join(', ') || '').toString();
+      const cityVal = city ? String(city) : null;
+      const stateVal = state ? String(state) : null;
+      const countryVal = country ? String(country) : null;
+      const postalCodeVal = postalCode ? String(postalCode) : null;
+      const latVal = latitude !== undefined && latitude !== null && latitude !== '' ? parseFloat(latitude) : null;
+      const lngVal = longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude) : null;
+
+      if (!name) {
+        return NextResponse.json({ message: 'Name is required' }, { status: 400 });
       }
 
       try {
@@ -3975,20 +4026,28 @@ export async function POST(
               where: { userId: auth.userId },
               update: {
                 name,
-                location,
+                location: locVal,
+                city: cityVal,
+                state: stateVal,
+                country: countryVal,
+                postalCode: postalCodeVal,
                 coverImageUrl: finalCoverImage,
                 profileImageUrl: finalProfileImage,
-                latitude: latitude !== undefined && latitude !== null ? parseFloat(latitude) : null,
-                longitude: longitude !== undefined && longitude !== null ? parseFloat(longitude) : null
+                latitude: latVal,
+                longitude: lngVal
               },
               create: {
                 userId: auth.userId,
                 name,
-                location,
+                location: locVal,
+                city: cityVal,
+                state: stateVal,
+                country: countryVal,
+                postalCode: postalCodeVal,
                 coverImageUrl: finalCoverImage,
                 profileImageUrl: finalProfileImage,
-                latitude: latitude !== undefined && latitude !== null ? parseFloat(latitude) : null,
-                longitude: longitude !== undefined && longitude !== null ? parseFloat(longitude) : null
+                latitude: latVal,
+                longitude: lngVal
               },
             });
           },
@@ -3999,11 +4058,15 @@ export async function POST(
               mockDb.profiles.push(mockProfile);
             }
             mockProfile.name = name;
-            mockProfile.location = location;
+            mockProfile.location = locVal;
+            mockProfile.city = cityVal;
+            mockProfile.state = stateVal;
+            mockProfile.country = countryVal;
+            mockProfile.postalCode = postalCodeVal;
             if (coverImageUrl !== undefined) mockProfile.coverImageUrl = coverImageUrl;
             if (profileImageUrl !== undefined) mockProfile.profileImageUrl = profileImageUrl;
-            mockProfile.latitude = latitude !== undefined && latitude !== null ? parseFloat(latitude) : null;
-            mockProfile.longitude = longitude !== undefined && longitude !== null ? parseFloat(longitude) : null;
+            mockProfile.latitude = latVal;
+            mockProfile.longitude = lngVal;
             return mockProfile;
           }
         );
@@ -5775,6 +5838,11 @@ export async function PUT(
 
       let name: any = undefined;
       let location: any = undefined;
+      let address: any = undefined;
+      let city: any = undefined;
+      let state: any = undefined;
+      let country: any = undefined;
+      let postalCode: any = undefined;
       let latitude: any = undefined;
       let longitude: any = undefined;
       let profileImageUrl: any = undefined;
@@ -5785,8 +5853,13 @@ export async function PUT(
           const formData = await request.formData();
           name = formData.get('name');
           location = formData.get('location');
-          latitude = formData.get('latitude');
-          longitude = formData.get('longitude');
+          address = formData.get('address');
+          city = formData.get('city');
+          state = formData.get('state');
+          country = formData.get('country');
+          postalCode = formData.get('postalCode') ?? formData.get('postal_code') ?? formData.get('zipCode');
+          latitude = formData.get('latitude') ?? formData.get('lat');
+          longitude = formData.get('longitude') ?? formData.get('lng') ?? formData.get('long');
           const profileImageFile = formData.get('profileImage');
 
           if (profileImageFile && typeof profileImageFile === 'object' && 'name' in profileImageFile) {
@@ -5820,14 +5893,20 @@ export async function PUT(
       } else {
         name = body.name;
         location = body.location;
-        latitude = body.latitude;
-        longitude = body.longitude;
+        address = body.address;
+        city = body.city;
+        state = body.state;
+        country = body.country;
+        postalCode = body.postalCode ?? body.postal_code ?? body.zipCode;
+        latitude = body.latitude ?? body.lat;
+        longitude = body.longitude ?? body.lng ?? body.long;
         profileImageUrl = body.profileImageUrl;
       }
 
-      // Automatically set onboardingCompleted to true if the client sends: name and location
+      const locVal = location ?? address;
       const hasName = name !== undefined && name !== null && String(name).trim() !== '';
-      const hasLocation = location !== undefined && location !== null && String(location).trim() !== '';
+      const hasLocation = (locVal !== undefined && locVal !== null && String(locVal).trim() !== '') ||
+                          (city !== undefined && city !== null && String(city).trim() !== '');
 
       const autoOnboardingCompleted = hasName && hasLocation;
 
@@ -5840,10 +5919,14 @@ export async function PUT(
           }
 
           const clientProfileData: any = {};
-          if (location !== undefined && location !== null) clientProfileData.location = location;
+          if (locVal !== undefined && locVal !== null) clientProfileData.location = String(locVal);
+          if (city !== undefined && city !== null) clientProfileData.city = String(city);
+          if (state !== undefined && state !== null) clientProfileData.state = String(state);
+          if (country !== undefined && country !== null) clientProfileData.country = String(country);
+          if (postalCode !== undefined && postalCode !== null) clientProfileData.postalCode = String(postalCode);
           if (profileImageUrl !== undefined && profileImageUrl !== null) clientProfileData.profileImageUrl = profileImageUrl;
-          if (latitude !== undefined && latitude !== null) clientProfileData.latitude = parseFloat(latitude);
-          if (longitude !== undefined && longitude !== null) clientProfileData.longitude = parseFloat(longitude);
+          if (latitude !== undefined && latitude !== null && latitude !== '') clientProfileData.latitude = parseFloat(latitude);
+          if (longitude !== undefined && longitude !== null && longitude !== '') clientProfileData.longitude = parseFloat(longitude);
 
           updateData.clientProfile = {
             upsert: {
@@ -5876,10 +5959,14 @@ export async function PUT(
             } as any;
             mockDb.profiles.push(profile);
           }
-          if (location !== undefined && location !== null) (profile as any).location = location;
+          if (locVal !== undefined && locVal !== null) (profile as any).location = String(locVal);
+          if (city !== undefined && city !== null) (profile as any).city = String(city);
+          if (state !== undefined && state !== null) (profile as any).state = String(state);
+          if (country !== undefined && country !== null) (profile as any).country = String(country);
+          if (postalCode !== undefined && postalCode !== null) (profile as any).postalCode = String(postalCode);
           if (profileImageUrl !== undefined && profileImageUrl !== null) (profile as any).profileImageUrl = profileImageUrl;
-          if (latitude !== undefined && latitude !== null) (profile as any).latitude = parseFloat(latitude);
-          if (longitude !== undefined && longitude !== null) (profile as any).longitude = parseFloat(longitude);
+          if (latitude !== undefined && latitude !== null && latitude !== '') (profile as any).latitude = parseFloat(latitude);
+          if (longitude !== undefined && longitude !== null && longitude !== '') (profile as any).longitude = parseFloat(longitude);
 
           return { ...user, clientProfile: profile };
         }
@@ -5907,6 +5994,13 @@ export async function PUT(
       const {
         name,
         location,
+        address,
+        city,
+        state,
+        country,
+        postalCode,
+        postal_code,
+        zipCode,
         categories,
         services,
         amenities,
@@ -5915,8 +6009,19 @@ export async function PUT(
         certificateUrl,
         coverImageUrl,
         latitude,
-        longitude
+        lat,
+        longitude,
+        lng,
+        long
       } = providerProfile;
+
+      const locVal = (location || address || [city, state, country].filter(Boolean).join(', ') || '').toString();
+      const cityVal = city ? String(city) : null;
+      const stateVal = state ? String(state) : null;
+      const countryVal = country ? String(country) : null;
+      const postalCodeVal = (postalCode || postal_code || zipCode) ? String(postalCode || postal_code || zipCode) : null;
+      const latVal = (latitude ?? lat) !== undefined && (latitude ?? lat) !== null && (latitude ?? lat) !== '' ? parseFloat(latitude ?? lat) : null;
+      const lngVal = (longitude ?? lng ?? long) !== undefined && (longitude ?? lng ?? long) !== null && (longitude ?? lng ?? long) !== '' ? parseFloat(longitude ?? lng ?? long) : null;
 
       try {
         const updatedUser = await executeWithDbFallback(
@@ -5926,26 +6031,34 @@ export async function PUT(
               where: { userId: auth.userId },
               update: {
                 name: name || '',
-                location: location || '',
+                location: locVal,
+                city: cityVal,
+                state: stateVal,
+                country: countryVal,
+                postalCode: postalCodeVal,
                 categories: categories ? JSON.stringify(categories) : null,
                 experience: parseInt(experience) || 0,
                 licenseType: licenseType ? (Array.isArray(licenseType) ? JSON.stringify(licenseType) : licenseType) : null,
                 certificateUrl: certificateUrl ? (Array.isArray(certificateUrl) ? JSON.stringify(certificateUrl) : certificateUrl) : null,
                 coverImageUrl: coverImageUrl || null,
-                latitude: latitude !== undefined && latitude !== null ? parseFloat(latitude) : null,
-                longitude: longitude !== undefined && longitude !== null ? parseFloat(longitude) : null
+                latitude: latVal,
+                longitude: lngVal
               },
               create: {
                 userId: auth.userId,
                 name: name || '',
-                location: location || '',
+                location: locVal,
+                city: cityVal,
+                state: stateVal,
+                country: countryVal,
+                postalCode: postalCodeVal,
                 categories: categories ? JSON.stringify(categories) : null,
                 experience: parseInt(experience) || 0,
                 licenseType: licenseType ? (Array.isArray(licenseType) ? JSON.stringify(licenseType) : licenseType) : null,
                 certificateUrl: certificateUrl ? (Array.isArray(certificateUrl) ? JSON.stringify(certificateUrl) : certificateUrl) : null,
                 coverImageUrl: coverImageUrl || null,
-                latitude: latitude !== undefined && latitude !== null ? parseFloat(latitude) : null,
-                longitude: longitude !== undefined && longitude !== null ? parseFloat(longitude) : null
+                latitude: latVal,
+                longitude: lngVal
               }
             });
 
@@ -6009,14 +6122,18 @@ export async function PUT(
             }
 
             profile.name = name || '';
-            profile.location = location || '';
+            profile.location = locVal;
+            profile.city = cityVal;
+            profile.state = stateVal;
+            profile.country = countryVal;
+            profile.postalCode = postalCodeVal;
             profile.categories = categories ? JSON.stringify(categories) : null;
             profile.experience = parseInt(experience) || 0;
             profile.licenseType = licenseType ? (Array.isArray(licenseType) ? JSON.stringify(licenseType) : licenseType) : null;
             profile.certificateUrl = certificateUrl ? (Array.isArray(certificateUrl) ? JSON.stringify(certificateUrl) : certificateUrl) : null;
             profile.coverImageUrl = coverImageUrl || null;
-            profile.latitude = latitude !== undefined && latitude !== null ? parseFloat(latitude) : null;
-            profile.longitude = longitude !== undefined && longitude !== null ? parseFloat(longitude) : null;
+            profile.latitude = latVal;
+            profile.longitude = lngVal;
 
             if (Array.isArray(services)) {
               mockDb.services = mockDb.services.filter((s) => s.profileId !== profile.id);
