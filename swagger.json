@@ -197,6 +197,10 @@
             "type": "boolean",
             "example": false
           },
+          "totalDistance": {
+            "type": "string",
+            "example": "2.5 mi"
+          },
           "latitude": {
             "type": "number",
             "example": 40.7128
@@ -215,6 +219,158 @@
     }
   ],
   "paths": {
+    "/providers/notification": {
+      "get": {
+        "tags": [
+          "Providers Profile"
+        ],
+        "summary": "Get provider notifications list",
+        "description": "Fetch list of all notifications for the authenticated provider.",
+        "responses": {
+          "200": {
+            "description": "Provider notifications retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "count": {
+                      "type": "integer",
+                      "example": 2
+                    },
+                    "notifications": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 1
+                          },
+                          "userId": {
+                            "type": "integer",
+                            "example": 2
+                          },
+                          "title": {
+                            "type": "string",
+                            "example": "New Booking Request! 📅"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Sarah Connor booked a service with you."
+                          },
+                          "type": {
+                            "type": "string",
+                            "example": "NEW_BOOKING"
+                          },
+                          "data": {
+                            "type": "object",
+                            "example": {
+                              "bookingId": "1"
+                            }
+                          },
+                          "isRead": {
+                            "type": "boolean",
+                            "example": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "example": "2026-07-29T23:27:25.000Z"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/clients/notification": {
+      "get": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Get client notifications list",
+        "description": "Fetch list of all notifications for the authenticated client.",
+        "responses": {
+          "200": {
+            "description": "Client notifications retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "count": {
+                      "type": "integer",
+                      "example": 2
+                    },
+                    "notifications": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 1
+                          },
+                          "userId": {
+                            "type": "integer",
+                            "example": 3
+                          },
+                          "title": {
+                            "type": "string",
+                            "example": "Booking Confirmed! ✅"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Your appointment with Maison Lumière has been confirmed."
+                          },
+                          "type": {
+                            "type": "string",
+                            "example": "BOOKING_STATUS_CHANGED"
+                          },
+                          "data": {
+                            "type": "object",
+                            "example": {
+                              "bookingId": "1"
+                            }
+                          },
+                          "isRead": {
+                            "type": "boolean",
+                            "example": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "example": "2026-07-29T23:27:25.000Z"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
     "/providers/daily/transactions": {
       "post": {
         "tags": [

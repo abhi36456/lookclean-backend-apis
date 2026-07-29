@@ -30,6 +30,7 @@ model User {
   reviewsAsClient     Review[]         @relation("ClientReviews")
   reviewsAsProvider   Review[]         @relation("ProviderReviews")
   issueReports        IssueReport[]
+  notifications       Notification[]
 
   @@map("users")
 }
@@ -86,7 +87,6 @@ model ProviderService {
   category    String
   createdAt   DateTime         @default(now())
   bookingServices BookingService[]
-  reviews     Review[]
 
   @@map("provider_service")
 }
@@ -171,6 +171,7 @@ model Booking {
   grandTotal      Float
   createdAt       DateTime         @default(now())
   services        BookingService[]
+  review          Review?
 
   @@map("bookings")
 }
@@ -238,8 +239,8 @@ model Review {
   client      User             @relation("ClientReviews", fields: [clientId], references: [id], onDelete: Cascade)
   providerId  Int
   provider    User             @relation("ProviderReviews", fields: [providerId], references: [id], onDelete: Cascade)
-  serviceId   Int?
-  service     ProviderService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  bookingId   Int?             @unique
+  booking     Booking?         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   rating      Float
   comment     String?          @db.Text
   createdAt   DateTime         @default(now())
@@ -280,5 +281,19 @@ model IssueReport {
   updatedAt   DateTime @updatedAt
 
   @@map("issue_reports")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String   @db.VarChar(255)
+  message   String   @db.Text
+  type      String?  @db.VarChar(50)
+  data      String?  @db.Text
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
 }
 

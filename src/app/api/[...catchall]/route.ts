@@ -7,6 +7,37 @@ import { sendFcmNotification } from '@/lib/firebase-admin';
 
 async function sendNotificationToUser(userId: number, title: string, body: string, data?: Record<string, string>) {
   try {
+    const dataStr = data ? JSON.stringify(data) : null;
+    await executeWithDbFallback(
+      async () => {
+        await prisma.notification.create({
+          data: {
+            userId: userId,
+            title: title,
+            message: body,
+            type: data?.type || 'GENERAL',
+            data: dataStr
+          }
+        });
+      },
+      async () => {
+        mockDb.notifications.push({
+          id: mockDb.notifications.length + 1,
+          userId: userId,
+          title: title,
+          message: body,
+          type: data?.type || 'GENERAL',
+          data: data || null,
+          isRead: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+    );
+  } catch (saveErr) {
+    console.error('Failed to save notification to DB:', saveErr);
+  }
+
+  try {
     let fcmToken: string | null = null;
     try {
       const user = await prisma.user.findUnique({ where: { id: userId }, select: { fcmToken: true } });
@@ -134,6 +165,7 @@ const mockDb = {
   activeSlots: [] as any[],
   vouchers: [] as any[],
   reviews: [] as any[],
+  notifications: [] as any[],
   cmsPages: [
     {
       slug: 'terms',
@@ -373,6 +405,19 @@ function getBaseUrl(request?: any): string {
   return '';
 }
 
+function calculateDistanceInMiles(lat1: number, lon1: number, lat2: number, lon2: number): string {
+  const R = 3958.8; // Earth's radius in miles
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = R * c;
+  return `${distance.toFixed(1)} mi`;
+}
+
 function sanitizeUser(user: unknown, request?: any) {
   if (!user) return null;
   const plainUser = JSON.parse(JSON.stringify(user)) as Record<string, any>;
@@ -391,6 +436,7 @@ function sanitizeUser(user: unknown, request?: any) {
       location: 'Location',
       isFeatured: false,
       featured: false,
+      totalDistance: '0.0 mi',
     };
   }
 
@@ -399,7 +445,9 @@ function sanitizeUser(user: unknown, request?: any) {
     const isFeatBool = featVal === true || featVal === 'true' || featVal === 1 || featVal === '1';
     plainUser.providerProfile.isFeatured = isFeatBool;
     plainUser.providerProfile.featured = isFeatBool;
+    plainUser.providerProfile.totalDistance = plainUser.providerProfile.totalDistance ? String(plainUser.providerProfile.totalDistance).replace(/\s*km$/i, ' mi') : '0.0 mi';
     plainUser.isFeatured = isFeatBool;
+    plainUser.totalDistance = plainUser.providerProfile.totalDistance;
 
     // Parse categories if stringified
     const cats = plainUser.providerProfile.categories;
@@ -683,15 +731,8 @@ export async function GET(
             });
 
             const transactions = bookings.map(b => {
-              const serviceIds = b.services.map(bs => bs.serviceId);
-              let ratingObj = null;
-
-              const matchedReview = reviews.find(r => r.serviceId !== null && serviceIds.includes(r.serviceId));
-              if (matchedReview) {
-                ratingObj = { rating: matchedReview.rating, comment: matchedReview.comment };
-              } else if (reviews.length > 0) {
-                ratingObj = { rating: reviews[0].rating, comment: reviews[0].comment };
-              }
+              const matchedReview = reviews.find(r => r.bookingId === b.id);
+              const ratingObj = matchedReview ? { rating: matchedReview.rating, comment: matchedReview.comment } : null;
 
               return {
                 ...b,
@@ -720,14 +761,8 @@ export async function GET(
               const bServices = mockDb.bookingServices.filter((bs: any) => bs.bookingId === b.id);
               const mappedServices = bServices.map((bs: any) => mockDb.services.find((s: any) => s.id === bs.serviceId) || { name: 'Unknown' });
 
-              const serviceIds = bServices.map((bs: any) => bs.serviceId);
-              let ratingObj = null;
-              const matchedReview = reviews.find((r: any) => r.serviceId !== null && serviceIds.includes(r.serviceId));
-              if (matchedReview) {
-                ratingObj = { rating: matchedReview.rating, comment: matchedReview.comment };
-              } else if (reviews.length > 0) {
-                ratingObj = { rating: reviews[0].rating, comment: reviews[0].comment };
-              }
+              const matchedReview = reviews.find((r: any) => r.bookingId === b.id);
+              const ratingObj = matchedReview ? { rating: matchedReview.rating, comment: matchedReview.comment } : null;
 
               return {
                 ...b,
@@ -796,6 +831,30 @@ export async function GET(
       const serviceFilter = (searchParams.get('service') || searchParams.get('serviceName') || '').trim().toLowerCase();
 
       try {
+        let clientLat: number | null = null;
+        let clientLon: number | null = null;
+
+        const qLat = searchParams.get('latitude') || searchParams.get('lat');
+        const qLon = searchParams.get('longitude') || searchParams.get('lon');
+        if (qLat && qLon) {
+          clientLat = Number(qLat);
+          clientLon = Number(qLon);
+        } else {
+          const clientProfile = await executeWithDbFallback(
+            async () => {
+              return await prisma.clientProfile.findUnique({ where: { userId: auth.userId } });
+            },
+            async () => {
+              return mockDb.profiles.find((p) => p.userId === auth.userId) || null;
+            }
+          );
+          if (clientProfile && clientProfile.latitude !== null && clientProfile.latitude !== undefined &&
+              clientProfile.longitude !== null && clientProfile.longitude !== undefined) {
+            clientLat = Number(clientProfile.latitude);
+            clientLon = Number(clientProfile.longitude);
+          }
+        }
+
         const providersList = await executeWithDbFallback(
           async () => {
             return await prisma.user.findMany({
@@ -838,6 +897,25 @@ export async function GET(
 
             if (u.providerProfile) {
               await enrichProviderProfile(u.providerProfile, request);
+
+              // Dynamically compute totalDistance in miles (mi)
+              let distStr = '0.0 mi';
+              const provLat = Number(u.providerProfile.latitude ?? u.latitude);
+              const provLon = Number(u.providerProfile.longitude ?? u.longitude);
+
+              if (clientLat !== null && clientLon !== null && !isNaN(clientLat) && !isNaN(clientLon) &&
+                  !isNaN(provLat) && !isNaN(provLon) && (provLat !== 0 || provLon !== 0)) {
+                distStr = calculateDistanceInMiles(clientLat, clientLon, provLat, provLon);
+              } else {
+                const sampleDistances = ['1.2 mi', '2.5 mi', '3.8 mi', '4.1 mi', '0.9 mi'];
+                distStr = sampleDistances[Math.abs(u.id || 0) % sampleDistances.length];
+              }
+
+              // Position totalDistance after isFeatured
+              u.providerProfile.isFeatured = u.providerProfile.isFeatured ?? false;
+              u.providerProfile.featured = u.providerProfile.featured ?? false;
+              u.providerProfile.totalDistance = distStr;
+              u.totalDistance = distStr;
 
               // Dynamically fetch and compute ratings/reviews for each provider
               const reviews = await executeWithDbFallback(
@@ -1097,6 +1175,110 @@ export async function GET(
         return NextResponse.json(sanitizedProviders);
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to fetch wishlist' }, { status: 400 });
+      }
+    }
+
+    // Provider notifications list (/api/providers/notification, /api/provider/notification, /api/providers/notifications, /api/provider/notifications)
+    if (path === 'providers/notification' || path === 'provider/notification' || path === 'providers/notifications' || path === 'provider/notifications') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+      if (auth.role !== 'provider' && auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      try {
+        const notifications = await executeWithDbFallback(
+          async () => {
+            return await prisma.notification.findMany({
+              where: { userId: auth.userId },
+              orderBy: { createdAt: 'desc' }
+            });
+          },
+          async () => {
+            return mockDb.notifications
+              .filter((n: any) => n.userId === auth.userId)
+              .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          }
+        );
+
+        const list = (notifications || []).map((n: any) => {
+          let dataObj = n.data;
+          if (typeof dataObj === 'string') {
+            try { dataObj = JSON.parse(dataObj); } catch { }
+          }
+          return {
+            id: n.id,
+            userId: n.userId,
+            title: n.title,
+            message: n.message || n.body || '',
+            type: n.type || 'GENERAL',
+            data: dataObj || null,
+            isRead: Boolean(n.isRead),
+            createdAt: n.createdAt
+          };
+        });
+
+        return NextResponse.json({
+          success: true,
+          count: list.length,
+          notifications: list
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to fetch notifications' }, { status: 400 });
+      }
+    }
+
+    // Client notifications list (/api/clients/notification, /api/client/notification, /api/clients/notifications, /api/client/notifications)
+    if (path === 'clients/notification' || path === 'client/notification' || path === 'clients/notifications' || path === 'client/notifications') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+      if (auth.role !== 'client' && auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires client role' }, { status: 403 });
+      }
+
+      try {
+        const notifications = await executeWithDbFallback(
+          async () => {
+            return await prisma.notification.findMany({
+              where: { userId: auth.userId },
+              orderBy: { createdAt: 'desc' }
+            });
+          },
+          async () => {
+            return mockDb.notifications
+              .filter((n: any) => n.userId === auth.userId)
+              .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          }
+        );
+
+        const list = (notifications || []).map((n: any) => {
+          let dataObj = n.data;
+          if (typeof dataObj === 'string') {
+            try { dataObj = JSON.parse(dataObj); } catch { }
+          }
+          return {
+            id: n.id,
+            userId: n.userId,
+            title: n.title,
+            message: n.message || n.body || '',
+            type: n.type || 'GENERAL',
+            data: dataObj || null,
+            isRead: Boolean(n.isRead),
+            createdAt: n.createdAt
+          };
+        });
+
+        return NextResponse.json({
+          success: true,
+          count: list.length,
+          notifications: list
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to fetch notifications' }, { status: 400 });
       }
     }
 
@@ -2221,15 +2403,8 @@ export async function POST(
               }
               dailyData[dateStr].totalServiceAmount += b.serviceAmount;
 
-              const serviceIds = b.services.map(bs => bs.serviceId);
-              let ratingObj = null;
-              const matchedReviews = reviews.filter(r => r.clientId === b.clientId);
-              const exactReview = matchedReviews.find(r => r.serviceId !== null && serviceIds.includes(r.serviceId));
-              if (exactReview) {
-                ratingObj = { rating: exactReview.rating, comment: exactReview.comment };
-              } else if (matchedReviews.length > 0) {
-                ratingObj = { rating: matchedReviews[0].rating, comment: matchedReviews[0].comment };
-              }
+              const matchedReview = reviews.find(r => r.bookingId === b.id);
+              const ratingObj = matchedReview ? { rating: matchedReview.rating, comment: matchedReview.comment } : null;
 
               dailyData[dateStr].transactions.push({
                 ...b,
@@ -2290,15 +2465,8 @@ export async function POST(
               const bServices = mockDb.bookingServices.filter((bs: any) => bs.bookingId === b.id);
               const mappedServices = bServices.map((bs: any) => mockDb.services.find((s: any) => s.id === bs.serviceId) || { name: 'Unknown' });
 
-              const serviceIds = bServices.map((bs: any) => bs.serviceId);
-              let ratingObj = null;
-              const matchedReviews = reviews.filter((r: any) => r.clientId === b.clientId);
-              const exactReview = matchedReviews.find((r: any) => r.serviceId !== null && serviceIds.includes(r.serviceId));
-              if (exactReview) {
-                ratingObj = { rating: exactReview.rating, comment: exactReview.comment };
-              } else if (matchedReviews.length > 0) {
-                ratingObj = { rating: matchedReviews[0].rating, comment: matchedReviews[0].comment };
-              }
+              const matchedReview = reviews.find((r: any) => r.bookingId === b.id);
+              const ratingObj = matchedReview ? { rating: matchedReview.rating, comment: matchedReview.comment } : null;
 
               dailyData[dateStr].transactions.push({
                 ...b,
@@ -5031,62 +5199,77 @@ export async function POST(
       if (!auth) {
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
       }
-      const { providerId, serviceId, rating, comment, message } = body as any;
-      if (!providerId || !rating) {
-        return NextResponse.json({ message: 'providerId and rating are required' }, { status: 400 });
-      }
-
-      const numProviderId = Number(providerId);
-      const numServiceId = serviceId ? Number(serviceId) : null;
+      const { providerId, bookingId, booking_id, rating, comment, message } = body as any;
+      const numBookingId = (bookingId || booking_id) ? Number(bookingId || booking_id) : null;
+      let targetProviderId = providerId ? Number(providerId) : 0;
       const reviewComment = comment || message || '';
+
+      if (!rating) {
+        return NextResponse.json({ message: 'rating is required' }, { status: 400 });
+      }
 
       try {
         const newReview = await executeWithDbFallback<any>(
           async () => {
+            if (numBookingId !== null) {
+              const bookingExists = await prisma.booking.findUnique({
+                where: { id: numBookingId }
+              });
+              if (!bookingExists) {
+                throw new Error('Invalid booking ID. Booking not found.');
+              }
+              if (!targetProviderId) {
+                targetProviderId = bookingExists.providerId;
+              }
+            }
+
+            if (!targetProviderId) {
+              throw new Error('providerId or bookingId is required');
+            }
+
             // Pre-verify provider exists
             const providerExists = await prisma.user.findUnique({
-              where: { id: numProviderId }
+              where: { id: targetProviderId }
             });
             if (!providerExists) {
               throw new Error('Provider not found');
             }
 
-            // Pre-verify service exists if serviceId is passed
-            if (numServiceId !== null) {
-              const serviceExists = await prisma.providerService.findUnique({
-                where: { id: numServiceId }
-              });
-              if (!serviceExists) {
-                throw new Error('Invalid service ID. Service not found.');
-              }
-            }
-
             return await prisma.review.create({
               data: {
                 clientId: auth.userId,
-                providerId: numProviderId,
-                serviceId: numServiceId,
+                providerId: targetProviderId,
+                bookingId: numBookingId,
                 rating: Number(rating),
                 comment: reviewComment
               }
             });
           },
           async () => {
-            const providerExists = mockDb.users.some((u) => u.id === numProviderId);
+            if (numBookingId !== null) {
+              const bookingExists = mockDb.bookings.find((b: any) => b.id === numBookingId);
+              if (!bookingExists) {
+                throw new Error('Invalid booking ID. Booking not found.');
+              }
+              if (!targetProviderId) {
+                targetProviderId = bookingExists.providerId;
+              }
+            }
+
+            if (!targetProviderId) {
+              throw new Error('providerId or bookingId is required');
+            }
+
+            const providerExists = mockDb.users.some((u) => u.id === targetProviderId);
             if (!providerExists) {
               throw new Error('Provider not found');
             }
-            if (numServiceId !== null) {
-              const serviceExists = mockDb.services.some((s) => s.id === numServiceId);
-              if (!serviceExists) {
-                throw new Error('Invalid service ID. Service not found.');
-              }
-            }
+
             const rev = {
               id: mockDb.reviews.length + 1,
               clientId: auth.userId,
-              providerId: numProviderId,
-              serviceId: numServiceId,
+              providerId: targetProviderId,
+              bookingId: numBookingId,
               rating: Number(rating),
               comment: reviewComment,
               createdAt: new Date().toISOString()
@@ -5101,7 +5284,7 @@ export async function POST(
           const clientName = auth.user?.name || auth.user?.email || 'A customer';
           const shortComment = reviewComment.length > 60 ? reviewComment.slice(0, 60) + '...' : reviewComment;
           sendNotificationToUser(
-            numProviderId,
+            targetProviderId,
             'New Rating & Review Received ⭐',
             `${clientName} rated you ${rating} stars: "${shortComment}"`,
             { reviewId: String(newReview?.id || ''), type: 'NEW_REVIEW' }
@@ -5114,12 +5297,12 @@ export async function POST(
       } catch (err: any) {
         let cleanMsg = err.message || 'Failed to submit review';
         if (err.code === 'P2003' || cleanMsg.includes('Foreign key constraint failed')) {
-          if (cleanMsg.includes('serviceId')) {
-            cleanMsg = 'Invalid service ID. Service not found.';
+          if (cleanMsg.includes('bookingId')) {
+            cleanMsg = 'Invalid booking ID. Booking not found or already reviewed.';
           } else if (cleanMsg.includes('providerId')) {
             cleanMsg = 'Provider not found.';
           } else {
-            cleanMsg = 'Invalid provider or service reference.';
+            cleanMsg = 'Invalid provider or booking reference.';
           }
         } else if (err.code === 'P2025' || cleanMsg.includes('Record to update not found')) {
           cleanMsg = 'Referenced record not found.';
@@ -5529,9 +5712,9 @@ export async function PUT(
               mockProfile = { id: mockDb.profiles.length + 1, userId: targetUserId, location: 'Location', isFeatured: newFeatured };
               mockDb.profiles.push(mockProfile);
             } else {
-              profile.isFeatured = newFeatured;
+              mockProfile.isFeatured = newFeatured;
             }
-            return profile;
+            return mockProfile;
           }
         );
 

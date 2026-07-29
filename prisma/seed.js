@@ -449,7 +449,7 @@ async function main() {
         data: {
           clientId: client.id,
           providerId: provider.id,
-          serviceId: service.id,
+          bookingId: b.id,
           rating: rating,
           comment: comments[Math.floor(Math.random() * comments.length)],
           createdAt: date
@@ -458,6 +458,39 @@ async function main() {
     }
     console.log(`Created ${bCount} dummy bookings with reviews.`);
   }
+
+  console.log('Seeding sample notifications...');
+  await prisma.notification.createMany({
+    data: [
+      {
+        userId: provider.id,
+        title: 'New Booking Request! 📅',
+        message: 'Sarah Connor booked a service with you.',
+        type: 'NEW_BOOKING',
+        data: JSON.stringify({ bookingId: '1' }),
+      },
+      {
+        userId: provider.id,
+        title: 'New Rating & Review Received ⭐',
+        message: 'Sarah Connor rated you 5 stars: "Great service!"',
+        type: 'NEW_REVIEW',
+        data: JSON.stringify({ reviewId: '1' }),
+      },
+      {
+        userId: client.id,
+        title: 'Booking Confirmed! ✅',
+        message: 'Your appointment with Maison Lumière has been confirmed.',
+        type: 'BOOKING_STATUS_CHANGED',
+        data: JSON.stringify({ bookingId: '1', status: 'confirmed' }),
+      },
+      {
+        userId: client.id,
+        title: 'Welcome to Look Clean! 🎉',
+        message: 'Explore top salons and beauty professionals near you.',
+        type: 'WELCOME',
+      },
+    ]
+  });
 
   console.log('Seed completed successfully! Default admin:', admin.email);
 }
