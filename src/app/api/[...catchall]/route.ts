@@ -40,9 +40,13 @@ async function sendNotificationToUser(userId: number, title: string, body: strin
   try {
     let fcmToken: string | null = null;
     try {
-      const user = await prisma.user.findUnique({ where: { id: userId }, select: { fcmToken: true } });
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { fcmToken: true } }).catch(() => null);
       if (user?.fcmToken) fcmToken = user.fcmToken;
-    } catch {
+    } catch (err) {
+      console.error('Error fetching fcmToken from DB:', err);
+    }
+
+    if (!fcmToken) {
       const mockUser = mockDb.users.find((u: any) => u.id === userId);
       if (mockUser?.fcmToken) fcmToken = mockUser.fcmToken;
     }
@@ -675,6 +679,143 @@ export async function GET(
     const rawPath = catchall?.join('/') || '';
     const path = rawPath.replace(/^api\//i, '').replace(/\/$/, '').trim();
     console.log(`[API GET] rawPath='${rawPath}' -> path='${path}'`);
+
+    // GET Test FCM Push Notification Endpoint (/api/test-notification?userId=2)
+    if (path === 'test-notification' || path === 'users/test-notification' || path === 'fcm/test' || path === 'admin/test-notification') {
+      const logs: string[] = [];
+      const timestamp = new Date().toISOString();
+      logs.push(`[${timestamp}] Test Notification GET Endpoint Invoked.`);
+
+      const urlParams = new URL(request.url).searchParams;
+      const rawUserId = urlParams.get('userId') || urlParams.get('id') || urlParams.get('user_id');
+
+      if (!rawUserId) {
+        logs.push('[ERROR] Missing userId parameter in query string.');
+        return NextResponse.json({
+          success: false,
+          error: 'Missing userId parameter',
+          usage: 'Append ?userId={ID} to URL (e.g. /api/test-notification?userId=2)',
+          logs
+        }, { status: 400 });
+      }
+
+      const targetUserId = parseInt(String(rawUserId), 10);
+      logs.push(`[INFO] Target User ID: ${targetUserId}`);
+
+      let targetUser: any = null;
+      let fcmToken: string | null = null;
+      let source: string = 'none';
+
+      // 1. Check Prisma DB
+      try {
+        logs.push(`[STEP 1] Querying Prisma DB for User ID ${targetUserId}...`);
+        const dbUser = await prisma.user.findUnique({
+          where: { id: targetUserId },
+          select: { id: true, name: true, email: true, role: true, fcmToken: true }
+        });
+        if (dbUser) {
+          targetUser = dbUser;
+          source = 'Prisma DB';
+          fcmToken = dbUser.fcmToken;
+          logs.push(`[STEP 1 SUCCESS] User found in Prisma DB. Name: "${dbUser.name}", Email: "${dbUser.email}", Role: "${dbUser.role}".`);
+          if (fcmToken) {
+            logs.push(`[STEP 1 SUCCESS] FCM Token found in Prisma DB: "${fcmToken.slice(0, 25)}..." (Length: ${fcmToken.length})`);
+          } else {
+            logs.push(`[STEP 1 WARNING] User exists in Prisma DB, but fcmToken is NULL / Empty.`);
+          }
+        } else {
+          logs.push(`[STEP 1 INFO] User ID ${targetUserId} not found in Prisma DB.`);
+        }
+      } catch (dbErr: any) {
+        logs.push(`[STEP 1 ERROR] Prisma DB query failed: ${dbErr.message || String(dbErr)}`);
+      }
+
+      // 2. Check mockDb fallback
+      if (!targetUser || !fcmToken) {
+        logs.push(`[STEP 2] Checking mockDb in-memory storage for User ID ${targetUserId}...`);
+        const mockUser = mockDb.users.find((u: any) => u.id === targetUserId);
+        if (mockUser) {
+          if (!targetUser) {
+            targetUser = mockUser;
+            source = 'mockDb';
+          }
+          if (mockUser.fcmToken) {
+            const foundToken = mockUser.fcmToken;
+            fcmToken = foundToken;
+            logs.push(`[STEP 2 SUCCESS] FCM Token found in mockDb: "${foundToken.slice(0, 25)}..." (Length: ${foundToken.length})`);
+          } else {
+            logs.push(`[STEP 2 WARNING] User found in mockDb, but fcmToken is NULL / Empty.`);
+          }
+        } else {
+          logs.push(`[STEP 2 INFO] User ID ${targetUserId} not found in mockDb.`);
+        }
+      }
+
+      if (!targetUser) {
+        logs.push(`[FAILED] User ID ${targetUserId} does not exist in Database or mockDb.`);
+        return NextResponse.json({
+          success: false,
+          error: `User ID ${targetUserId} not found`,
+          targetUserId,
+          logs
+        }, { status: 404 });
+      }
+
+      if (!fcmToken) {
+        logs.push(`[FAILED] User ID ${targetUserId} has NO FCM token registered. Please call POST /api/users/fcm-token with {"fcmToken": "your_token"} first.`);
+        return NextResponse.json({
+          success: false,
+          error: 'No FCM token registered for this user',
+          targetUser: { id: targetUser.id, name: targetUser.name, email: targetUser.email, role: targetUser.role },
+          logs
+        }, { status: 400 });
+      }
+
+      // 3. Send Notification via Firebase Admin SDK
+      const testTitle = urlParams.get('title') || 'Look Clean Test Push Notification 🔔';
+      const testBody = urlParams.get('body') || `Hello ${targetUser.name || 'User'}! This is a test FCM push notification from Look Clean server.`;
+      const testData = { type: 'TEST_NOTIFICATION', timestamp };
+
+      logs.push(`[STEP 3] Dispatching FCM notification via Firebase Admin SDK...`);
+      logs.push(`[STEP 3 PAYLOAD] Title: "${testTitle}", Body: "${testBody}"`);
+
+      try {
+        const result = await sendFcmNotification({
+          token: fcmToken,
+          title: testTitle,
+          body: testBody,
+          data: testData
+        });
+
+        if (result.success) {
+          logs.push(`[STEP 3 SUCCESS] Firebase Admin SDK returned SUCCESS! Push notification sent to FCM token.`);
+          return NextResponse.json({
+            success: true,
+            message: 'Test notification sent successfully via Firebase Admin SDK',
+            user: { id: targetUser.id, name: targetUser.name, email: targetUser.email, role: targetUser.role, dataSource: source },
+            fcmTokenPreview: fcmToken ? (fcmToken.length > 35 ? `${fcmToken.slice(0, 25)}...${fcmToken.slice(-10)}` : fcmToken) : null,
+            notificationDetails: { title: testTitle, body: testBody, data: testData },
+            logs
+          });
+        } else {
+          logs.push(`[STEP 3 ERROR] Firebase Admin SDK failed: ${JSON.stringify(result.error || 'Unknown error')}`);
+          return NextResponse.json({
+            success: false,
+            error: result.error || 'Firebase Admin notification failed',
+            user: { id: targetUser.id, name: targetUser.name, email: targetUser.email, role: targetUser.role },
+            fcmTokenPreview: fcmToken ? (fcmToken.length > 35 ? `${fcmToken.slice(0, 25)}...${fcmToken.slice(-10)}` : fcmToken) : null,
+            logs
+          }, { status: 500 });
+        }
+      } catch (sendErr: any) {
+        logs.push(`[STEP 3 EXCEPTION] ${sendErr.message || String(sendErr)}`);
+        return NextResponse.json({
+          success: false,
+          error: sendErr.message || 'Exception during FCM dispatch',
+          logs
+        }, { status: 500 });
+      }
+    }
 
     if (path === 'providers/client-profile' || path === 'provider/client-profile' || path === 'providers/customer-profile' || path === 'provider/customer-profile') {
       const auth = await getAuthenticatedUser(request);
@@ -2383,30 +2524,173 @@ export async function POST(
       }
     }
 
+    // POST Test FCM Push Notification Endpoint (/api/test-notification, /api/users/test-notification)
+    if (path === 'test-notification' || path === 'users/test-notification' || path === 'fcm/test' || path === 'admin/test-notification') {
+      const logs: string[] = [];
+      const timestamp = new Date().toISOString();
+      logs.push(`[${timestamp}] Test Notification POST Endpoint Invoked.`);
+
+      const urlParams = new URL(request.url).searchParams;
+      const paramUserId = urlParams.get('userId') || urlParams.get('id') || urlParams.get('user_id');
+      const bodyUserId = body?.userId || body?.user_id || body?.id;
+      const rawUserId = paramUserId || bodyUserId;
+
+      if (!rawUserId) {
+        logs.push('[ERROR] Missing userId parameter in JSON body ({ "userId": 2 }) or query string (?userId=2).');
+        return NextResponse.json({
+          success: false,
+          error: 'Missing userId parameter',
+          usage: 'Send POST body {"userId": 2, "title": "Optional", "body": "Optional"} or query param ?userId=2',
+          logs
+        }, { status: 400 });
+      }
+
+      const targetUserId = parseInt(String(rawUserId), 10);
+      logs.push(`[INFO] Target User ID: ${targetUserId}`);
+
+      let targetUser: any = null;
+      let fcmToken: string | null = null;
+      let source: string = 'none';
+
+      // 1. Check Prisma DB
+      try {
+        logs.push(`[STEP 1] Querying Prisma DB for User ID ${targetUserId}...`);
+        const dbUser = await prisma.user.findUnique({
+          where: { id: targetUserId },
+          select: { id: true, name: true, email: true, role: true, fcmToken: true }
+        });
+        if (dbUser) {
+          targetUser = dbUser;
+          source = 'Prisma DB';
+          fcmToken = dbUser.fcmToken;
+          logs.push(`[STEP 1 SUCCESS] User found in Prisma DB. Name: "${dbUser.name}", Email: "${dbUser.email}", Role: "${dbUser.role}".`);
+          if (fcmToken) {
+            logs.push(`[STEP 1 SUCCESS] FCM Token found in Prisma DB: "${fcmToken.slice(0, 25)}..." (Length: ${fcmToken.length})`);
+          } else {
+            logs.push(`[STEP 1 WARNING] User exists in Prisma DB, but fcmToken is NULL / Empty.`);
+          }
+        } else {
+          logs.push(`[STEP 1 INFO] User ID ${targetUserId} not found in Prisma DB.`);
+        }
+      } catch (dbErr: any) {
+        logs.push(`[STEP 1 ERROR] Prisma DB query failed: ${dbErr.message || String(dbErr)}`);
+      }
+
+      // 2. Check mockDb fallback
+      if (!targetUser || !fcmToken) {
+        logs.push(`[STEP 2] Checking mockDb in-memory storage for User ID ${targetUserId}...`);
+        const mockUser = mockDb.users.find((u: any) => u.id === targetUserId);
+        if (mockUser) {
+          if (!targetUser) {
+            targetUser = mockUser;
+            source = 'mockDb';
+          }
+          if (mockUser.fcmToken) {
+            const foundToken = mockUser.fcmToken;
+            fcmToken = foundToken;
+            logs.push(`[STEP 2 SUCCESS] FCM Token found in mockDb: "${foundToken.slice(0, 25)}..." (Length: ${foundToken.length})`);
+          } else {
+            logs.push(`[STEP 2 WARNING] User found in mockDb, but fcmToken is NULL / Empty.`);
+          }
+        } else {
+          logs.push(`[STEP 2 INFO] User ID ${targetUserId} not found in mockDb.`);
+        }
+      }
+
+      if (!targetUser) {
+        logs.push(`[FAILED] User ID ${targetUserId} does not exist in Database or mockDb.`);
+        return NextResponse.json({
+          success: false,
+          error: `User ID ${targetUserId} not found`,
+          targetUserId,
+          logs
+        }, { status: 404 });
+      }
+
+      if (!fcmToken) {
+        logs.push(`[FAILED] User ID ${targetUserId} has NO FCM token registered. Please call POST /api/users/fcm-token with {"fcmToken": "your_token"} first.`);
+        return NextResponse.json({
+          success: false,
+          error: 'No FCM token registered for this user',
+          targetUser: { id: targetUser.id, name: targetUser.name, email: targetUser.email, role: targetUser.role },
+          logs
+        }, { status: 400 });
+      }
+
+      // 3. Send Notification via Firebase Admin SDK
+      const testTitle = body?.title || urlParams.get('title') || 'Look Clean Test Push Notification 🔔';
+      const testBody = body?.body || urlParams.get('body') || `Hello ${targetUser.name || 'User'}! This is a test FCM push notification from Look Clean server.`;
+      const testData = body?.data || { type: 'TEST_NOTIFICATION', timestamp };
+
+      logs.push(`[STEP 3] Dispatching FCM notification via Firebase Admin SDK...`);
+      logs.push(`[STEP 3 PAYLOAD] Title: "${testTitle}", Body: "${testBody}"`);
+
+      try {
+        const result = await sendFcmNotification({
+          token: fcmToken,
+          title: testTitle,
+          body: testBody,
+          data: testData
+        });
+
+        if (result.success) {
+          logs.push(`[STEP 3 SUCCESS] Firebase Admin SDK returned SUCCESS! Push notification sent to FCM token.`);
+          return NextResponse.json({
+            success: true,
+            message: 'Test notification sent successfully via Firebase Admin SDK',
+            user: { id: targetUser.id, name: targetUser.name, email: targetUser.email, role: targetUser.role, dataSource: source },
+            fcmTokenPreview: fcmToken ? (fcmToken.length > 35 ? `${fcmToken.slice(0, 25)}...${fcmToken.slice(-10)}` : fcmToken) : null,
+            notificationDetails: { title: testTitle, body: testBody, data: testData },
+            logs
+          });
+        } else {
+          logs.push(`[STEP 3 ERROR] Firebase Admin SDK failed: ${JSON.stringify(result.error || 'Unknown error')}`);
+          return NextResponse.json({
+            success: false,
+            error: result.error || 'Firebase Admin notification failed',
+            user: { id: targetUser.id, name: targetUser.name, email: targetUser.email, role: targetUser.role },
+            fcmTokenPreview: fcmToken ? (fcmToken.length > 35 ? `${fcmToken.slice(0, 25)}...${fcmToken.slice(-10)}` : fcmToken) : null,
+            logs
+          }, { status: 500 });
+        }
+      } catch (sendErr: any) {
+        logs.push(`[STEP 3 EXCEPTION] ${sendErr.message || String(sendErr)}`);
+        return NextResponse.json({
+          success: false,
+          error: sendErr.message || 'Exception during FCM dispatch',
+          logs
+        }, { status: 500 });
+      }
+    }
+
     // POST User FCM Token registration (/api/users/fcm-token or /api/fcm-token)
     if (path === 'users/fcm-token' || path === 'fcm-token' || path === 'clients/fcm-token' || path === 'providers/fcm-token') {
       const auth = await getAuthenticatedUser(request);
       if (!auth) {
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
       }
-      const { fcmToken } = body;
-      if (!fcmToken) {
-        return NextResponse.json({ message: 'Missing fcmToken' }, { status: 400 });
+      const { fcmToken, fcm_token } = body as any;
+      const targetToken = fcmToken || fcm_token;
+      if (!targetToken) {
+        return NextResponse.json({ message: 'Missing fcmToken or fcm_token in request body' }, { status: 400 });
       }
       try {
         await executeWithDbFallback(
           async () => {
             await prisma.user.update({
               where: { id: auth.userId },
-              data: { fcmToken }
+              data: { fcmToken: targetToken }
             });
           },
           async () => {
             const user = mockDb.users.find((u: any) => u.id === auth.userId);
-            if (user) user.fcmToken = fcmToken;
+            if (user) user.fcmToken = targetToken;
           }
         );
-        return NextResponse.json({ success: true, message: 'FCM Token saved successfully' });
+        const mockUser = mockDb.users.find((u: any) => u.id === auth.userId);
+        if (mockUser) mockUser.fcmToken = targetToken;
+
+        return NextResponse.json({ success: true, message: 'FCM Token saved successfully', fcmToken: targetToken });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to save FCM token' }, { status: 400 });
       }
