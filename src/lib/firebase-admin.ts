@@ -68,9 +68,32 @@ export async function sendFcmNotification({ token, title, body, data }: FcmPaylo
 
     const response = await messaging.sendEachForMulticast(message);
     console.log(`[FCM] Sent message "${title}" to ${response.successCount} / ${response.responses.length} devices.`);
-    return { success: response.successCount > 0 };
+    
+    if (response.successCount > 0) {
+      return { success: true };
+    } else {
+      const firstResp = response.responses[0];
+      const errObj = firstResp?.error;
+      const hasServiceKey = Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      
+      let errorDetail = errObj
+        ? `[${errObj.code || 'fcm_error'}] ${errObj.message}`
+        : 'FCM push notification failed (0 devices received message).';
+
+      if (!hasServiceKey) {
+        errorDetail += ' NOTE: FIREBASE_SERVICE_ACCOUNT_KEY is missing in server .env file. Real FCM push notifications require Firebase Admin Service Account Key JSON.';
+      }
+
+      console.warn('[FCM Send Failed]:', errorDetail);
+      return { success: false, error: errorDetail };
+    }
   } catch (err: any) {
-    console.error('[FCM Send Error]:', err?.message || err);
-    return { success: false, error: err?.message || err };
+    const hasServiceKey = Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+    let errMsg = err?.message || String(err);
+    if (!hasServiceKey) {
+      errMsg += ' (FIREBASE_SERVICE_ACCOUNT_KEY missing in .env)';
+    }
+    console.error('[FCM Send Exception]:', errMsg);
+    return { success: false, error: errMsg };
   }
 }
