@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldAlert, LogOut, Search, Filter, ShieldCheck, Phone, Check, Mail,
   X, Calendar, Star, MapPin, Award, Clock, Users, Building, Activity, FileText, ChevronRight, Settings, Lock, Server, Globe, Tag, Scissors, Sparkles, Database,
-  HelpCircle, AlertCircle, Smartphone, Plus, Trash2, Edit3, Save, Eye, CheckCircle, ExternalLink
+  HelpCircle, AlertCircle, Smartphone, Plus, Trash2, Edit3, Save, Eye, CheckCircle, ExternalLink, Percent, DollarSign
 } from 'lucide-react';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
@@ -233,6 +233,9 @@ export default function AdminPage() {
   const [platformFeeCut, setPlatformFeeCut] = useState<string>('5');
   const [platformFeeSaving, setPlatformFeeSaving] = useState(false);
   const [platformFeeMsg, setPlatformFeeMsg] = useState('');
+
+  // Dashboard time filter state (day, week, month, all)
+  const [dashboardTimeFilter, setDashboardTimeFilter] = useState<'day' | 'week' | 'month' | 'all'>('all');
 
   // Twilio settings state
   const [twilioMode, setTwilioMode] = useState<'staging' | 'live'>('staging');
@@ -876,7 +879,12 @@ export default function AdminPage() {
   // Tab switching data fetch
   useEffect(() => {
     if (isAuthenticated && token) {
-      if (activeTab === 'vouchers') {
+      if (activeTab === 'dashboard') {
+        fetchStats();
+        fetchUsers();
+        fetchBookings();
+        fetchPlatformFeeCut();
+      } else if (activeTab === 'vouchers') {
         fetchVouchers();
       } else if (activeTab === 'cms') {
         fetchCmsPage(cmsActiveSlug);
@@ -2254,52 +2262,296 @@ export default function AdminPage() {
               )}
             </div>
           ) : activeTab === 'dashboard' ? (
-            <>
-              {/* Statistics Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card className="border border-gray-850 p-4">
-                  <div className="flex items-center justify-between text-gray-500 mb-1">
-                    <span className="text-xs font-bold uppercase tracking-wider">Total Users</span>
-                    <Users className="w-4 h-4 text-primary" />
-                  </div>
-                  <div className="text-2xl font-extrabold text-white">{stats.total}</div>
-                </Card>
+            <div className="space-y-6">
+              {/* Header & Timeframe Filter Bar */}
+              <div className="border-b border-gray-900 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-primary" /> Admin Analytics Dashboard
+                  </h2>
+                  <p className="text-xs text-gray-400">
+                    Real-time metrics for platform revenue, customer signups, provider onboardings, and bookings.
+                  </p>
+                </div>
 
-                <Card className="border border-gray-850 p-4">
-                  <div className="flex items-center justify-between text-gray-500 mb-1">
-                    <span className="text-xs font-bold uppercase tracking-wider">Clients</span>
-                    <Users className="w-4 h-4 text-purple-500" />
-                  </div>
-                  <div className="text-2xl font-extrabold text-white">{stats.clients}</div>
-                </Card>
-
-                <Card className="border border-gray-850 p-4">
-                  <div className="flex items-center justify-between text-gray-500 mb-1">
-                    <span className="text-xs font-bold uppercase tracking-wider">Providers</span>
-                    <Building className="w-4 h-4 text-amber-500" />
-                  </div>
-                  <div className="text-2xl font-extrabold text-white">{stats.providers}</div>
-                </Card>
-
-                <Card className="border border-gray-850 p-4">
-                  <div className="flex items-center justify-between text-gray-500 mb-1">
-                    <span className="text-xs font-bold uppercase tracking-wider">SMS Verified</span>
-                    <Phone className="w-4 h-4 text-green-500" />
-                  </div>
-                  <div className="text-2xl font-extrabold text-white">
-                    {stats.total > 0 ? Math.round((stats.verifiedPhone / stats.total) * 100) : 0}%
-                  </div>
-                </Card>
+                {/* Day, Week, Month, All Filter Pills */}
+                <div className="flex items-center bg-gray-950 p-1 rounded-xl border border-gray-850 self-start md:self-auto">
+                  {(['day', 'week', 'month', 'all'] as const).map((filterKey) => {
+                    const labels = {
+                      day: 'Today (Day)',
+                      week: 'This Week',
+                      month: 'This Month',
+                      all: 'All Time'
+                    };
+                    const isActive = dashboardTimeFilter === filterKey;
+                    return (
+                      <button
+                        key={filterKey}
+                        onClick={() => setDashboardTimeFilter(filterKey)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-primary text-gray-950 shadow-md shadow-primary/20'
+                            : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {labels[filterKey]}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Greeting Card */}
-              <Card className="border border-gray-850 p-6 bg-gradient-to-r from-primary-dark/10 to-purple-950/20">
-                <h3 className="text-lg font-bold text-white mb-2">Welcome to Look Clean Admin Center</h3>
-                <p className="text-xs text-gray-400 max-w-xl leading-relaxed">
-                  Use this control dashboard to track total registered users, verify stylists credentials, analyze mobile OTP activations, and manage bookings and salon listings. Select the <strong>Users</strong> tab in the sidebar to browse individual clients and provider directory grids.
-                </p>
-              </Card>
-            </>
+              {/* Dynamic Calculations based on filter */}
+              {(() => {
+                const isWithinFilter = (dateInput: any) => {
+                  if (!dateInput || dashboardTimeFilter === 'all') return true;
+                  const d = new Date(dateInput);
+                  if (isNaN(d.getTime())) return true;
+                  const now = new Date();
+                  const diffMs = now.getTime() - d.getTime();
+                  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+                  if (dashboardTimeFilter === 'day') {
+                    return diffDays >= 0 && diffDays <= 1 || d.toDateString() === now.toDateString();
+                  }
+                  if (dashboardTimeFilter === 'week') {
+                    return diffDays >= 0 && diffDays <= 7;
+                  }
+                  if (dashboardTimeFilter === 'month') {
+                    return diffDays >= 0 && diffDays <= 30;
+                  }
+                  return true;
+                };
+
+                const filteredUsers = users.filter((u) => isWithinFilter(u.createdAt));
+                const filteredBookings = bookingsList.filter((b) => isWithinFilter(b.createdAt || b.date));
+
+                const totalCustomers = filteredUsers.filter((u) => u.role === 'client').length || (dashboardTimeFilter === 'all' ? stats.clients : 0);
+                const totalProviders = filteredUsers.filter((u) => u.role === 'provider').length || (dashboardTimeFilter === 'all' ? stats.providers : 0);
+                const totalBookings = filteredBookings.length;
+
+                const feeCutPct = parseFloat(platformFeeCut) || 5;
+                const totalGrossRevenue = filteredBookings.reduce((sum, b) => sum + (b.grandTotal || b.serviceAmount || 0), 0);
+                const totalServiceSubtotal = filteredBookings.reduce((sum, b) => sum + (b.serviceAmount || 0), 0);
+                const totalPlatformCommission = (totalServiceSubtotal * feeCutPct) / 100;
+                const totalProviderPayout = (totalServiceSubtotal - totalPlatformCommission) + filteredBookings.reduce((sum, b) => sum + (b.tipAmount || 0), 0);
+
+                const completedCount = filteredBookings.filter((b) => b.status === 'completed').length;
+                const confirmedCount = filteredBookings.filter((b) => b.status === 'confirmed').length;
+                const pendingCount = filteredBookings.filter((b) => b.status === 'pending').length;
+                const cancelledCount = filteredBookings.filter((b) => b.status === 'cancelled').length;
+
+                return (
+                  <div className="space-y-6">
+                    {/* Top 4 KPI Grid Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* Card 1: Total Revenue */}
+                      <Card className="border border-gray-850 p-5 bg-gray-900/40 relative overflow-hidden">
+                        <div className="flex items-center justify-between text-gray-400 mb-2">
+                          <span className="text-[11px] font-bold uppercase tracking-wider">Total Revenue</span>
+                          <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                            <DollarSign className="w-4 h-4" />
+                          </div>
+                        </div>
+                        <div className="text-2xl font-extrabold text-white">${totalGrossRevenue.toFixed(2)}</div>
+                        <div className="mt-2 pt-2 border-t border-gray-900 flex items-center justify-between text-[11px]">
+                          <span className="text-gray-400">Platform Cut ({feeCutPct}%):</span>
+                          <span className="font-extrabold text-emerald-400">+${totalPlatformCommission.toFixed(2)}</span>
+                        </div>
+                      </Card>
+
+                      {/* Card 2: Total Customers Joined */}
+                      <Card className="border border-gray-850 p-5 bg-gray-900/40 relative overflow-hidden">
+                        <div className="flex items-center justify-between text-gray-400 mb-2">
+                          <span className="text-[11px] font-bold uppercase tracking-wider">Customers Joined</span>
+                          <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                            <Users className="w-4 h-4" />
+                          </div>
+                        </div>
+                        <div className="text-2xl font-extrabold text-white">{totalCustomers}</div>
+                        <div className="mt-2 pt-2 border-t border-gray-900 flex items-center justify-between text-[11px]">
+                          <span className="text-gray-400">Total Registered Clients</span>
+                          <span className="font-extrabold text-purple-400">{stats.clients} total</span>
+                        </div>
+                      </Card>
+
+                      {/* Card 3: Total Providers Joined */}
+                      <Card className="border border-gray-850 p-5 bg-gray-900/40 relative overflow-hidden">
+                        <div className="flex items-center justify-between text-gray-400 mb-2">
+                          <span className="text-[11px] font-bold uppercase tracking-wider">Providers Joined</span>
+                          <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                            <Building className="w-4 h-4" />
+                          </div>
+                        </div>
+                        <div className="text-2xl font-extrabold text-white">{totalProviders}</div>
+                        <div className="mt-2 pt-2 border-t border-gray-900 flex items-center justify-between text-[11px]">
+                          <span className="text-gray-400">Verified Providers & Salons</span>
+                          <span className="font-extrabold text-amber-400">{stats.providers} total</span>
+                        </div>
+                      </Card>
+
+                      {/* Card 4: Total Bookings Made */}
+                      <Card className="border border-gray-850 p-5 bg-gray-900/40 relative overflow-hidden">
+                        <div className="flex items-center justify-between text-gray-400 mb-2">
+                          <span className="text-[11px] font-bold uppercase tracking-wider">Bookings Made</span>
+                          <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+                            <Calendar className="w-4 h-4" />
+                          </div>
+                        </div>
+                        <div className="text-2xl font-extrabold text-white">{totalBookings}</div>
+                        <div className="mt-2 pt-2 border-t border-gray-900 flex items-center justify-between text-[11px]">
+                          <span className="text-gray-400">Completed Orders</span>
+                          <span className="font-extrabold text-emerald-400">{completedCount} completed</span>
+                        </div>
+                      </Card>
+                    </div>
+
+                    {/* Detailed Financial & Booking Analytics Section */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Financial Overview Card */}
+                      <Card className="border border-gray-850 p-6 space-y-4">
+                        <div className="flex items-center justify-between border-b border-gray-900 pb-3">
+                          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <Tag className="w-4 h-4 text-emerald-400" /> Revenue & Payout Financial Breakdown
+                          </h3>
+                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            {dashboardTimeFilter === 'day' ? 'Today' : dashboardTimeFilter === 'week' ? 'This Week' : dashboardTimeFilter === 'month' ? 'This Month' : 'All Time'}
+                          </span>
+                        </div>
+
+                        <div className="space-y-3 text-xs divide-y divide-gray-900">
+                          <div className="flex justify-between py-2 text-gray-300">
+                            <span className="font-medium">Gross Bookings Volume</span>
+                            <span className="font-extrabold text-white">${totalGrossRevenue.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between py-2 text-gray-300">
+                            <span className="font-medium">Service Subtotal Amount</span>
+                            <span className="font-semibold text-gray-200">${totalServiceSubtotal.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between py-2 text-gray-300">
+                            <span className="font-medium">Platform Commission Earned ({feeCutPct}%)</span>
+                            <span className="font-extrabold text-emerald-400">+${totalPlatformCommission.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between py-2 text-gray-300">
+                            <span className="font-medium">Net Cleared Provider Payout</span>
+                            <span className="font-semibold text-indigo-400">${totalProviderPayout.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      </Card>
+
+                      {/* Bookings Status Breakdown Card */}
+                      <Card className="border border-gray-850 p-6 space-y-4">
+                        <div className="flex items-center justify-between border-b border-gray-900 pb-3">
+                          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-primary" /> Bookings Performance & Status
+                          </h3>
+                          <span className="text-[10px] text-gray-400 font-bold uppercase">
+                            {totalBookings} Total Requests
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 pt-1">
+                          <div className="p-3.5 rounded-xl bg-green-500/5 border border-green-500/10 space-y-1">
+                            <div className="text-[10px] font-bold text-green-400 uppercase tracking-wider">Completed</div>
+                            <div className="text-xl font-extrabold text-white">{completedCount}</div>
+                            <div className="text-[10px] text-gray-400">
+                              {totalBookings > 0 ? Math.round((completedCount / totalBookings) * 100) : 0}% of bookings
+                            </div>
+                          </div>
+
+                          <div className="p-3.5 rounded-xl bg-blue-500/5 border border-blue-500/10 space-y-1">
+                            <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Confirmed</div>
+                            <div className="text-xl font-extrabold text-white">{confirmedCount}</div>
+                            <div className="text-[10px] text-gray-400">
+                              {totalBookings > 0 ? Math.round((confirmedCount / totalBookings) * 100) : 0}% of bookings
+                            </div>
+                          </div>
+
+                          <div className="p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/10 space-y-1">
+                            <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Pending</div>
+                            <div className="text-xl font-extrabold text-white">{pendingCount}</div>
+                            <div className="text-[10px] text-gray-400">
+                              {totalBookings > 0 ? Math.round((pendingCount / totalBookings) * 100) : 0}% of bookings
+                            </div>
+                          </div>
+
+                          <div className="p-3.5 rounded-xl bg-red-500/5 border border-red-500/10 space-y-1">
+                            <div className="text-[10px] font-bold text-red-400 uppercase tracking-wider">Cancelled</div>
+                            <div className="text-xl font-extrabold text-white">{cancelledCount}</div>
+                            <div className="text-[10px] text-gray-400">
+                              {totalBookings > 0 ? Math.round((cancelledCount / totalBookings) * 100) : 0}% of bookings
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    </div>
+
+                    {/* Quick Overview Table: Recent Bookings */}
+                    <Card className="border border-gray-850 p-6 space-y-4">
+                      <div className="flex items-center justify-between border-b border-gray-900 pb-3">
+                        <div>
+                          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-emerald-400" /> Recent Bookings
+                          </h3>
+                          <p className="text-xs text-gray-400">Latest customer appointments in selected timeframe.</p>
+                        </div>
+                        <button
+                          onClick={() => handleTabChange('bookings')}
+                          className="text-xs font-bold text-primary hover:text-white transition-colors cursor-pointer"
+                        >
+                          View All Bookings &rarr;
+                        </button>
+                      </div>
+
+                      {filteredBookings.length === 0 ? (
+                        <p className="text-xs text-gray-500 italic py-4 text-center">No bookings recorded for this timeframe.</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="border-b border-gray-900 text-[10px] uppercase tracking-wider text-gray-400 font-bold">
+                                <th className="py-2.5 px-3">Booking ID</th>
+                                <th className="py-2.5 px-3">Date</th>
+                                <th className="py-2.5 px-3">Client</th>
+                                <th className="py-2.5 px-3">Provider</th>
+                                <th className="py-2.5 px-3">Status</th>
+                                <th className="py-2.5 px-3 text-right">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-900 text-xs text-gray-300">
+                              {filteredBookings.slice(0, 5).map((booking) => (
+                                <tr key={booking.id} className="hover:bg-white/2 transition-colors">
+                                  <td className="py-3 px-3 font-mono font-bold text-white">#{booking.id}</td>
+                                  <td className="py-3 px-3">{new Date(booking.date).toLocaleDateString()}</td>
+                                  <td className="py-3 px-3 font-semibold text-white">{booking.client?.name || `Client #${booking.clientId}`}</td>
+                                  <td className="py-3 px-3">{booking.provider?.name || booking.provider?.providerProfile?.salonName || `Provider #${booking.providerId}`}</td>
+                                  <td className="py-3 px-3">
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase border ${
+                                      booking.status === 'completed'
+                                        ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                                        : booking.status === 'confirmed'
+                                        ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                        : booking.status === 'cancelled'
+                                        ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                    }`}>
+                                      {booking.status || 'pending'}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-3 text-right font-extrabold text-white">
+                                    ${(booking.grandTotal || booking.serviceAmount || 0).toFixed(2)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </Card>
+                  </div>
+                );
+              })()}
+            </div>
           ) : activeTab === 'settings' ? (
             <div className="space-y-6">
               <div className="border-b border-gray-900 pb-4">
@@ -2760,7 +3012,7 @@ export default function AdminPage() {
                               required
                             />
                           </div>
-                          <Button type="submit" variant="primary" loading={platformFeeSaving}>
+                          <Button type="submit" variant="primary" isLoading={platformFeeSaving}>
                             Save Fee Cut
                           </Button>
                         </form>
@@ -3925,6 +4177,48 @@ export default function AdminPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Section 5: Platform Commission & Provider Payout Breakdown */}
+                {(() => {
+                  const feeCutPct = typeof selectedBooking.platformFeeCut === 'number'
+                    ? selectedBooking.platformFeeCut
+                    : (parseFloat(platformFeeCut) || 5);
+                  const svcAmount = selectedBooking.serviceAmount || 0;
+                  const platformCommission = (svcAmount * feeCutPct) / 100;
+                  const tipAmt = selectedBooking.tipAmount || 0;
+                  const providerPayout = (svcAmount - platformCommission) + tipAmt;
+
+                  return (
+                    <div className="bg-gray-900/40 border border-gray-850 p-4 rounded-2xl space-y-3">
+                      <h4 className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Percent className="w-3.5 h-3.5" /> Platform Commission & Provider Payout
+                      </h4>
+                      <div className="space-y-2 text-xs divide-y divide-gray-900">
+                        <div className="flex justify-between py-1 text-gray-300">
+                          <span>Platform Fee Cut Percentage</span>
+                          <span className="font-semibold text-indigo-400">{feeCutPct}%</span>
+                        </div>
+
+                        <div className="flex justify-between py-1 text-gray-300">
+                          <span>Platform Commission ({feeCutPct}% of ${svcAmount.toFixed(2)})</span>
+                          <span className="font-semibold text-rose-400">-${platformCommission.toFixed(2)}</span>
+                        </div>
+
+                        {tipAmt > 0 && (
+                          <div className="flex justify-between py-1 text-gray-300">
+                            <span>Client Tip (100% to Provider)</span>
+                            <span className="font-semibold text-emerald-400">+${tipAmt.toFixed(2)}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between pt-3 text-sm font-extrabold">
+                          <span className="text-white">Cleared Provider Payout</span>
+                          <span className="text-emerald-400 text-base">${providerPayout.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Close Drawer Button */}
@@ -3970,7 +4264,7 @@ export default function AdminPage() {
                   <Button
                     variant="danger"
                     size="sm"
-                    loading={deleteRequestLoading}
+                    isLoading={deleteRequestLoading}
                     onClick={() => handleDeleteRequest(deletingRequestId)}
                   >
                     Delete Request

@@ -5777,20 +5777,24 @@ export async function POST(
             });
           },
           async () => {
+            const provider = mockDb.users.find((u) => u.id === auth.userId);
             const reqObj = {
               id: mockDb.providerRequests.length + 1,
               providerId: auth.userId,
               requestType: normalizedType,
               requestTitle: requestTitle.trim(),
               status: 'pending',
-              createdAt: new Date().toISOString()
+              createdAt: new Date(),
+              provider: {
+                id: auth.userId,
+                name: provider?.name || 'Provider',
+                email: provider?.email || '',
+                role: provider?.role || 'provider',
+                providerType: provider?.providerType || null
+              }
             };
             mockDb.providerRequests.push(reqObj);
-            const provider = mockDb.users.find((u) => u.id === auth.userId);
-            return {
-              ...reqObj,
-              provider: provider ? { id: provider.id, name: provider.name, email: provider.email, role: provider.role, providerType: provider.providerType } : null
-            };
+            return reqObj;
           }
         );
         return NextResponse.json({ message: 'Request submitted successfully', request: newRequest }, { status: 201 });
