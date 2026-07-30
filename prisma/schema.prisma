@@ -31,6 +31,7 @@ model User {
   reviewsAsProvider   Review[]         @relation("ProviderReviews")
   issueReports        IssueReport[]
   notifications       Notification[]
+  providerRequests    ProviderRequest[]
 
   @@map("users")
 }
@@ -295,5 +296,17 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@map("notifications")
+}
+
+model ProviderRequest {
+  id           Int      @id @default(autoincrement())
+  providerId   Int
+  provider     User     @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  requestType  String   @db.VarChar(50) // "Category" | "Service"
+  requestTitle String   @db.VarChar(255)
+  status       String   @default("pending") @db.VarChar(50)
+  createdAt    DateTime @default(now())
+
+  @@map("provider_requests")
 }
 

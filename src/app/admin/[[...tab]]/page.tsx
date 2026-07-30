@@ -65,7 +65,7 @@ export default function AdminPage() {
   const router = useRouter();
 
   // Derive activeTab from pathname
-  type AdminTabType = 'dashboard' | 'users' | 'settings' | 'vouchers' | 'cms' | 'faqs' | 'reports';
+  type AdminTabType = 'dashboard' | 'users' | 'settings' | 'vouchers' | 'cms' | 'faqs' | 'reports' | 'provider-requests' | 'bookings';
 
   const activeTab: AdminTabType = pathname.endsWith('/users')
     ? 'users'
@@ -77,9 +77,13 @@ export default function AdminPage() {
           ? 'faqs'
           : pathname.endsWith('/reports')
             ? 'reports'
-            : pathname.endsWith('/settings')
-              ? 'settings'
-              : 'dashboard';
+            : pathname.endsWith('/provider-requests')
+              ? 'provider-requests'
+              : pathname.endsWith('/bookings')
+                ? 'bookings'
+                : pathname.endsWith('/settings')
+                  ? 'settings'
+                  : 'dashboard';
 
   const handleTabChange = (tab: AdminTabType) => {
     if (tab === 'users') {
@@ -92,6 +96,10 @@ export default function AdminPage() {
       router.push('/admin/faqs');
     } else if (tab === 'reports') {
       router.push('/admin/reports');
+    } else if (tab === 'provider-requests') {
+      router.push('/admin/provider-requests');
+    } else if (tab === 'bookings') {
+      router.push('/admin/bookings');
     } else if (tab === 'settings') {
       router.push('/admin/settings');
     } else {
@@ -201,6 +209,30 @@ export default function AdminPage() {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
+
+  // Provider Requests state
+  const [providerRequestsList, setProviderRequestsList] = useState<any[]>([]);
+  const [providerRequestsTab, setProviderRequestsTab] = useState<'Category' | 'Service'>('Category');
+  const [providerRequestsLoading, setProviderRequestsLoading] = useState(false);
+  const [providerRequestSearch, setProviderRequestSearch] = useState('');
+  const [deleteRequestModalOpen, setDeleteRequestModalOpen] = useState(false);
+  const [deletingRequestId, setDeletingRequestId] = useState<number | null>(null);
+  const [deleteRequestLoading, setDeleteRequestLoading] = useState(false);
+
+  // Booking List state
+  const [bookingsList, setBookingsList] = useState<any[]>([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [bookingSearchQuery, setBookingSearchQuery] = useState('');
+  const [bookingStatusFilter, setBookingStatusFilter] = useState<'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled'>('all');
+
+  // Booking details drawer state
+  const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
+  const [bookingDrawerOpen, setBookingDrawerOpen] = useState(false);
+
+  // Platform fee cut state
+  const [platformFeeCut, setPlatformFeeCut] = useState<string>('5');
+  const [platformFeeSaving, setPlatformFeeSaving] = useState(false);
+  const [platformFeeMsg, setPlatformFeeMsg] = useState('');
 
   // Twilio settings state
   const [twilioMode, setTwilioMode] = useState<'staging' | 'live'>('staging');
@@ -732,6 +764,115 @@ export default function AdminPage() {
     }
   }, [isAuthenticated, token]);
 
+  // Fetch Provider Requests
+  const fetchProviderRequests = async () => {
+    if (!token) return;
+    setProviderRequestsLoading(true);
+    try {
+      const res = await fetch('/api/admin/provider-requests', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProviderRequestsList(data.requests || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch provider requests', err);
+    } finally {
+      setProviderRequestsLoading(false);
+    }
+  };
+
+  // Fetch Bookings
+  const fetchBookings = async () => {
+    if (!token) return;
+    setBookingsLoading(true);
+    try {
+      const res = await fetch('/api/admin/bookings', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBookingsList(data.bookings || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch bookings', err);
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
+  // Fetch Platform Fee Cut
+  const fetchPlatformFeeCut = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/settings/platform-fee', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.platformFeeCut !== undefined) {
+          setPlatformFeeCut(String(data.platformFeeCut));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch platform fee cut', err);
+    }
+  };
+
+  // Save Platform Fee Cut
+  const handleSavePlatformFee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setPlatformFeeSaving(true);
+    setPlatformFeeMsg('');
+    try {
+      const res = await fetch('/api/admin/settings/platform-fee', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ platformFeeCut: parseFloat(platformFeeCut) })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPlatformFeeMsg('Platform fee cut saved successfully!');
+        setTimeout(() => setPlatformFeeMsg(''), 3000);
+      } else {
+        alert(data.message || 'Failed to save platform fee cut');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error saving platform fee cut');
+    } finally {
+      setPlatformFeeSaving(false);
+    }
+  };
+
+  // Delete Provider Request
+  const handleDeleteRequest = async (id: number) => {
+    if (!token) return;
+    setDeleteRequestLoading(true);
+    try {
+      const res = await fetch(`/api/admin/provider-requests?id=${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setProviderRequestsList((prev) => prev.filter((r) => r.id !== id));
+        setDeleteRequestModalOpen(false);
+        setDeletingRequestId(null);
+      } else {
+        const data = await res.json();
+        alert(data.message || 'Failed to delete request');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error deleting request');
+    } finally {
+      setDeleteRequestLoading(false);
+    }
+  };
+
   // Tab switching data fetch
   useEffect(() => {
     if (isAuthenticated && token) {
@@ -741,10 +882,17 @@ export default function AdminPage() {
         fetchCmsPage(cmsActiveSlug);
       } else if (activeTab === 'reports') {
         fetchReports(reportsTab);
+      } else if (activeTab === 'provider-requests') {
+        fetchProviderRequests();
+      } else if (activeTab === 'bookings') {
+        fetchBookings();
       } else if (activeTab === 'settings') {
         if (settingsSubTab === 'appversion') fetchAppVersions();
         else if (settingsSubTab === 'categories') fetchCategories();
-        else if (settingsSubTab === 'services') fetchServices();
+        else if (settingsSubTab === 'services') {
+          fetchServices();
+          fetchPlatformFeeCut();
+        }
         else if (settingsSubTab === 'ambience') fetchAmbience();
       }
     }
@@ -1211,6 +1359,30 @@ export default function AdminPage() {
             >
               <AlertCircle className="w-4 h-4" />
               <span>Report & Issues</span>
+            </button>
+            <button
+              onClick={() => handleTabChange('provider-requests')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-left cursor-pointer transition-all
+                ${activeTab === 'provider-requests'
+                  ? 'bg-primary/10 border border-primary/20 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }
+              `}
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>Provider Requests</span>
+            </button>
+            <button
+              onClick={() => handleTabChange('bookings')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-left cursor-pointer transition-all
+                ${activeTab === 'bookings'
+                  ? 'bg-primary/10 border border-primary/20 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }
+              `}
+            >
+              <Calendar className="w-4 h-4 text-emerald-400" />
+              <span>Booking List</span>
             </button>
           </nav>
         </div>
@@ -1788,6 +1960,299 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
+          ) : activeTab === 'provider-requests' ? (
+            <div className="space-y-6">
+              <div className="border-b border-gray-900 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-amber-400" /> Provider Requests
+                  </h2>
+                  <p className="text-xs text-gray-400">Review new category and service addition requests submitted by service providers.</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="text"
+                    placeholder="Search by provider or request title..."
+                    value={providerRequestSearch}
+                    onChange={(e) => setProviderRequestSearch(e.target.value)}
+                    leftIcon={<Search className="w-4 h-4 text-gray-500" />}
+                    className="w-64"
+                  />
+                </div>
+              </div>
+
+              {/* Filter Sub-Tabs */}
+              <div className="flex items-center gap-3 border-b border-gray-900 pb-3">
+                <button
+                  onClick={() => setProviderRequestsTab('Category')}
+                  className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border
+                    ${providerRequestsTab === 'Category'
+                      ? 'bg-primary/10 border-primary/30 text-primary'
+                      : 'bg-gray-900/60 border-gray-850 text-gray-400 hover:text-white'
+                    }
+                  `}
+                >
+                  <Tag className="w-4 h-4" />
+                  <span>Category Requests</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-extrabold ml-1">
+                    {providerRequestsList.filter((r) => r.requestType?.toLowerCase() === 'category').length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setProviderRequestsTab('Service')}
+                  className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border
+                    ${providerRequestsTab === 'Service'
+                      ? 'bg-purple-500/10 border-purple-500/30 text-purple-400'
+                      : 'bg-gray-900/60 border-gray-850 text-gray-400 hover:text-white'
+                    }
+                  `}
+                >
+                  <Scissors className="w-4 h-4" />
+                  <span>Service Requests</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-extrabold ml-1">
+                    {providerRequestsList.filter((r) => r.requestType?.toLowerCase() === 'service').length}
+                  </span>
+                </button>
+              </div>
+
+              {/* Requests List Table */}
+              {providerRequestsLoading ? (
+                <div className="py-12 text-center text-gray-400 text-xs">Loading provider requests...</div>
+              ) : (
+                <Card className="border border-gray-850 p-0 overflow-hidden">
+                  {(() => {
+                    const filtered = providerRequestsList.filter((r) => {
+                      const matchesTab = r.requestType?.toLowerCase() === providerRequestsTab.toLowerCase();
+                      const search = providerRequestSearch.toLowerCase();
+                      const matchesSearch =
+                        !search ||
+                        r.requestTitle?.toLowerCase().includes(search) ||
+                        r.provider?.name?.toLowerCase().includes(search) ||
+                        r.provider?.email?.toLowerCase().includes(search);
+                      return matchesTab && matchesSearch;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="p-8 text-center text-gray-400 text-xs">
+                          No {providerRequestsTab.toLowerCase()} requests found.
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-gray-900 bg-gray-950/60 text-[10px] uppercase tracking-wider text-gray-400 font-bold">
+                              <th className="py-3.5 px-4">Request ID</th>
+                              <th className="py-3.5 px-4">Provider</th>
+                              <th className="py-3.5 px-4">Request Type</th>
+                              <th className="py-3.5 px-4">Requested Title</th>
+                              <th className="py-3.5 px-4">Status</th>
+                              <th className="py-3.5 px-4">Date</th>
+                              <th className="py-3.5 px-4 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-900/60 text-xs">
+                            {filtered.map((req) => (
+                              <tr key={req.id} className="hover:bg-white/[0.02] transition-colors">
+                                <td className="py-3.5 px-4 font-mono text-gray-400 font-bold">#{req.id}</td>
+                                <td className="py-3.5 px-4">
+                                  <div className="font-semibold text-white">
+                                    {req.provider?.name || req.provider?.providerProfile?.salonName || `Provider #${req.providerId}`}
+                                  </div>
+                                  <div className="text-[11px] text-gray-400">{req.provider?.email || '-'}</div>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className={`px-2.5 py-1 rounded text-[10px] font-extrabold uppercase border ${
+                                    req.requestType === 'Category'
+                                      ? 'bg-primary/10 text-primary border-primary/20'
+                                      : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                                  }`}>
+                                    {req.requestType}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 font-bold text-gray-200">
+                                  {req.requestTitle}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                    {req.status || 'pending'}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 text-gray-400 text-[11px]">
+                                  {new Date(req.createdAt).toLocaleDateString()} {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </td>
+                                <td className="py-3.5 px-4 text-right">
+                                  <button
+                                    onClick={() => {
+                                      setDeletingRequestId(req.id);
+                                      setDeleteRequestModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-red-400 hover:text-red-300 px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-all cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Delete</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
+                </Card>
+              )}
+            </div>
+          ) : activeTab === 'bookings' ? (
+            <div className="space-y-6">
+              <div className="border-b border-gray-900 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-emerald-400" /> Booking List
+                  </h2>
+                  <p className="text-xs text-gray-400">View customer appointments, provider assignments, and complete fee details.</p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <Input
+                    type="text"
+                    placeholder="Search by ID, client, provider..."
+                    value={bookingSearchQuery}
+                    onChange={(e) => setBookingSearchQuery(e.target.value)}
+                    leftIcon={<Search className="w-4 h-4 text-gray-500" />}
+                    className="w-full sm:w-64"
+                  />
+
+                  <select
+                    value={bookingStatusFilter}
+                    onChange={(e) => setBookingStatusFilter(e.target.value as any)}
+                    className="w-full sm:w-40 bg-gray-900 border border-gray-850 text-xs font-semibold text-gray-300 rounded-xl px-3 py-2.5 focus:outline-none focus:border-primary transition-all cursor-pointer"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Bookings Data Table */}
+              {bookingsLoading ? (
+                <div className="py-12 text-center text-gray-400 text-xs">Loading booking records...</div>
+              ) : (
+                <Card className="border border-gray-850 p-0 overflow-hidden">
+                  {(() => {
+                    const filtered = bookingsList.filter((b) => {
+                      const search = bookingSearchQuery.toLowerCase();
+                      const matchesSearch =
+                        !search ||
+                        String(b.id).includes(search) ||
+                        b.client?.name?.toLowerCase().includes(search) ||
+                        b.client?.email?.toLowerCase().includes(search) ||
+                        b.provider?.name?.toLowerCase().includes(search) ||
+                        b.provider?.email?.toLowerCase().includes(search) ||
+                        b.provider?.providerProfile?.salonName?.toLowerCase().includes(search);
+                      const matchesStatus = bookingStatusFilter === 'all' || b.status?.toLowerCase() === bookingStatusFilter.toLowerCase();
+                      return matchesSearch && matchesStatus;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="p-8 text-center text-gray-400 text-xs">
+                          No bookings found matching filters.
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-gray-900 bg-gray-950/60 text-[10px] uppercase tracking-wider text-gray-400 font-bold">
+                              <th className="py-3.5 px-4">Booking ID</th>
+                              <th className="py-3.5 px-4">Date & Slot</th>
+                              <th className="py-3.5 px-4">Client</th>
+                              <th className="py-3.5 px-4">Provider</th>
+                              <th className="py-3.5 px-4">Services</th>
+                              <th className="py-3.5 px-4">Status</th>
+                              <th className="py-3.5 px-4">Total Amount</th>
+                              <th className="py-3.5 px-4 text-right">Details</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-900/60 text-xs">
+                            {filtered.map((booking) => {
+                              const statusColor =
+                                booking.status === 'completed'
+                                  ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                                  : booking.status === 'confirmed'
+                                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                  : booking.status === 'cancelled'
+                                  ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+
+                              const serviceNames = Array.isArray(booking.services)
+                                ? booking.services.map((s: any) => s.name || s.title).join(', ')
+                                : 'Services';
+
+                              return (
+                                <tr key={booking.id} className="hover:bg-white/[0.02] transition-colors">
+                                  <td className="py-3.5 px-4 font-mono font-bold text-gray-300">#{booking.id}</td>
+                                  <td className="py-3.5 px-4">
+                                    <div className="font-semibold text-white">
+                                      {new Date(booking.date).toLocaleDateString()}
+                                    </div>
+                                    <div className="text-[11px] text-gray-400">{booking.timeSlot}</div>
+                                  </td>
+                                  <td className="py-3.5 px-4">
+                                    <div className="font-semibold text-white">{booking.client?.name || `Client #${booking.clientId}`}</div>
+                                    <div className="text-[11px] text-gray-400">{booking.client?.email || '-'}</div>
+                                  </td>
+                                  <td className="py-3.5 px-4">
+                                    <div className="font-semibold text-white">
+                                      {booking.provider?.name || booking.provider?.providerProfile?.salonName || `Provider #${booking.providerId}`}
+                                    </div>
+                                    <div className="text-[11px] text-gray-400">{booking.provider?.email || '-'}</div>
+                                  </td>
+                                  <td className="py-3.5 px-4 max-w-[200px] truncate text-gray-300">
+                                    {serviceNames || 'N/A'}
+                                  </td>
+                                  <td className="py-3.5 px-4">
+                                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase border ${statusColor}`}>
+                                      {booking.status || 'pending'}
+                                    </span>
+                                  </td>
+                                  <td className="py-3.5 px-4 font-extrabold text-white">
+                                    ${(booking.grandTotal || booking.serviceAmount || 0).toFixed(2)}
+                                  </td>
+                                  <td className="py-3.5 px-4 text-right">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedBooking(booking);
+                                        setBookingDrawerOpen(true);
+                                      }}
+                                      className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:text-white px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary border border-primary/20 transition-all cursor-pointer"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>View Details</span>
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
+                </Card>
+              )}
+            </div>
           ) : activeTab === 'dashboard' ? (
             <>
               {/* Statistics Grid */}
@@ -2271,11 +2736,46 @@ export default function AdminPage() {
                       </div>
                     </Card>
                   ) : settingsSubTab === 'services' ? (
-                    <Card className="border border-gray-850 p-6 space-y-4">
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
-                        <Scissors className="w-4 h-4 text-primary" /> Service Settings
-                      </h3>
-                      <p className="text-xs text-gray-400">Manage master services. Click inline buttons next to categories to add sub-services directly.</p>
+                    <div className="space-y-6">
+                      <Card className="border border-gray-850 p-6 space-y-4">
+                        <div className="flex items-center justify-between border-b border-gray-900 pb-3">
+                          <div>
+                            <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                              <Settings className="w-4 h-4 text-primary" /> Platform Fee Cut Setting
+                            </h3>
+                            <p className="text-xs text-gray-400">Set the default percentage cut collected by the platform on completed bookings.</p>
+                          </div>
+                        </div>
+                        <form onSubmit={handleSavePlatformFee} className="flex flex-col sm:flex-row items-end gap-4">
+                          <div className="flex-1">
+                            <Input
+                              label="Platform Fee Cut (%)"
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              placeholder="e.g. 5"
+                              value={platformFeeCut}
+                              onChange={(e) => setPlatformFeeCut(e.target.value)}
+                              required
+                            />
+                          </div>
+                          <Button type="submit" variant="primary" loading={platformFeeSaving}>
+                            Save Fee Cut
+                          </Button>
+                        </form>
+                        {platformFeeMsg && (
+                          <p className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                            <CheckCircle className="w-3.5 h-3.5" /> {platformFeeMsg}
+                          </p>
+                        )}
+                      </Card>
+
+                      <Card className="border border-gray-850 p-6 space-y-4">
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                          <Scissors className="w-4 h-4 text-primary" /> Service Settings
+                        </h3>
+                        <p className="text-xs text-gray-400">Manage master services. Click inline buttons next to categories to add sub-services directly.</p>
 
                       <div className="border-t border-gray-900 pt-4">
                         {categoriesList.length === 0 ? (
@@ -2482,6 +2982,7 @@ export default function AdminPage() {
                         </div>
                       )}
                     </Card>
+                  </div>
                   ) : settingsSubTab === 'ambience' ? (
                     <Card className="border border-gray-850 p-6 space-y-4">
                       <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
@@ -3257,7 +3758,229 @@ export default function AdminPage() {
         )}
       </AnimatePresence>
 
+      {/* BOOKING DETAILS SLIDE-OUT DRAWER */}
+      <AnimatePresence>
+        {bookingDrawerOpen && selectedBooking && (
+          <>
+            {/* Backdrop overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setBookingDrawerOpen(false)}
+              className="fixed inset-0 bg-black z-30"
+            />
 
+            {/* Slideout Panel */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+              className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-gray-950 border-l border-gray-900 shadow-2xl z-40 p-6 flex flex-col justify-between overflow-y-auto"
+            >
+              <div className="space-y-6">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-gray-900 pb-4">
+                  <div>
+                    <span className="text-xs text-primary font-bold uppercase tracking-wider">Booking Preview</span>
+                    <h2 className="text-xl font-extrabold text-white mt-0.5">Booking #{selectedBooking.id}</h2>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
+                        selectedBooking.status === 'completed'
+                          ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                          : selectedBooking.status === 'confirmed'
+                          ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                          : selectedBooking.status === 'cancelled'
+                          ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      }`}>
+                        Status: {selectedBooking.status || 'pending'}
+                      </span>
+                      <span className="text-[11px] text-gray-400 font-medium">
+                        {new Date(selectedBooking.date).toLocaleDateString()} at {selectedBooking.timeSlot}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setBookingDrawerOpen(false)}
+                    className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Section 1: Provider Info */}
+                <div className="bg-gray-900/40 border border-gray-850 p-4 rounded-2xl space-y-3">
+                  <h4 className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Building className="w-3.5 h-3.5" /> Provider Details
+                  </h4>
+                  <div className="grid grid-cols-1 gap-1 text-xs text-gray-300">
+                    <div className="font-bold text-white text-sm">
+                      {selectedBooking.provider?.name || selectedBooking.provider?.providerProfile?.salonName || `Provider #${selectedBooking.providerId}`}
+                    </div>
+                    {selectedBooking.provider?.providerProfile?.salonName && (
+                      <div className="text-gray-400 text-xs">Salon: {selectedBooking.provider.providerProfile.salonName}</div>
+                    )}
+                    <div className="flex items-center gap-2 text-gray-400 text-xs mt-1">
+                      <Mail className="w-3.5 h-3.5 text-gray-500" />
+                      <span>{selectedBooking.provider?.email || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-gray-400 text-xs">
+                      <Phone className="w-3.5 h-3.5 text-gray-500" />
+                      <span>{selectedBooking.provider?.phoneNumber || '-'}</span>
+                    </div>
+                    {selectedBooking.provider?.providerProfile?.location && (
+                      <div className="flex items-center gap-2 text-gray-400 text-xs">
+                        <MapPin className="w-3.5 h-3.5 text-gray-500" />
+                        <span>{selectedBooking.provider.providerProfile.location}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Section 2: Client Info */}
+                <div className="bg-gray-900/40 border border-gray-850 p-4 rounded-2xl space-y-3">
+                  <h4 className="text-[10px] font-extrabold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5" /> Client Details
+                  </h4>
+                  <div className="grid grid-cols-1 gap-1 text-xs text-gray-300">
+                    <div className="font-bold text-white text-sm">
+                      {selectedBooking.client?.name || `Client #${selectedBooking.clientId}`}
+                    </div>
+                    <div className="flex items-center gap-2 text-gray-400 text-xs mt-1">
+                      <Mail className="w-3.5 h-3.5 text-gray-500" />
+                      <span>{selectedBooking.client?.email || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-gray-400 text-xs">
+                      <Phone className="w-3.5 h-3.5 text-gray-500" />
+                      <span>{selectedBooking.client?.phoneNumber || '-'}</span>
+                    </div>
+                    {selectedBooking.client?.clientProfile?.location && (
+                      <div className="flex items-center gap-2 text-gray-400 text-xs">
+                        <MapPin className="w-3.5 h-3.5 text-gray-500" />
+                        <span>{selectedBooking.client.clientProfile.location}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Section 3: Booked Services */}
+                <div className="bg-gray-900/40 border border-gray-850 p-4 rounded-2xl space-y-3">
+                  <h4 className="text-[10px] font-extrabold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <Scissors className="w-3.5 h-3.5" /> Services Booked
+                  </h4>
+                  {Array.isArray(selectedBooking.services) && selectedBooking.services.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedBooking.services.map((svc: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-2.5 rounded-xl bg-gray-950 border border-gray-900 text-xs">
+                          <div>
+                            <div className="font-bold text-white">{svc.name || svc.title}</div>
+                            <div className="text-[10px] text-gray-400">{svc.category || 'General'}</div>
+                          </div>
+                          <div className="font-bold text-primary">${(svc.price || 0).toFixed(2)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-400 italic">No detailed services list recorded.</div>
+                  )}
+                </div>
+
+                {/* Section 4: All Charges Breakdown */}
+                <div className="bg-gray-900/40 border border-gray-850 p-4 rounded-2xl space-y-3">
+                  <h4 className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5" /> Financial & Charges Breakdown
+                  </h4>
+                  <div className="space-y-2 text-xs divide-y divide-gray-900">
+                    <div className="flex justify-between py-1 text-gray-300">
+                      <span>Service Amount (Subtotal)</span>
+                      <span className="font-semibold text-white">${(selectedBooking.serviceAmount || 0).toFixed(2)}</span>
+                    </div>
+
+                    <div className="flex justify-between py-1 text-gray-300">
+                      <span>
+                        Tip Amount {selectedBooking.tipPercentage ? `(${selectedBooking.tipPercentage}%)` : ''}
+                      </span>
+                      <span className="font-semibold text-emerald-400">+${(selectedBooking.tipAmount || 0).toFixed(2)}</span>
+                    </div>
+
+                    {selectedBooking.voucherDiscount > 0 && (
+                      <div className="flex justify-between py-1 text-gray-300">
+                        <span>Voucher Discount {selectedBooking.voucherCode ? `(${selectedBooking.voucherCode})` : ''}</span>
+                        <span className="font-semibold text-amber-400">-${(selectedBooking.voucherDiscount || 0).toFixed(2)}</span>
+                      </div>
+                    )}
+
+                    {selectedBooking.promoDiscount > 0 && (
+                      <div className="flex justify-between py-1 text-gray-300">
+                        <span>Promo Discount {selectedBooking.promoCode ? `(${selectedBooking.promoCode})` : ''}</span>
+                        <span className="font-semibold text-amber-400">-${(selectedBooking.promoDiscount || 0).toFixed(2)}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between pt-3 text-sm font-extrabold">
+                      <span className="text-white">Grand Total</span>
+                      <span className="text-primary text-base">${(selectedBooking.grandTotal || selectedBooking.serviceAmount || 0).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Close Drawer Button */}
+              <div className="pt-4 border-t border-gray-900">
+                <Button variant="secondary" className="w-full" onClick={() => setBookingDrawerOpen(false)}>
+                  Close Preview
+                </Button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* DELETE REQUEST CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {deleteRequestModalOpen && deletingRequestId && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDeleteRequestModalOpen(false)}
+              className="fixed inset-0 bg-black z-50"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 flex items-center justify-center z-50 p-4"
+            >
+              <Card className="w-full max-w-md border border-gray-850 p-6 space-y-4 bg-gray-950">
+                <div className="flex items-center gap-3 text-red-400">
+                  <Trash2 className="w-6 h-6" />
+                  <h3 className="text-lg font-bold text-white">Delete Provider Request</h3>
+                </div>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Are you sure you want to delete request <strong>#{deletingRequestId}</strong>? This action cannot be undone.
+                </p>
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <Button variant="secondary" size="sm" onClick={() => setDeleteRequestModalOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    loading={deleteRequestLoading}
+                    onClick={() => handleDeleteRequest(deletingRequestId)}
+                  >
+                    Delete Request
+                  </Button>
+                </div>
+              </Card>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

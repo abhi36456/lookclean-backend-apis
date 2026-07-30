@@ -239,7 +239,9 @@ const mockDb = {
       verificationServiceId: process.env.TWILIO_VERIFICATION_SERVICE_ID_LIVE || '',
       messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID_LIVE || ''
     }
-  }
+  },
+  providerRequests: [] as any[],
+  platformFeeCut: 5
 };
 
 // Memory map to store generated OTP codes temporarily
@@ -2196,6 +2198,151 @@ export async function GET(
         return NextResponse.json(reports);
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to fetch reports' }, { status: 400 });
+      }
+    }
+
+    // GET Provider Requests (/api/admin/provider-requests or /api/provider-requests)
+    if (path === 'admin/provider-requests' || path === 'provider-requests' || path === 'provider/requests' || path === 'providers/requests') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+      const url = new URL(request.url);
+      const requestType = url.searchParams.get('requestType');
+
+      try {
+        const requests = await executeWithDbFallback(
+          async () => {
+            const whereClause: any = {};
+            if (requestType) {
+              whereClause.requestType = { equals: requestType, mode: 'insensitive' };
+            }
+            if (auth.role === 'provider') {
+              whereClause.providerId = auth.userId;
+            }
+            return await prisma.providerRequest.findMany({
+              where: whereClause,
+              include: {
+                provider: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    phoneNumber: true,
+                    role: true,
+                    providerType: true,
+                    providerProfile: true
+                  }
+                }
+              },
+              orderBy: { createdAt: 'desc' }
+            });
+          },
+          async () => {
+            let list = [...mockDb.providerRequests];
+            if (requestType) {
+              list = list.filter((r) => r.requestType?.toLowerCase() === requestType.toLowerCase());
+            }
+            if (auth.role === 'provider') {
+              list = list.filter((r) => r.providerId === auth.userId);
+            }
+            return list.map((r) => {
+              const provider = mockDb.users.find((u) => u.id === r.providerId);
+              const providerProfile = mockDb.profiles.find((p) => p.userId === r.providerId);
+              return {
+                ...r,
+                provider: provider ? {
+                  id: provider.id,
+                  name: provider.name,
+                  email: provider.email,
+                  phoneNumber: provider.phoneNumber,
+                  role: provider.role,
+                  providerType: provider.providerType,
+                  providerProfile: providerProfile || null
+                } : null
+              };
+            }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          }
+        );
+        return NextResponse.json({ success: true, requests });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to fetch provider requests' }, { status: 400 });
+      }
+    }
+
+    // GET All Bookings for Admin (/api/admin/bookings or /api/bookings)
+    if (path === 'admin/bookings' || path === 'bookings') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
+      }
+      try {
+        const bookingsList = await executeWithDbFallback(
+          async () => {
+            const list = await prisma.booking.findMany({
+              include: {
+                client: {
+                  include: { clientProfile: true }
+                },
+                provider: {
+                  include: { providerProfile: true }
+                },
+                services: {
+                  include: { service: true }
+                },
+                review: true
+              },
+              orderBy: { createdAt: 'desc' }
+            });
+            return list.map((b: any) => ({
+              ...b,
+              client: sanitizeUser(b.client, request),
+              provider: sanitizeUser(b.provider, request),
+              services: b.services.map((bs: any) => bs.service)
+            }));
+          },
+          async () => {
+            return mockDb.bookings.map((b: any) => {
+              const client = mockDb.users.find((u) => u.id === b.clientId);
+              const clientProfile = mockDb.profiles.find((p) => p.userId === b.clientId);
+              const provider = mockDb.users.find((u) => u.id === b.providerId);
+              const providerProfile = mockDb.profiles.find((p) => p.userId === b.providerId);
+              const bServices = mockDb.bookingServices.filter((bs) => bs.bookingId === b.id);
+              const services = bServices.map((bs) => mockDb.services.find((s) => s.id === bs.serviceId) || { id: bs.serviceId, name: 'Service', price: 0, category: 'General' });
+              return {
+                ...b,
+                client: client ? { ...sanitizeUser(client, request), clientProfile } : null,
+                provider: provider ? { ...sanitizeUser(provider, request), providerProfile } : null,
+                services
+              };
+            }).sort((a: any, b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+          }
+        );
+        return NextResponse.json({ success: true, bookings: bookingsList });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to fetch bookings' }, { status: 400 });
+      }
+    }
+
+    // GET Platform Fee Cut Setting (/api/admin/settings/platform-fee)
+    if (path === 'admin/settings/platform-fee' || path === 'settings/platform-fee') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
+      }
+      try {
+        const feeCut = await executeWithDbFallback(
+          async () => {
+            const setting = await prisma.systemSetting.findUnique({ where: { key: 'platform_fee_cut' } });
+            return setting ? parseFloat(setting.value) : 5;
+          },
+          async () => {
+            return mockDb.platformFeeCut !== undefined ? mockDb.platformFeeCut : 5;
+          }
+        );
+        return NextResponse.json({ success: true, platformFeeCut: feeCut });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to fetch platform fee setting' }, { status: 400 });
       }
     }
 
@@ -5593,6 +5740,96 @@ export async function POST(
       }
     }
 
+    // POST Provider Request (/api/provider/requests or /api/provider-requests)
+    if (path === 'provider/requests' || path === 'providers/requests' || path === 'provider-requests') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+      if (auth.role !== 'provider' && auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+      const { requestType, requestTitle } = body;
+      if (!requestType || !requestTitle || typeof requestTitle !== 'string' || !requestTitle.trim()) {
+        return NextResponse.json({ message: 'Missing or invalid requestType or requestTitle' }, { status: 400 });
+      }
+
+      const normalizedType = String(requestType).trim().toLowerCase() === 'category' ? 'Category' : String(requestType).trim().toLowerCase() === 'service' ? 'Service' : null;
+      if (!normalizedType) {
+        return NextResponse.json({ message: 'requestType must be Category or Service' }, { status: 400 });
+      }
+
+      try {
+        const newRequest = await executeWithDbFallback(
+          async () => {
+            return await prisma.providerRequest.create({
+              data: {
+                providerId: auth.userId,
+                requestType: normalizedType,
+                requestTitle: requestTitle.trim(),
+                status: 'pending'
+              },
+              include: {
+                provider: {
+                  select: { id: true, name: true, email: true, role: true, providerType: true }
+                }
+              }
+            });
+          },
+          async () => {
+            const reqObj = {
+              id: mockDb.providerRequests.length + 1,
+              providerId: auth.userId,
+              requestType: normalizedType,
+              requestTitle: requestTitle.trim(),
+              status: 'pending',
+              createdAt: new Date().toISOString()
+            };
+            mockDb.providerRequests.push(reqObj);
+            const provider = mockDb.users.find((u) => u.id === auth.userId);
+            return {
+              ...reqObj,
+              provider: provider ? { id: provider.id, name: provider.name, email: provider.email, role: provider.role, providerType: provider.providerType } : null
+            };
+          }
+        );
+        return NextResponse.json({ message: 'Request submitted successfully', request: newRequest }, { status: 201 });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to submit request' }, { status: 400 });
+      }
+    }
+
+    // POST Platform Fee Cut Setting (/api/admin/settings/platform-fee)
+    if (path === 'admin/settings/platform-fee' || path === 'settings/platform-fee') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
+      }
+      const { platformFeeCut, feeCut, value } = body;
+      const feeVal = parseFloat(platformFeeCut ?? feeCut ?? value ?? 5);
+      if (isNaN(feeVal) || feeVal < 0 || feeVal > 100) {
+        return NextResponse.json({ message: 'Invalid platformFeeCut value. Must be a percentage between 0 and 100.' }, { status: 400 });
+      }
+
+      try {
+        await executeWithDbFallback(
+          async () => {
+            await prisma.systemSetting.upsert({
+              where: { key: 'platform_fee_cut' },
+              update: { value: String(feeVal) },
+              create: { key: 'platform_fee_cut', value: String(feeVal) }
+            });
+          },
+          async () => {
+            mockDb.platformFeeCut = feeVal;
+          }
+        );
+        return NextResponse.json({ success: true, message: 'Platform fee cut updated successfully', platformFeeCut: feeVal });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to update platform fee cut' }, { status: 400 });
+      }
+    }
+
     return NextResponse.json({ message: 'Endpoint not found' }, { status: 404 });
   } catch (err: any) {
     console.error(`[API POST Error]`, err);
@@ -6885,6 +7122,42 @@ export async function DELETE(
         return NextResponse.json({ success: true, message: 'FAQ deleted successfully.' });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to delete FAQ' }, { status: 400 });
+      }
+    }
+
+    // DELETE Provider Request (/api/admin/provider-requests or /api/provider-requests)
+    if (path === 'admin/provider-requests' || path === 'provider-requests' || path === 'provider/requests' || path === 'providers/requests' || path.startsWith('admin/provider-requests/') || path.startsWith('provider-requests/')) {
+      if (auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
+      }
+      const { searchParams } = new URL(request.url);
+      let requestIdStr = searchParams.get('id') || searchParams.get('requestId');
+      if (!requestIdStr) {
+        const pathParts = path.split('/');
+        const lastPart = pathParts[pathParts.length - 1];
+        if (!isNaN(parseInt(lastPart, 10))) {
+          requestIdStr = lastPart;
+        }
+      }
+      if (!requestIdStr) {
+        return NextResponse.json({ message: 'Missing request id' }, { status: 400 });
+      }
+      const requestId = parseInt(requestIdStr, 10);
+
+      try {
+        await executeWithDbFallback(
+          async () => {
+            await prisma.providerRequest.delete({ where: { id: requestId } });
+          },
+          async () => {
+            const index = mockDb.providerRequests.findIndex((r) => r.id === requestId);
+            if (index === -1) throw new Error('Provider request not found');
+            mockDb.providerRequests.splice(index, 1);
+          }
+        );
+        return NextResponse.json({ success: true, message: 'Provider request deleted successfully' });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to delete provider request' }, { status: 400 });
       }
     }
 

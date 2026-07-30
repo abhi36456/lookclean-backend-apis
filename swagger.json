@@ -31,6 +31,10 @@
     {
       "name": "Providers Profile",
       "description": "Service provider profile details and settings"
+    },
+    {
+      "name": "Provider Requests",
+      "description": "APIs for providers to request new Categories and Services"
     }
   ],
   "components": {
@@ -291,6 +295,106 @@
           },
           "401": {
             "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/provider/requests": {
+      "post": {
+        "tags": [
+          "Provider Requests"
+        ],
+        "summary": "Request a new Category or Service",
+        "description": "Allows a Service Provider to submit a request for adding a new Category or Service to the platform.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "requestType",
+                  "requestTitle"
+                ],
+                "properties": {
+                  "requestType": {
+                    "type": "string",
+                    "enum": [
+                      "Category",
+                      "Service"
+                    ],
+                    "example": "Category",
+                    "description": "Type of request: Category or Service"
+                  },
+                  "requestTitle": {
+                    "type": "string",
+                    "example": "Organic Hair Treatment",
+                    "description": "Title/Name of the proposed Category or Service"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Request submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Request submitted successfully"
+                    },
+                    "request": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "example": 1
+                        },
+                        "providerId": {
+                          "type": "integer",
+                          "example": 2
+                        },
+                        "requestType": {
+                          "type": "string",
+                          "example": "Category"
+                        },
+                        "requestTitle": {
+                          "type": "string",
+                          "example": "Organic Hair Treatment"
+                        },
+                        "status": {
+                          "type": "string",
+                          "example": "pending"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "example": "2026-07-30T08:33:41.000Z"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid requestType or requestTitle"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - Requires provider role"
           }
         }
       }
