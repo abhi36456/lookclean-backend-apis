@@ -963,6 +963,10 @@
                   "tipAmount": {
                     "type": "number",
                     "example": 0
+                  },
+                  "promoCode": {
+                    "type": "string",
+                    "example": "SAVE20"
                   }
                 }
               }
@@ -1040,6 +1044,10 @@
                   "tipAmount": {
                     "type": "number",
                     "example": 0
+                  },
+                  "promoCode": {
+                    "type": "string",
+                    "example": "SAVE20"
                   }
                 }
               }
