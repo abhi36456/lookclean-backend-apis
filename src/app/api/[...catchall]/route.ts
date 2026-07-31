@@ -5264,13 +5264,15 @@ export async function POST(
       try {
         const result = await executeWithDbFallback(
           async () => {
+            const normalizedCode = String(code).toUpperCase().trim();
+            await prisma.promoCode.create({
+              data: { code: normalizedCode, title, amount: amountVal, isActive: activeVal }
+            }).catch(() => null);
+
             return await prisma.voucher.create({
-              data: {
-                code: String(code).toUpperCase().trim(),
-                title,
-                amount: amountVal,
-                isActive: activeVal
-              }
+              data: { code: normalizedCode, title, amount: amountVal, isActive: activeVal }
+            }).catch(async () => {
+              return await prisma.voucher.findUnique({ where: { code: normalizedCode } });
             });
           },
           async () => {
