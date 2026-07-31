@@ -12,6 +12,7 @@ import Button from '@/components/Button';
 import Input from '@/components/Input';
 import Card from '@/components/Card';
 import { CmsRichEditor } from '@/components/CmsRichEditor';
+import { triggerTopLoader } from '@/components/TopLoader';
 
 interface UserData {
   id: number;
@@ -86,6 +87,9 @@ export default function AdminPage() {
                   : 'dashboard';
 
   const handleTabChange = (tab: AdminTabType) => {
+    if (tab !== activeTab) {
+      triggerTopLoader();
+    }
     if (tab === 'users') {
       router.push('/admin/users');
     } else if (tab === 'vouchers') {
@@ -1290,7 +1294,7 @@ export default function AdminPage() {
 
   // --- RENDERING ADMIN DASHBOARD ---
   return (
-    <div className="min-h-screen bg-dark-bg text-gray-100 flex relative overflow-x-hidden">
+    <div className="min-h-screen bg-dark-bg text-gray-100 flex relative">
       {/* Decorative background glows */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-500/10 rounded-full blur-[120px] pointer-events-none" />
@@ -2075,11 +2079,10 @@ export default function AdminPage() {
                                   <div className="text-[11px] text-gray-400">{req.provider?.email || '-'}</div>
                                 </td>
                                 <td className="py-3.5 px-4">
-                                  <span className={`px-2.5 py-1 rounded text-[10px] font-extrabold uppercase border ${
-                                    req.requestType === 'Category'
-                                      ? 'bg-primary/10 text-primary border-primary/20'
-                                      : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                                  }`}>
+                                  <span className={`px-2.5 py-1 rounded text-[10px] font-extrabold uppercase border ${req.requestType === 'Category'
+                                    ? 'bg-primary/10 text-primary border-primary/20'
+                                    : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                                    }`}>
                                     {req.requestType}
                                   </span>
                                 </td>
@@ -2199,10 +2202,10 @@ export default function AdminPage() {
                                 booking.status === 'completed'
                                   ? 'bg-green-500/10 text-green-400 border-green-500/20'
                                   : booking.status === 'confirmed'
-                                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                                  : booking.status === 'cancelled'
-                                  ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+                                    ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                    : booking.status === 'cancelled'
+                                      ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                                      : 'bg-amber-500/10 text-amber-400 border-amber-500/20';
 
                               const serviceNames = Array.isArray(booking.services)
                                 ? booking.services.map((s: any) => s.name || s.title).join(', ')
@@ -2288,11 +2291,10 @@ export default function AdminPage() {
                       <button
                         key={filterKey}
                         onClick={() => setDashboardTimeFilter(filterKey)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          isActive
-                            ? 'bg-primary text-gray-950 shadow-md shadow-primary/20'
-                            : 'text-gray-400 hover:text-white hover:bg-white/5'
-                        }`}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${isActive
+                          ? 'bg-primary text-gray-950 shadow-md shadow-primary/20'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                          }`}
                       >
                         {labels[filterKey]}
                       </button>
@@ -2526,15 +2528,14 @@ export default function AdminPage() {
                                   <td className="py-3 px-3 font-semibold text-white">{booking.client?.name || `Client #${booking.clientId}`}</td>
                                   <td className="py-3 px-3">{booking.provider?.name || booking.provider?.providerProfile?.salonName || `Provider #${booking.providerId}`}</td>
                                   <td className="py-3 px-3">
-                                    <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase border ${
-                                      booking.status === 'completed'
-                                        ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                                        : booking.status === 'confirmed'
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase border ${booking.status === 'completed'
+                                      ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                                      : booking.status === 'confirmed'
                                         ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                                         : booking.status === 'cancelled'
-                                        ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                                    }`}>
+                                          ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                      }`}>
                                       {booking.status || 'pending'}
                                     </span>
                                   </td>
@@ -3029,212 +3030,212 @@ export default function AdminPage() {
                         </h3>
                         <p className="text-xs text-gray-400">Manage master services. Click inline buttons next to categories to add sub-services directly.</p>
 
-                      <div className="border-t border-gray-900 pt-4">
-                        {categoriesList.length === 0 ? (
-                          <div className="text-center py-6">
-                            <p className="text-xs text-gray-500 italic mb-4">No categories created yet. Create a category to get started.</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-6">
-                            {categoriesList.map((cat) => {
-                              const main = cat.title;
-                              const filteredServices = servicesList.filter(s => s.mainType === main);
-                              return (
-                                <div key={main} className="space-y-3">
-                                  <h5 className="text-[10px] font-extrabold text-primary uppercase tracking-wider border-b border-gray-900 pb-2 flex items-center justify-between">
-                                    <span>{main}</span>
-                                    <button
-                                      onClick={() => {
-                                        setActiveAddServiceCategory(main);
-                                        setNewModalServiceTitle('');
-                                        setAddServiceModalOpen(true);
-                                      }}
-                                      className="text-[9px] text-primary hover:text-white font-extrabold uppercase px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
-                                    >
-                                      + Add Service
-                                    </button>
-                                  </h5>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                    {filteredServices.length === 0 ? (
-                                      <p className="text-[10px] text-gray-500 italic py-1 col-span-2">No services in this category yet. Click '+ Add Service' to create one.</p>
-                                    ) : (
-                                      filteredServices.map((service) => (
-                                        <div key={service.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-900/40 border border-white/5 hover:border-primary/20 transition-all">
-                                          <span className="text-xs font-semibold text-gray-200">{service.title}</span>
-                                          <button
-                                            onClick={() => handleDeleteService(service.id)}
-                                            className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase px-2 py-1 rounded hover:bg-red-500/10 cursor-pointer"
-                                          >
-                                            Delete
-                                          </button>
-                                        </div>
-                                      ))
-                                    )}
+                        <div className="border-t border-gray-900 pt-4">
+                          {categoriesList.length === 0 ? (
+                            <div className="text-center py-6">
+                              <p className="text-xs text-gray-500 italic mb-4">No categories created yet. Create a category to get started.</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-6">
+                              {categoriesList.map((cat) => {
+                                const main = cat.title;
+                                const filteredServices = servicesList.filter(s => s.mainType === main);
+                                return (
+                                  <div key={main} className="space-y-3">
+                                    <h5 className="text-[10px] font-extrabold text-primary uppercase tracking-wider border-b border-gray-900 pb-2 flex items-center justify-between">
+                                      <span>{main}</span>
+                                      <button
+                                        onClick={() => {
+                                          setActiveAddServiceCategory(main);
+                                          setNewModalServiceTitle('');
+                                          setAddServiceModalOpen(true);
+                                        }}
+                                        className="text-[9px] text-primary hover:text-white font-extrabold uppercase px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
+                                      >
+                                        + Add Service
+                                      </button>
+                                    </h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                      {filteredServices.length === 0 ? (
+                                        <p className="text-[10px] text-gray-500 italic py-1 col-span-2">No services in this category yet. Click '+ Add Service' to create one.</p>
+                                      ) : (
+                                        filteredServices.map((service) => (
+                                          <div key={service.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-900/40 border border-white/5 hover:border-primary/20 transition-all">
+                                            <span className="text-xs font-semibold text-gray-200">{service.title}</span>
+                                            <button
+                                              onClick={() => handleDeleteService(service.id)}
+                                              className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase px-2 py-1 rounded hover:bg-red-500/10 cursor-pointer"
+                                            >
+                                              Delete
+                                            </button>
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
+                                );
+                              })}
+                            </div>
+                          )}
 
-                        <div className="pt-6 border-t border-gray-900 mt-6">
-                          {isAddingNewCategory ? (
-                            <div className="p-4 rounded-xl border border-dashed border-primary/30 bg-primary/5 space-y-4">
-                              <h5 className="text-[10px] font-extrabold text-primary uppercase tracking-wider">Create New Service Category</h5>
+                          <div className="pt-6 border-t border-gray-900 mt-6">
+                            {isAddingNewCategory ? (
+                              <div className="p-4 rounded-xl border border-dashed border-primary/30 bg-primary/5 space-y-4">
+                                <h5 className="text-[10px] font-extrabold text-primary uppercase tracking-wider">Create New Service Category</h5>
+                                <form onSubmit={async (e) => {
+                                  e.preventDefault();
+                                  if (!newCategoryFormTitle.trim() || !newCategoryFirstServiceTitle.trim()) return;
+                                  setServicesLoading(true);
+                                  try {
+                                    // 1. Create Category
+                                    const catRes = await fetch('/api/admin/settings/categories', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        Authorization: `Bearer ${token}`,
+                                      },
+                                      body: JSON.stringify({ title: newCategoryFormTitle }),
+                                    });
+                                    if (!catRes.ok) {
+                                      const errData = await catRes.json();
+                                      throw new Error(errData.message || 'Failed to create category');
+                                    }
+
+                                    // 2. Create First Service
+                                    const svcRes = await fetch('/api/admin/settings/services', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        Authorization: `Bearer ${token}`,
+                                      },
+                                      body: JSON.stringify({ mainType: newCategoryFormTitle, title: newCategoryFirstServiceTitle }),
+                                    });
+                                    if (!svcRes.ok) {
+                                      const errData = await svcRes.json();
+                                      throw new Error(errData.message || 'Failed to create first service');
+                                    }
+
+                                    setIsAddingNewCategory(false);
+                                    setNewCategoryFormTitle('');
+                                    setNewCategoryFirstServiceTitle('');
+                                    fetchCategories();
+                                    fetchServices();
+                                  } catch (err: any) {
+                                    alert(err.message || 'Error occurred');
+                                  } finally {
+                                    setServicesLoading(false);
+                                  }
+                                }} className="space-y-4">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <Input
+                                      label="Category Title"
+                                      type="text"
+                                      placeholder="e.g. Hair Color, Facial"
+                                      value={newCategoryFormTitle}
+                                      onChange={(e) => setNewCategoryFormTitle(e.target.value)}
+                                      required
+                                    />
+                                    <Input
+                                      label="First Service Title"
+                                      type="text"
+                                      placeholder="e.g. Root touch-up, Balayage"
+                                      value={newCategoryFirstServiceTitle}
+                                      onChange={(e) => setNewCategoryFirstServiceTitle(e.target.value)}
+                                      required
+                                    />
+                                  </div>
+                                  <div className="flex justify-end gap-3 pt-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsAddingNewCategory(false)}
+                                      className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <Button type="submit" isLoading={servicesLoading} className="px-5 py-2">
+                                      Create Category & Service
+                                    </Button>
+                                  </div>
+                                </form>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setIsAddingNewCategory(true)}
+                                className="w-full p-4 rounded-xl border border-dashed border-gray-800 hover:border-primary/40 text-xs font-semibold text-gray-400 hover:text-white text-center cursor-pointer transition-all flex items-center justify-center gap-2 hover:bg-white/5"
+                              >
+                                <Scissors className="w-4 h-4 text-gray-500" />
+                                <span>+ Add New Service Category</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Add Service Modal Overlay */}
+                        {addServiceModalOpen && (
+                          <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <Card className="border border-gray-850 p-6 space-y-4 max-w-md w-full bg-gray-950 shadow-2xl">
+                              <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                                <Scissors className="w-4 h-4 text-primary" /> Add Service to {activeAddServiceCategory}
+                              </h3>
+                              <p className="text-xs text-gray-450">Please enter a title for the new sub-service.</p>
+
                               <form onSubmit={async (e) => {
                                 e.preventDefault();
-                                if (!newCategoryFormTitle.trim() || !newCategoryFirstServiceTitle.trim()) return;
+                                if (!newModalServiceTitle.trim()) return;
                                 setServicesLoading(true);
                                 try {
-                                  // 1. Create Category
-                                  const catRes = await fetch('/api/admin/settings/categories', {
+                                  const res = await fetch('/api/admin/settings/services', {
                                     method: 'POST',
                                     headers: {
                                       'Content-Type': 'application/json',
                                       Authorization: `Bearer ${token}`,
                                     },
-                                    body: JSON.stringify({ title: newCategoryFormTitle }),
+                                    body: JSON.stringify({
+                                      mainType: activeAddServiceCategory,
+                                      title: newModalServiceTitle
+                                    }),
                                   });
-                                  if (!catRes.ok) {
-                                    const errData = await catRes.json();
-                                    throw new Error(errData.message || 'Failed to create category');
+                                  if (res.ok) {
+                                    setAddServiceModalOpen(false);
+                                    setNewModalServiceTitle('');
+                                    fetchServices();
+                                  } else {
+                                    const data = await res.json();
+                                    alert(data.message || 'Failed to add service');
                                   }
-
-                                  // 2. Create First Service
-                                  const svcRes = await fetch('/api/admin/settings/services', {
-                                    method: 'POST',
-                                    headers: {
-                                      'Content-Type': 'application/json',
-                                      Authorization: `Bearer ${token}`,
-                                    },
-                                    body: JSON.stringify({ mainType: newCategoryFormTitle, title: newCategoryFirstServiceTitle }),
-                                  });
-                                  if (!svcRes.ok) {
-                                    const errData = await svcRes.json();
-                                    throw new Error(errData.message || 'Failed to create first service');
-                                  }
-
-                                  setIsAddingNewCategory(false);
-                                  setNewCategoryFormTitle('');
-                                  setNewCategoryFirstServiceTitle('');
-                                  fetchCategories();
-                                  fetchServices();
-                                } catch (err: any) {
-                                  alert(err.message || 'Error occurred');
+                                } catch (err) {
+                                  console.error(err);
                                 } finally {
                                   setServicesLoading(false);
                                 }
                               }} className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <Input
-                                    label="Category Title"
-                                    type="text"
-                                    placeholder="e.g. Hair Color, Facial"
-                                    value={newCategoryFormTitle}
-                                    onChange={(e) => setNewCategoryFormTitle(e.target.value)}
-                                    required
-                                  />
-                                  <Input
-                                    label="First Service Title"
-                                    type="text"
-                                    placeholder="e.g. Root touch-up, Balayage"
-                                    value={newCategoryFirstServiceTitle}
-                                    onChange={(e) => setNewCategoryFirstServiceTitle(e.target.value)}
-                                    required
-                                  />
-                                </div>
+                                <Input
+                                  label="Service Title"
+                                  type="text"
+                                  placeholder="e.g. Skin fade, Kids cut..."
+                                  value={newModalServiceTitle}
+                                  onChange={(e) => setNewModalServiceTitle(e.target.value)}
+                                  required
+                                />
+
                                 <div className="flex justify-end gap-3 pt-2">
                                   <button
                                     type="button"
-                                    onClick={() => setIsAddingNewCategory(false)}
+                                    onClick={() => setAddServiceModalOpen(false)}
                                     className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
                                   >
                                     Cancel
                                   </button>
                                   <Button type="submit" isLoading={servicesLoading} className="px-5 py-2">
-                                    Create Category & Service
+                                    Add Service
                                   </Button>
                                 </div>
                               </form>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setIsAddingNewCategory(true)}
-                              className="w-full p-4 rounded-xl border border-dashed border-gray-800 hover:border-primary/40 text-xs font-semibold text-gray-400 hover:text-white text-center cursor-pointer transition-all flex items-center justify-center gap-2 hover:bg-white/5"
-                            >
-                              <Scissors className="w-4 h-4 text-gray-500" />
-                              <span>+ Add New Service Category</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Add Service Modal Overlay */}
-                      {addServiceModalOpen && (
-                        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                          <Card className="border border-gray-850 p-6 space-y-4 max-w-md w-full bg-gray-950 shadow-2xl">
-                            <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
-                              <Scissors className="w-4 h-4 text-primary" /> Add Service to {activeAddServiceCategory}
-                            </h3>
-                            <p className="text-xs text-gray-450">Please enter a title for the new sub-service.</p>
-
-                            <form onSubmit={async (e) => {
-                              e.preventDefault();
-                              if (!newModalServiceTitle.trim()) return;
-                              setServicesLoading(true);
-                              try {
-                                const res = await fetch('/api/admin/settings/services', {
-                                  method: 'POST',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                    Authorization: `Bearer ${token}`,
-                                  },
-                                  body: JSON.stringify({
-                                    mainType: activeAddServiceCategory,
-                                    title: newModalServiceTitle
-                                  }),
-                                });
-                                if (res.ok) {
-                                  setAddServiceModalOpen(false);
-                                  setNewModalServiceTitle('');
-                                  fetchServices();
-                                } else {
-                                  const data = await res.json();
-                                  alert(data.message || 'Failed to add service');
-                                }
-                              } catch (err) {
-                                console.error(err);
-                              } finally {
-                                setServicesLoading(false);
-                              }
-                            }} className="space-y-4">
-                              <Input
-                                label="Service Title"
-                                type="text"
-                                placeholder="e.g. Skin fade, Kids cut..."
-                                value={newModalServiceTitle}
-                                onChange={(e) => setNewModalServiceTitle(e.target.value)}
-                                required
-                              />
-
-                              <div className="flex justify-end gap-3 pt-2">
-                                <button
-                                  type="button"
-                                  onClick={() => setAddServiceModalOpen(false)}
-                                  className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
-                                >
-                                  Cancel
-                                </button>
-                                <Button type="submit" isLoading={servicesLoading} className="px-5 py-2">
-                                  Add Service
-                                </Button>
-                              </div>
-                            </form>
-                          </Card>
-                        </div>
-                      )}
-                    </Card>
-                  </div>
+                            </Card>
+                          </div>
+                        )}
+                      </Card>
+                    </div>
                   ) : settingsSubTab === 'ambience' ? (
                     <Card className="border border-gray-850 p-6 space-y-4">
                       <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
@@ -4038,15 +4039,14 @@ export default function AdminPage() {
                     <span className="text-xs text-primary font-bold uppercase tracking-wider">Booking Preview</span>
                     <h2 className="text-xl font-extrabold text-white mt-0.5">Booking #{selectedBooking.id}</h2>
                     <div className="flex items-center gap-2 mt-1.5">
-                      <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
-                        selectedBooking.status === 'completed'
-                          ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                          : selectedBooking.status === 'confirmed'
+                      <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase border ${selectedBooking.status === 'completed'
+                        ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                        : selectedBooking.status === 'confirmed'
                           ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                           : selectedBooking.status === 'cancelled'
-                          ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                      }`}>
+                            ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        }`}>
                         Status: {selectedBooking.status || 'pending'}
                       </span>
                       <span className="text-[11px] text-gray-400 font-medium">
@@ -4157,13 +4157,6 @@ export default function AdminPage() {
                       <span className="font-semibold text-emerald-400">+${(selectedBooking.tipAmount || 0).toFixed(2)}</span>
                     </div>
 
-                    {selectedBooking.voucherDiscount > 0 && (
-                      <div className="flex justify-between py-1 text-gray-300">
-                        <span>Voucher Discount {selectedBooking.voucherCode ? `(${selectedBooking.voucherCode})` : ''}</span>
-                        <span className="font-semibold text-amber-400">-${(selectedBooking.voucherDiscount || 0).toFixed(2)}</span>
-                      </div>
-                    )}
-
                     {selectedBooking.promoDiscount > 0 && (
                       <div className="flex justify-between py-1 text-gray-300">
                         <span>Promo Discount {selectedBooking.promoCode ? `(${selectedBooking.promoCode})` : ''}</span>
@@ -4212,7 +4205,7 @@ export default function AdminPage() {
                         )}
 
                         <div className="flex justify-between pt-3 text-sm font-extrabold">
-                          <span className="text-white">Cleared Provider Payout</span>
+                          <span className="text-white">Provider Payout</span>
                           <span className="text-emerald-400 text-base">${providerPayout.toFixed(2)}</span>
                         </div>
                       </div>

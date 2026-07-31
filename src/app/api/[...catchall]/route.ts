@@ -5377,12 +5377,9 @@ export async function POST(
           serviceAmount,
           tipAmount: calculatedTip,
           promoDiscount: discount,
-          voucherDiscount: discount,
           grandTotal,
           isValidPromoCode,
-          isValidVoucher: isValidPromoCode,
-          promoCodeMessage,
-          voucherMessage: promoCodeMessage
+          promoCodeMessage
         });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to calculate summary' }, { status: 400 });
@@ -5540,8 +5537,6 @@ export async function POST(
                 status: 'pending',
                 tipAmount: calculatedTip,
                 tipPercentage: tipPct,
-                voucherCode: appliedCode,
-                voucherDiscount: discount,
                 promoCode: appliedCode,
                 promoDiscount: discount,
                 serviceAmount,
@@ -5573,8 +5568,8 @@ export async function POST(
               status: 'pending',
               tipAmount: calculatedTip,
               tipPercentage: tipPct,
-              voucherCode: voucherCode ? String(voucherCode).toUpperCase().trim() : null,
-              voucherDiscount: discount,
+              promoCode: appliedCode,
+              promoDiscount: discount,
               serviceAmount,
               grandTotal,
               createdAt: new Date()

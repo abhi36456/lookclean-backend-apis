@@ -1814,10 +1814,6 @@
                   "tipAmount": {
                     "type": "number",
                     "example": 0
-                  },
-                  "voucherCode": {
-                    "type": "string",
-                    "example": "SAVE10"
                   }
                 }
               }
@@ -1895,10 +1891,6 @@
                   "tipAmount": {
                     "type": "number",
                     "example": 0
-                  },
-                  "voucherCode": {
-                    "type": "string",
-                    "example": "SAVE10"
                   }
                 }
               }

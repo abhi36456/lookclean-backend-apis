@@ -17,6 +17,9 @@ export const metadata: Metadata = {
   },
 };
 
+import { Suspense } from "react";
+import TopLoader from "@/components/TopLoader";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -25,10 +28,14 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${plusJakartaSans.variable} h-full antialiased dark`}
+      className={`${plusJakartaSans.variable} min-h-screen antialiased dark`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-dark-bg text-gray-100 selection:bg-primary/30 selection:text-white relative">
+      <body className="min-h-screen flex flex-col bg-dark-bg text-gray-100 selection:bg-primary/30 selection:text-white relative">
+        <Suspense fallback={null}>
+          <TopLoader />
+        </Suspense>
+
         {/* Decorative background glows */}
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-500/10 rounded-full blur-[120px] pointer-events-none" />

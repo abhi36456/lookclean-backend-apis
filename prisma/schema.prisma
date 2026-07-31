@@ -164,8 +164,6 @@ model Booking {
   status          String           @default("pending") // "pending", "confirmed", "completed", "cancelled"
   tipAmount       Float            @default(0)
   tipPercentage   Float?
-  voucherCode     String?          @db.VarChar(50)
-  voucherDiscount Float            @default(0)
   promoCode       String?          @db.VarChar(50)
   promoDiscount   Float            @default(0)
   serviceAmount   Float
