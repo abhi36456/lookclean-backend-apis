@@ -1185,41 +1185,14 @@ export async function GET(
             return ratingB - ratingA;
           });
         } else if (sortKey === 'nearest' || sortKey === 'distance') {
-          let clientLat: number | null = null;
-          let clientLon: number | null = null;
-
-          const qLat = searchParams.get('latitude') || searchParams.get('lat');
-          const qLon = searchParams.get('longitude') || searchParams.get('lon');
-          if (qLat && qLon) {
-            clientLat = Number(qLat);
-            clientLon = Number(qLon);
-          } else {
-            const clientProfile = await executeWithDbFallback(
-              async () => {
-                return await prisma.clientProfile.findUnique({ where: { userId: auth.userId } });
-              },
-              async () => {
-                return mockDb.profiles.find((p) => p.userId === auth.userId) || null;
-              }
-            );
-            if (clientProfile) {
-              clientLat = clientProfile.latitude;
-              clientLon = clientProfile.longitude;
-            }
-          }
-
-          if (clientLat !== null && clientLon !== null && !isNaN(clientLat) && !isNaN(clientLon)) {
-            filteredProviders.sort((a: any, b: any) => {
-              const latA = a.providerProfile?.latitude ?? 0;
-              const lonA = a.providerProfile?.longitude ?? 0;
-              const latB = b.providerProfile?.latitude ?? 0;
-              const lonB = b.providerProfile?.longitude ?? 0;
-
-              const distA = Math.sqrt(Math.pow(latA - clientLat!, 2) + Math.pow(lonA - clientLon!, 2));
-              const distB = Math.sqrt(Math.pow(latB - clientLat!, 2) + Math.pow(lonB - clientLon!, 2));
-              return distA - distB;
-            });
-          }
+          filteredProviders.sort((a: any, b: any) => {
+            const getNumericDistance = (p: any) => {
+              const distStr = p.providerProfile?.totalDistance || p.totalDistance || '';
+              const val = parseFloat(distStr);
+              return isNaN(val) ? 999999 : val;
+            };
+            return getNumericDistance(a) - getNumericDistance(b);
+          });
         } else if (sortKey === 'earliest' || sortKey === 'earliest_time' || sortKey === 'time' || sortKey === 'earliesttime') {
           filteredProviders.sort((a: any, b: any) => {
             const timeStrA = a.providerProfile?.earliestTime || '09:00 AM';
