@@ -386,7 +386,7 @@ export default function AdminPage() {
         fetchVouchers();
       } else {
         const errData = await res.json();
-        alert(errData.message || 'Failed to add voucher');
+        alert(errData.message || 'Failed to add promo codes');
       }
     } catch (err: any) {
       alert(err.message || 'Error occurred');
@@ -424,7 +424,7 @@ export default function AdminPage() {
         fetchVouchers();
       } else {
         const errData = await res.json();
-        alert(errData.message || 'Failed to update voucher');
+        alert(errData.message || 'Failed to update promo codes');
       }
     } catch (err: any) {
       alert(err.message || 'Error occurred');
@@ -434,7 +434,7 @@ export default function AdminPage() {
   };
 
   const handleDeleteVoucher = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this voucher?')) return;
+    if (!confirm('Are you sure you want to delete this promo code?')) return;
     setVouchersLoading(true);
     try {
       const res = await fetch(`/api/admin/settings/vouchers?id=${id}`, {
@@ -445,10 +445,10 @@ export default function AdminPage() {
         fetchVouchers();
       } else {
         const errData = await res.json();
-        alert(errData.message || 'Failed to delete voucher');
+        alert(errData.message || 'Failed to delete promo code');
       }
     } catch (err) {
-      console.error('Delete voucher failed', err);
+      console.error('Delete promo code failed', err);
     } finally {
       setVouchersLoading(false);
     }
@@ -1381,7 +1381,7 @@ export default function AdminPage() {
                 }
               `}
             >
-              <Sparkles className="w-4 h-4 text-amber-400" />
+              <Sparkles className="w-4 h-4" />
               <span>Provider Requests</span>
             </button>
             <button
@@ -1393,7 +1393,7 @@ export default function AdminPage() {
                 }
               `}
             >
-              <Calendar className="w-4 h-4 text-emerald-400" />
+              <Calendar className="w-4 h-4" />
               <span>Booking List</span>
             </button>
           </nav>
@@ -1459,10 +1459,10 @@ export default function AdminPage() {
 
               <Card className="border border-gray-850 p-6 space-y-4">
                 <form onSubmit={handleAddVoucher} className="border border-gray-905 bg-gray-900/10 p-5 rounded-2xl space-y-4 pt-2">
-                  <h4 className="text-[10px] font-extrabold text-primary uppercase tracking-wider mb-2">Create New Voucher</h4>
+                  <h4 className="text-[10px] font-extrabold text-primary uppercase tracking-wider mb-2">Create New promo codes</h4>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                     <Input
-                      label="Voucher Code"
+                      label="Promo Code"
                       type="text"
                       placeholder="e.g. SAVE20"
                       value={newVoucherCode}
@@ -1499,7 +1499,7 @@ export default function AdminPage() {
                   </div>
                   <div className="flex justify-end pt-2">
                     <Button type="submit" isLoading={vouchersLoading} className="px-6 py-2.5">
-                      Add Voucher Code
+                      Add promo codes
                     </Button>
                   </div>
                 </form>
@@ -1549,7 +1549,7 @@ export default function AdminPage() {
                                       if (res.ok) {
                                         fetchVouchers();
                                       } else {
-                                        alert('Failed to toggle voucher status');
+                                        alert('Failed to toggle promo code status');
                                       }
                                     } catch (err) {
                                       console.error(err);
@@ -1607,13 +1607,13 @@ export default function AdminPage() {
                   <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <Card className="border border-gray-850 p-6 space-y-4 max-w-md w-full bg-gray-950 shadow-2xl">
                       <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
-                        <Tag className="w-4 h-4 text-primary" /> Edit Voucher Code
+                        <Tag className="w-4 h-4 text-primary" /> Edit Promo Code
                       </h3>
-                      <p className="text-xs text-gray-450">Modify the settings and status for the selected voucher.</p>
+                      <p className="text-xs text-gray-450">Modify the settings and status for the selected promo code.</p>
 
                       <form onSubmit={handleUpdateVoucher} className="space-y-4">
                         <Input
-                          label="Voucher Code"
+                          label="Promo Code"
                           type="text"
                           placeholder="e.g. SAVE20"
                           value={editVoucherCode}
@@ -1977,7 +1977,7 @@ export default function AdminPage() {
               <div className="border-b border-gray-900 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-amber-400" /> Provider Requests
+                    <Sparkles className="w-5 h-5 text-gray-400" /> Provider Requests
                   </h2>
                   <p className="text-xs text-gray-400">Review new category and service addition requests submitted by service providers.</p>
                 </div>
@@ -2124,7 +2124,7 @@ export default function AdminPage() {
               <div className="border-b border-gray-900 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-emerald-400" /> Booking List
+                    <Calendar className="w-5 h-5 text-primary" /> Booking List
                   </h2>
                   <p className="text-xs text-gray-400">View customer appointments, provider assignments, and complete fee details.</p>
                 </div>
@@ -2144,7 +2144,7 @@ export default function AdminPage() {
                     onChange={(e) => setBookingStatusFilter(e.target.value as any)}
                     className="w-full sm:w-40 bg-gray-900 border border-gray-850 text-xs font-semibold text-gray-300 rounded-xl px-3 py-2.5 focus:outline-none focus:border-primary transition-all cursor-pointer"
                   >
-                    <option value="all">All Statuses</option>
+                    <option value="all">All Status</option>
                     <option value="pending">Pending</option>
                     <option value="confirmed">Confirmed</option>
                     <option value="completed">Completed</option>
