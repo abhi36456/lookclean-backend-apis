@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs/promises';
 import nodePath from 'path';
 import { sendFcmNotification } from '@/lib/firebase-admin';
+import { setCronDependencies, autoCompletePastBookings, initCompletedBookingsCron } from '@/lib/completed-bookings-cron';
 
 async function sendNotificationToUser(userId: number, title: string, body: string, data?: Record<string, string>) {
   try {
@@ -278,6 +279,13 @@ async function executeWithDbFallback<T>(
     console.error('[DB Error] Prisma operation failed:', err);
     throw err;
   }
+}
+
+try {
+  setCronDependencies(mockDb, sendNotificationToUser);
+  initCompletedBookingsCron('* * * * *');
+} catch (cronInitErr) {
+  console.error('Failed to initialize completed bookings cron:', cronInitErr);
 }
 
 // Token helper (Base64 encoding/decoding simulation of JWT)
@@ -1990,6 +1998,7 @@ export async function GET(
       if (!auth || auth.role !== 'client') {
         return NextResponse.json({ message: 'Forbidden: Requires client role' }, { status: 403 });
       }
+      await autoCompletePastBookings().catch(() => {});
       const baseUrl = getBaseUrl(request);
       const list = await executeWithDbFallback(
         async () => {
@@ -2083,6 +2092,7 @@ export async function GET(
       if (!auth || auth.role !== 'provider') {
         return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
       }
+      await autoCompletePastBookings().catch(() => {});
       const baseUrl = getBaseUrl(request);
       const list = await executeWithDbFallback(
         async () => {
@@ -2390,6 +2400,7 @@ export async function GET(
       if (!auth || auth.role !== 'admin') {
         return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
       }
+      await autoCompletePastBookings().catch(() => {});
       try {
         const bookingsList = await executeWithDbFallback(
           async () => {
@@ -2457,6 +2468,22 @@ export async function GET(
         return NextResponse.json({ success: true, platformFeeCut: feeCut });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to fetch platform fee setting' }, { status: 400 });
+      }
+    }
+
+    // GET Cron Job for Auto-Completing Past Bookings (/api/cron/completed-bookings or /api/admin/cron/completed-bookings or /api/cron/auto-complete-bookings)
+    if (path === 'cron/completed-bookings' || path === 'admin/cron/completed-bookings' || path === 'cron/auto-complete-bookings') {
+      try {
+        setCronDependencies(mockDb, sendNotificationToUser);
+        const result = await autoCompletePastBookings();
+        return NextResponse.json({
+          success: true,
+          message: `Completed bookings cron executed successfully. Auto-completed ${result.updatedCount} expired booking(s).`,
+          updatedCount: result.updatedCount,
+          completedBookingIds: result.completedBookingIds
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to execute completed bookings cron' }, { status: 500 });
       }
     }
 
@@ -2726,6 +2753,22 @@ export async function POST(
         return NextResponse.json({ success: true, message: `Processed appointment reminders. Sent: ${sentCount}` });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to process appointment reminders' }, { status: 500 });
+      }
+    }
+
+    // POST Cron Job for Auto-Completing Past Bookings (/api/cron/completed-bookings or /api/admin/cron/completed-bookings or /api/cron/auto-complete-bookings)
+    if (path === 'cron/completed-bookings' || path === 'admin/cron/completed-bookings' || path === 'cron/auto-complete-bookings') {
+      try {
+        setCronDependencies(mockDb, sendNotificationToUser);
+        const result = await autoCompletePastBookings();
+        return NextResponse.json({
+          success: true,
+          message: `Completed bookings cron executed successfully. Auto-completed ${result.updatedCount} expired booking(s).`,
+          updatedCount: result.updatedCount,
+          completedBookingIds: result.completedBookingIds
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to execute completed bookings cron' }, { status: 500 });
       }
     }
 

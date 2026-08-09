@@ -6,17 +6,20 @@
     "dev": "next dev",
     "build": "node --max-old-space-size=4096 node_modules/next/dist/bin/next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "cron:completed-bookings": "node scripts/cron-completed-bookings.js"
   },
   "dependencies": {
     "@nestjs/swagger": "^11.4.4",
     "@prisma/client": "^6.19.3",
+    "@types/node-cron": "^3.0.11",
     "axios": "^1.18.1",
     "firebase": "^12.16.0",
     "firebase-admin": "^14.2.0",
     "framer-motion": "^12.42.0",
     "lucide-react": "^1.21.0",
     "next": "16.2.9",
+    "node-cron": "^4.6.0",
     "prisma": "^6.19.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
