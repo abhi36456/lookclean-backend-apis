@@ -106,7 +106,7 @@ model ProviderAmenity {
 
 model SystemSetting {
   key   String @id
-  value String @db.Text
+  value String @db.LongText
 
   @@map("setting_system")
 }
@@ -241,7 +241,7 @@ model Review {
   bookingId   Int?             @unique
   booking     Booking?         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   rating      Float
-  comment     String?          @db.Text
+  comment     String?          @db.LongText
   createdAt   DateTime         @default(now())
 
   @@map("reviews")
@@ -250,7 +250,7 @@ model Review {
 model CmsPage {
   slug      String   @id @db.VarChar(100)
   title     String   @db.VarChar(255)
-  content   String   @db.Text
+  content   String   @db.LongText
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
 
@@ -259,8 +259,8 @@ model CmsPage {
 
 model Faq {
   id        Int      @id @default(autoincrement())
-  question  String   @db.Text
-  answer    String   @db.Text
+  question  String   @db.LongText
+  answer    String   @db.LongText
   category  String?  @default("General") @db.VarChar(100)
   order     Int      @default(0)
   createdAt DateTime @default(now())
@@ -273,8 +273,8 @@ model IssueReport {
   userId      Int?
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   title       String   @db.VarChar(255)
-  message     String   @db.Text
-  attachments String?  @db.Text
+  message     String   @db.LongText
+  attachments String?  @db.LongText
   status      String   @default("open") @db.VarChar(20)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -287,9 +287,9 @@ model Notification {
   userId    Int
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String   @db.VarChar(255)
-  message   String   @db.Text
+  message   String   @db.LongText
   type      String?  @db.VarChar(50)
-  data      String?  @db.Text
+  data      String?  @db.LongText
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 

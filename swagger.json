@@ -1195,6 +1195,16 @@
             }
           },
           {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Search by provider name",
+            "schema": {
+              "type": "string",
+              "example": "abc"
+            }
+          },
+          {
             "name": "sortBy",
             "in": "query",
             "required": false,
