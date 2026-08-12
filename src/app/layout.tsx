@@ -31,7 +31,10 @@ export default function RootLayout({
       className={`${plusJakartaSans.variable} min-h-screen antialiased dark`}
       suppressHydrationWarning
     >
-      <body className="min-h-screen flex flex-col bg-dark-bg text-gray-100 selection:bg-primary/30 selection:text-white relative">
+      <body
+        className="min-h-screen flex flex-col bg-dark-bg text-gray-100 selection:bg-primary/30 selection:text-white relative"
+        suppressHydrationWarning
+      >
         <Suspense fallback={null}>
           <TopLoader />
         </Suspense>

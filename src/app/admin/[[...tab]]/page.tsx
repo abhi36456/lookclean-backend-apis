@@ -526,30 +526,6 @@ export default function AdminPage() {
         const data = await res.json();
         setCmsTitle(data.title || slugToTitle(slug));
         setCmsContent(typeof data.content === 'string' ? data.content : JSON.stringify(data.content, null, 2));
-
-        if (Array.isArray(data.content)) {
-          setCmsFaqItems(data.content);
-        } else if (Array.isArray(data.faqs) && data.faqs.length > 0) {
-          setCmsFaqItems(data.faqs);
-        } else if (slug === 'client-faqs' || slug === 'provider-faqs' || slug === 'client-faq' || slug === 'provider-faq') {
-          const contentStr = typeof data.content === 'string' ? data.content : '';
-          const qMatches = [...contentStr.matchAll(/<b>Q:\s*(.*?)<\/b>/gi)];
-          const aMatches = [...contentStr.matchAll(/A:\s*(.*?)(?=<br>|<\/p>|$)/gi)];
-          const items: { question: string; answer: string }[] = [];
-          for (let i = 0; i < Math.max(qMatches.length, aMatches.length); i++) {
-            const q = qMatches[i] ? qMatches[i][1].replace(/<[^>]+>/g, '').trim() : '';
-            const a = aMatches[i] ? aMatches[i][1].replace(/<[^>]+>/g, '').trim() : '';
-            if (q || a) items.push({ question: q, answer: a });
-          }
-          if (items.length > 0) {
-            setCmsFaqItems(items);
-          } else {
-            setCmsFaqItems([
-              { question: 'How do I book an appointment?', answer: 'Select a salon or freelancer, choose your service and time slot, then confirm booking.' },
-              { question: 'Can I cancel or reschedule my booking?', answer: 'Yes, go to My Bookings in your profile to reschedule or cancel at least 2 hours prior.' }
-            ]);
-          }
-        }
       }
     } catch (err) {
       console.error('Fetch CMS page failed', err);
@@ -563,16 +539,11 @@ export default function AdminPage() {
     setCmsSaving(true);
     setCmsSavedMsg('');
 
-    let finalContent = cmsContent;
-    if (cmsActiveSlug === 'client-faqs' || cmsActiveSlug === 'provider-faqs') {
-      finalContent = JSON.stringify(cmsFaqItems);
-    }
-
     try {
       const res = await fetch('/api/admin/cms-pages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ slug: cmsActiveSlug, title: cmsTitle, content: finalContent })
+        body: JSON.stringify({ slug: cmsActiveSlug, title: cmsTitle, content: cmsContent })
       });
       if (res.ok) {
         setCmsSavedMsg('CMS Page updated successfully!');
@@ -1746,107 +1717,11 @@ export default function AdminPage() {
                   {/* CMS Content Editor */}
                   {cmsLoading ? (
                     <div className="py-12 text-center text-gray-400 text-xs">Loading CMS page content...</div>
-                  ) : cmsActiveSlug === 'client-faqs' || cmsActiveSlug === 'provider-faqs' ? (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">FAQ Query &amp; Answer List ({cmsFaqItems.length} Pairs)</span>
-                        <button
-                          type="button"
-                          onClick={() => setCmsFaqItems(prev => [...prev, { question: '', answer: '' }])}
-                          className="px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-xs font-bold text-primary hover:bg-primary/20 transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" /> + Add Q&amp;A Pair
-                        </button>
-                      </div>
-
-                      {cmsFaqItems.length === 0 ? (
-                        <div className="p-8 text-center border border-dashed border-gray-800 rounded-2xl text-xs text-gray-500">
-                          No FAQ Q&amp;A pairs added yet. Click &quot;+ Add Q&amp;A Pair&quot; above to create one.
-                        </div>
-                      ) : (
-                        cmsFaqItems.map((item, idx) => (
-                          <div key={idx} className="p-5 bg-gray-950 border border-gray-850 rounded-2xl space-y-3 relative group">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Q&amp;A #{idx + 1}</span>
-                              <div className="flex items-center gap-1.5">
-                                {idx > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const next = [...cmsFaqItems];
-                                      const temp = next[idx];
-                                      next[idx] = next[idx - 1];
-                                      next[idx - 1] = temp;
-                                      setCmsFaqItems(next);
-                                    }}
-                                    className="px-2 py-1 bg-gray-900 hover:bg-gray-850 text-gray-300 rounded text-[10px] font-semibold cursor-pointer"
-                                  >
-                                    ↑ Up
-                                  </button>
-                                )}
-                                {idx < cmsFaqItems.length - 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const next = [...cmsFaqItems];
-                                      const temp = next[idx];
-                                      next[idx] = next[idx + 1];
-                                      next[idx + 1] = temp;
-                                      setCmsFaqItems(next);
-                                    }}
-                                    className="px-2 py-1 bg-gray-900 hover:bg-gray-850 text-gray-300 rounded text-[10px] font-semibold cursor-pointer"
-                                  >
-                                    ↓ Down
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => setCmsFaqItems(prev => prev.filter((_, i) => i !== idx))}
-                                  className="px-2 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded text-[10px] font-semibold cursor-pointer"
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </div>
-
-                            <div>
-                              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Query / Question</label>
-                              <input
-                                type="text"
-                                value={item.question}
-                                onChange={(e) => {
-                                  const next = [...cmsFaqItems];
-                                  next[idx].question = e.target.value;
-                                  setCmsFaqItems(next);
-                                }}
-                                placeholder="e.g. How do I book an appointment?"
-                                className="w-full text-xs font-semibold text-white bg-gray-900 border border-gray-800 rounded-xl px-3.5 py-2 focus:border-primary focus:outline-none"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Answer</label>
-                              <textarea
-                                rows={3}
-                                value={item.answer}
-                                onChange={(e) => {
-                                  const next = [...cmsFaqItems];
-                                  next[idx].answer = e.target.value;
-                                  setCmsFaqItems(next);
-                                }}
-                                placeholder="e.g. Select a salon or freelancer, choose your service and time slot, then confirm."
-                                className="w-full text-xs text-gray-200 bg-gray-900 border border-gray-800 rounded-xl p-3.5 focus:border-primary focus:outline-none leading-relaxed"
-                              />
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
                   ) : (
                     <CmsRichEditor
                       value={cmsContent}
                       onChange={setCmsContent}
-                      placeholder="Write policy content here..."
+                      placeholder="Write page content here..."
                     />
                   )}
                 </form>

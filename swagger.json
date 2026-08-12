@@ -35,6 +35,10 @@
     {
       "name": "Provider Requests",
       "description": "APIs for providers to request new Categories and Services"
+    },
+    {
+      "name": "Stripe Payments",
+      "description": "APIs for salon charges, Stripe Payment Intents, Checkout Sessions, Payment Status, and Webhook integration"
     }
   ],
   "components": {
@@ -143,6 +147,10 @@
           "longitude": {
             "type": "number",
             "example": -74.006
+          },
+          "stripeCustomerId": {
+            "type": "string",
+            "example": "cus_N9x..."
           }
         }
       },
@@ -223,6 +231,42 @@
     }
   ],
   "paths": {
+    "/stripe/config": {
+      "get": {
+        "tags": [
+          "Stripe Payments"
+        ],
+        "summary": "Get Stripe app configuration",
+        "description": "Fetch Stripe publishable key, currency, and configuration status for client SDK initialization.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stripe configuration retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "publishableKey": { "type": "string", "example": "pk_test_51Px..." },
+                    "currency": { "type": "string", "example": "usd" },
+                    "webhookRoute": { "type": "string", "example": "/api/stripe/webhook" },
+                    "isConfigured": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
     "/providers/notification": {
       "get": {
         "tags": [

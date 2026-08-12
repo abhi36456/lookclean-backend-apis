@@ -3,8 +3,15 @@ import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import nodePath from 'path';
+import Stripe from 'stripe';
 import { sendFcmNotification } from '@/lib/firebase-admin';
 import { setCronDependencies, autoCompletePastBookings, initCompletedBookingsCron } from '@/lib/completed-bookings-cron';
+
+function getStripeInstance(): Stripe | null {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) return null;
+  return new Stripe(secretKey);
+}
 
 async function sendNotificationToUser(userId: number, title: string, body: string, data?: Record<string, string>) {
   try {
@@ -687,6 +694,75 @@ export async function GET(
     const rawPath = catchall?.join('/') || '';
     const path = rawPath.replace(/^api\//i, '').replace(/\/$/, '').trim();
     console.log(`[API GET] rawPath='${rawPath}' -> path='${path}'`);
+
+    // GET /api/stripe/config
+    if (path === 'stripe/config') {
+      const authUser = await getAuthenticatedUser(request);
+      if (!authUser) {
+        return NextResponse.json({ success: false, error: 'Unauthorized. Bearer token required.' }, { status: 401 });
+      }
+
+      const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY || '';
+      const isConfigured = Boolean(process.env.STRIPE_SECRET_KEY && publishableKey);
+
+      return NextResponse.json({
+        success: true,
+        publishableKey: publishableKey,
+        currency: 'usd',
+        webhookRoute: '/api/stripe/webhook',
+        isConfigured: isConfigured
+      });
+    }
+
+    // GET /api/stripe/payment-status
+    if (path === 'stripe/payment-status') {
+      const authUser = await getAuthenticatedUser(request);
+      if (!authUser) {
+        return NextResponse.json({ success: false, error: 'Unauthorized. Bearer token required.' }, { status: 401 });
+      }
+
+      const urlParams = new URL(request.url).searchParams;
+      const paymentIntentId = urlParams.get('paymentIntentId') || urlParams.get('payment_intent_id');
+      const sessionId = urlParams.get('sessionId') || urlParams.get('session_id');
+
+      if (!paymentIntentId && !sessionId) {
+        return NextResponse.json({ success: false, error: 'Either paymentIntentId or sessionId query parameter is required.' }, { status: 400 });
+      }
+
+      const stripe = getStripeInstance();
+      if (!stripe) {
+        return NextResponse.json({ success: false, error: 'Stripe is not configured on server. Missing STRIPE_SECRET_KEY.' }, { status: 500 });
+      }
+
+      try {
+        if (paymentIntentId) {
+          const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+          return NextResponse.json({
+            success: true,
+            type: 'payment_intent',
+            id: paymentIntent.id,
+            status: paymentIntent.status,
+            amount: paymentIntent.amount / 100,
+            currency: paymentIntent.currency,
+            paid: paymentIntent.status === 'succeeded'
+          });
+        } else if (sessionId) {
+          const session = await stripe.checkout.sessions.retrieve(sessionId);
+          return NextResponse.json({
+            success: true,
+            type: 'checkout_session',
+            id: session.id,
+            status: session.status,
+            paymentStatus: session.payment_status,
+            amountTotal: (session.amount_total || 0) / 100,
+            currency: session.currency,
+            paid: session.payment_status === 'paid'
+          });
+        }
+      } catch (stripeErr: any) {
+        return NextResponse.json({ success: false, error: stripeErr.message || 'Failed to retrieve payment status' }, { status: 400 });
+      }
+    }
 
     // GET Test FCM Push Notification Endpoint (/api/test-notification?userId=2)
     if (path === 'test-notification' || path === 'users/test-notification' || path === 'fcm/test' || path === 'admin/test-notification') {
@@ -2504,6 +2580,116 @@ export async function POST(
     const path = rawPath.replace(/^api\//i, '').replace(/\/$/, '').trim();
     console.log(`[API POST] rawPath='${rawPath}' -> path='${path}'`);
 
+    // POST /api/stripe/webhook (Raw body processing for Stripe Webhook Signature Verification)
+    if (path === 'stripe/webhook') {
+      try {
+        const rawBody = await request.text();
+        const sig = request.headers.get('stripe-signature');
+        const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+        const stripe = getStripeInstance();
+
+        let event: Stripe.Event;
+        if (webhookSecret && sig && stripe) {
+          try {
+            event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+          } catch (err: any) {
+            console.error('[Stripe Webhook Signature Failed]', err.message);
+            return NextResponse.json({ success: false, error: `Webhook Signature Verification Failed: ${err.message}` }, { status: 400 });
+          }
+        } else {
+          try {
+            event = JSON.parse(rawBody);
+          } catch {
+            return NextResponse.json({ success: false, error: 'Invalid JSON payload' }, { status: 400 });
+          }
+        }
+
+        console.log(`[Stripe Webhook Event Received] ${event.type}`);
+
+        if (event.type === 'payment_intent.succeeded') {
+          const paymentIntent = event.data.object as Stripe.PaymentIntent;
+          const metadata = paymentIntent.metadata || {};
+          const bookingId = metadata.bookingId ? parseInt(metadata.bookingId, 10) : null;
+          const userId = metadata.userId ? parseInt(metadata.userId, 10) : null;
+          const stripeRawData = JSON.stringify(paymentIntent);
+
+          if (bookingId) {
+            try {
+              await prisma.booking.update({
+                where: { id: bookingId },
+                data: {
+                  status: 'confirmed',
+                  transactionId: paymentIntent.id,
+                  stripeRawData: stripeRawData
+                }
+              }).catch(() => {
+                const b = mockDb.bookings.find((item: any) => item.id === bookingId);
+                if (b) {
+                  b.status = 'confirmed';
+                  b.transactionId = paymentIntent.id;
+                  b.stripeRawData = stripeRawData;
+                }
+              });
+            } catch (e) {
+              console.error('[Stripe Webhook] Error updating booking status', e);
+            }
+          }
+
+          if (userId) {
+            await sendNotificationToUser(
+              userId,
+              'Payment Successful! 💳',
+              `Your payment of $${(paymentIntent.amount / 100).toFixed(2)} was successfully processed via Stripe.`,
+              { type: 'PAYMENT_SUCCESS', paymentIntentId: paymentIntent.id, bookingId: String(bookingId || '') }
+            );
+          }
+        } else if (event.type === 'checkout.session.completed') {
+          const session = event.data.object as Stripe.Checkout.Session;
+          const metadata = session.metadata || {};
+          const bookingId = metadata.bookingId ? parseInt(metadata.bookingId, 10) : null;
+          const userId = metadata.userId ? parseInt(metadata.userId, 10) : null;
+          const stripeRawData = JSON.stringify(session);
+          const txId = (session.payment_intent as string) || session.id;
+
+          if (bookingId) {
+            try {
+              await prisma.booking.update({
+                where: { id: bookingId },
+                data: {
+                  status: 'confirmed',
+                  transactionId: txId,
+                  stripeRawData: stripeRawData
+                }
+              }).catch(() => {
+                const b = mockDb.bookings.find((item: any) => item.id === bookingId);
+                if (b) {
+                  b.status = 'confirmed';
+                  b.transactionId = txId;
+                  b.stripeRawData = stripeRawData;
+                }
+              });
+            } catch (e) {
+              console.error('[Stripe Webhook] Error updating booking status from Checkout', e);
+            }
+          }
+
+          if (userId) {
+            await sendNotificationToUser(
+              userId,
+              'Payment Completed! 💳',
+              `Your checkout session payment was successfully completed.`,
+              { type: 'PAYMENT_SUCCESS', sessionId: session.id, bookingId: String(bookingId || '') }
+            );
+          }
+        }
+
+        return NextResponse.json({ received: true, eventType: event.type });
+      } catch (err: any) {
+        console.error('[Stripe Webhook Error]', err);
+        return NextResponse.json({ success: false, error: err.message || 'Webhook processing failed' }, { status: 500 });
+      }
+    }
+
     let body: any = {};
     let parsedFormData: FormData | null = null;
     const contentType = request.headers.get('content-type') || '';
@@ -2521,6 +2707,148 @@ export async function POST(
         body = await request.json();
       } catch {
         // Empty body or not JSON
+      }
+    }
+
+    // POST /api/stripe/create-payment-intent
+    if (path === 'stripe/create-payment-intent') {
+      const authUser = await getAuthenticatedUser(request);
+      if (!authUser) {
+        return NextResponse.json({ success: false, error: 'Unauthorized. Bearer token required.' }, { status: 401 });
+      }
+
+      const { amount, currency = 'usd', bookingId, description } = body;
+      if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+        return NextResponse.json({ success: false, error: 'Valid positive amount is required.' }, { status: 400 });
+      }
+
+      const stripe = getStripeInstance();
+      if (!stripe) {
+        return NextResponse.json({ success: false, error: 'Stripe is not configured on server. Missing STRIPE_SECRET_KEY in environment.' }, { status: 500 });
+      }
+
+      try {
+        const amountInCents = Math.round(Number(amount) * 100);
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amountInCents,
+          currency: String(currency).toLowerCase(),
+          description: description || `LookClean Salon Charge for User #${authUser.userId}`,
+          metadata: {
+            userId: String(authUser.userId),
+            userEmail: authUser.email,
+            bookingId: bookingId ? String(bookingId) : ''
+          }
+        });
+
+        const rawDataStr = JSON.stringify(paymentIntent);
+
+        if (bookingId) {
+          const bId = parseInt(String(bookingId), 10);
+          await prisma.booking.update({
+            where: { id: bId },
+            data: {
+              transactionId: paymentIntent.id,
+              stripeRawData: rawDataStr
+            }
+          }).catch(() => {
+            const b = mockDb.bookings.find((item: any) => item.id === bId);
+            if (b) {
+              b.transactionId = paymentIntent.id;
+              b.stripeRawData = rawDataStr;
+            }
+          });
+        }
+
+        return NextResponse.json({
+          success: true,
+          clientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id,
+          transactionId: paymentIntent.id,
+          stripeRawData: paymentIntent,
+          amount: Number(amount),
+          amountInCents: paymentIntent.amount,
+          currency: paymentIntent.currency,
+          status: paymentIntent.status
+        });
+      } catch (stripeErr: any) {
+        return NextResponse.json({ success: false, error: stripeErr.message || 'Failed to create payment intent' }, { status: 400 });
+      }
+    }
+
+    // POST /api/stripe/create-checkout-session
+    if (path === 'stripe/create-checkout-session') {
+      const authUser = await getAuthenticatedUser(request);
+      if (!authUser) {
+        return NextResponse.json({ success: false, error: 'Unauthorized. Bearer token required.' }, { status: 401 });
+      }
+
+      const { amount, currency = 'usd', bookingId, serviceName, successUrl, cancelUrl } = body;
+      if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+        return NextResponse.json({ success: false, error: 'Valid positive amount is required.' }, { status: 400 });
+      }
+
+      const stripe = getStripeInstance();
+      if (!stripe) {
+        return NextResponse.json({ success: false, error: 'Stripe is not configured on server. Missing STRIPE_SECRET_KEY in environment.' }, { status: 500 });
+      }
+
+      try {
+        const baseUrl = getBaseUrl(request) || 'http://mylookclean.com';
+        const amountInCents = Math.round(Number(amount) * 100);
+
+        const session = await stripe.checkout.sessions.create({
+          payment_method_types: ['card'],
+          line_items: [
+            {
+              price_data: {
+                currency: String(currency).toLowerCase(),
+                product_data: {
+                  name: serviceName || 'Salon Service Charge',
+                  description: bookingId ? `Booking #${bookingId}` : 'LookClean Salon Payment'
+                },
+                unit_amount: amountInCents,
+              },
+              quantity: 1,
+            },
+          ],
+          mode: 'payment',
+          customer_email: authUser.email,
+          success_url: successUrl || `${baseUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: cancelUrl || `${baseUrl}/payment-cancel`,
+          metadata: {
+            userId: String(authUser.userId),
+            bookingId: bookingId ? String(bookingId) : ''
+          }
+        });
+
+        const rawDataStr = JSON.stringify(session);
+
+        if (bookingId) {
+          const bId = parseInt(String(bookingId), 10);
+          await prisma.booking.update({
+            where: { id: bId },
+            data: {
+              transactionId: session.id,
+              stripeRawData: rawDataStr
+            }
+          }).catch(() => {
+            const b = mockDb.bookings.find((item: any) => item.id === bId);
+            if (b) {
+              b.transactionId = session.id;
+              b.stripeRawData = rawDataStr;
+            }
+          });
+        }
+
+        return NextResponse.json({
+          success: true,
+          sessionId: session.id,
+          checkoutUrl: session.url,
+          transactionId: session.id,
+          stripeRawData: session
+        });
+      } catch (stripeErr: any) {
+        return NextResponse.json({ success: false, error: stripeErr.message || 'Failed to create checkout session' }, { status: 400 });
       }
     }
 
@@ -6554,6 +6882,7 @@ export async function PUT(
       let latitude: any = undefined;
       let longitude: any = undefined;
       let profileImageUrl: any = undefined;
+      let stripeCustomerId: any = undefined;
 
       const contentType = request.headers.get('content-type') || '';
       if (contentType.includes('multipart/form-data')) {
@@ -6568,6 +6897,7 @@ export async function PUT(
           postalCode = formData.get('postalCode') ?? formData.get('postal_code') ?? formData.get('zipCode');
           latitude = formData.get('latitude') ?? formData.get('lat');
           longitude = formData.get('longitude') ?? formData.get('lng') ?? formData.get('long');
+          stripeCustomerId = formData.get('stripeCustomerId') ?? formData.get('stripe_customer_id');
           const profileImageFile = formData.get('profileImage');
 
           if (profileImageFile && typeof profileImageFile === 'object' && 'name' in profileImageFile) {
@@ -6609,6 +6939,7 @@ export async function PUT(
         latitude = body.latitude ?? body.lat;
         longitude = body.longitude ?? body.lng ?? body.long;
         profileImageUrl = body.profileImageUrl;
+        stripeCustomerId = body.stripeCustomerId ?? body.stripe_customer_id;
       }
 
       const locVal = location ?? address;
@@ -6635,6 +6966,7 @@ export async function PUT(
           if (profileImageUrl !== undefined && profileImageUrl !== null) clientProfileData.profileImageUrl = profileImageUrl;
           if (latitude !== undefined && latitude !== null && latitude !== '') clientProfileData.latitude = parseFloat(latitude);
           if (longitude !== undefined && longitude !== null && longitude !== '') clientProfileData.longitude = parseFloat(longitude);
+          if (stripeCustomerId !== undefined && stripeCustomerId !== null) clientProfileData.stripeCustomerId = String(stripeCustomerId);
 
           updateData.clientProfile = {
             upsert: {
@@ -6675,6 +7007,7 @@ export async function PUT(
           if (profileImageUrl !== undefined && profileImageUrl !== null) (profile as any).profileImageUrl = profileImageUrl;
           if (latitude !== undefined && latitude !== null && latitude !== '') (profile as any).latitude = parseFloat(latitude);
           if (longitude !== undefined && longitude !== null && longitude !== '') (profile as any).longitude = parseFloat(longitude);
+          if (stripeCustomerId !== undefined && stripeCustomerId !== null) (profile as any).stripeCustomerId = String(stripeCustomerId);
 
           return { ...user, clientProfile: profile };
         }
