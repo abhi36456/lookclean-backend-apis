@@ -207,18 +207,12 @@ const mockDb = {
     {
       slug: 'client-faqs',
       title: 'Client FAQ',
-      content: JSON.stringify([
-        { question: 'How do I book an appointment?', answer: 'Select a salon or freelancer, choose your service and time slot, then confirm booking.' },
-        { question: 'Can I cancel or reschedule my booking?', answer: 'Yes, go to My Bookings in your profile to reschedule or cancel at least 2 hours prior.' }
-      ])
+      content: '<h2>Client FAQ</h2><p><b>Q: How do I book an appointment?</b></p><p>A: Select a salon or freelancer, choose your service and time slot, then confirm booking.</p><p><b>Q: Can I cancel or reschedule my booking?</b></p><p>A: Yes, go to My Bookings in your profile to reschedule or cancel at least 2 hours prior.</p>'
     },
     {
       slug: 'provider-faqs',
       title: 'Provider FAQ',
-      content: JSON.stringify([
-        { question: 'How do I receive booking notifications?', answer: 'Notifications are sent via push notifications and SMS.' },
-        { question: 'How do I set my schedule?', answer: 'Configure your working hours under Schedule Settings.' }
-      ])
+      content: '<h2>Provider FAQ</h2><p><b>Q: How do I receive booking notifications?</b></p><p>A: Notifications are sent via push notifications and SMS.</p><p><b>Q: How do I set my schedule?</b></p><p>A: Configure your working hours under Schedule Settings.</p>'
     },
     {
       slug: 'community-guidelines',
@@ -703,14 +697,25 @@ export async function GET(
       }
 
       const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY || '';
-      const isConfigured = Boolean(process.env.STRIPE_SECRET_KEY && publishableKey);
+      const secretKey = process.env.STRIPE_SECRET_KEY || '';
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
+      const connectClientId = process.env.STRIPE_CONNECT_CLIENT_ID || '';
+
+      const isConfigured = Boolean(secretKey && publishableKey);
 
       return NextResponse.json({
         success: true,
-        publishableKey: publishableKey,
+        publishableKey,
+        secretKey,
+        webhookSecret,
+        connectClientId,
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: publishableKey,
+        STRIPE_SECRET_KEY: secretKey,
+        STRIPE_WEBHOOK_SECRET: webhookSecret,
+        STRIPE_CONNECT_CLIENT_ID: connectClientId,
         currency: 'usd',
         webhookRoute: '/api/stripe/webhook',
-        isConfigured: isConfigured
+        isConfigured
       });
     }
 
@@ -2275,27 +2280,50 @@ export async function GET(
         let parsedContent = rawContent;
         let contentType: 'array' | 'html' = 'html';
 
+        let isArray = false;
+        let arrayItems: any[] = [];
+
         if (Array.isArray(rawContent)) {
-          contentType = 'array';
-          parsedContent = rawContent;
+          isArray = true;
+          arrayItems = rawContent;
         } else if (typeof rawContent === 'string') {
           const trimmed = rawContent.trim();
           if (trimmed.startsWith('[')) {
             try {
               const parsed = JSON.parse(rawContent);
               if (Array.isArray(parsed)) {
-                contentType = 'array';
-                parsedContent = parsed;
+                isArray = true;
+                arrayItems = parsed;
               }
             } catch {
-              contentType = 'html';
+              isArray = false;
             }
-          } else {
-            contentType = 'html';
           }
         } else if (typeof rawContent === 'object' && rawContent !== null) {
-          contentType = 'array';
-          parsedContent = rawContent;
+          isArray = true;
+          arrayItems = Array.isArray(rawContent) ? rawContent : [rawContent];
+        }
+
+        if (page.slug === 'client-faqs' || page.slug === 'provider-faqs' || page.slug === 'client-faq' || page.slug === 'provider-faq') {
+          contentType = 'html';
+          if (isArray && arrayItems.length > 0) {
+            parsedContent = arrayItems.map((item: any) => {
+              if (typeof item === 'string') return `<p>${item}</p>`;
+              const q = item.question || item.q || item.title || '';
+              const a = item.answer || item.a || item.content || item.description || '';
+              return `<h2>${q}</h2><p>${a}</p>`;
+            }).join('');
+          } else {
+            parsedContent = typeof rawContent === 'string' ? rawContent : String(rawContent || '');
+          }
+        } else {
+          if (isArray) {
+            contentType = 'array';
+            parsedContent = arrayItems;
+          } else {
+            contentType = 'html';
+            parsedContent = typeof rawContent === 'string' ? rawContent : String(rawContent || '');
+          }
         }
 
         const pageObj = typeof page.toObject === 'function' ? page.toObject() : { ...page };
@@ -6102,27 +6130,50 @@ export async function POST(
         let parsedContent = rawContent;
         let contentType: 'array' | 'html' = 'html';
 
+        let isArray = false;
+        let arrayItems: any[] = [];
+
         if (Array.isArray(rawContent)) {
-          contentType = 'array';
-          parsedContent = rawContent;
+          isArray = true;
+          arrayItems = rawContent;
         } else if (typeof rawContent === 'string') {
           const trimmed = rawContent.trim();
           if (trimmed.startsWith('[')) {
             try {
               const parsed = JSON.parse(rawContent);
               if (Array.isArray(parsed)) {
-                contentType = 'array';
-                parsedContent = parsed;
+                isArray = true;
+                arrayItems = parsed;
               }
             } catch {
-              contentType = 'html';
+              isArray = false;
             }
-          } else {
-            contentType = 'html';
           }
         } else if (typeof rawContent === 'object' && rawContent !== null) {
-          contentType = 'array';
-          parsedContent = rawContent;
+          isArray = true;
+          arrayItems = Array.isArray(rawContent) ? rawContent : [rawContent];
+        }
+
+        if (page.slug === 'client-faqs' || page.slug === 'provider-faqs' || page.slug === 'client-faq' || page.slug === 'provider-faq') {
+          contentType = 'html';
+          if (isArray && arrayItems.length > 0) {
+            parsedContent = arrayItems.map((item: any) => {
+              if (typeof item === 'string') return `<p>${item}</p>`;
+              const q = item.question || item.q || item.title || '';
+              const a = item.answer || item.a || item.content || item.description || '';
+              return `<h2>${q}</h2><p>${a}</p>`;
+            }).join('');
+          } else {
+            parsedContent = typeof rawContent === 'string' ? rawContent : String(rawContent || '');
+          }
+        } else {
+          if (isArray) {
+            contentType = 'array';
+            parsedContent = arrayItems;
+          } else {
+            contentType = 'html';
+            parsedContent = typeof rawContent === 'string' ? rawContent : String(rawContent || '');
+          }
         }
 
         const pageObj = typeof page.toObject === 'function' ? page.toObject() : { ...page };

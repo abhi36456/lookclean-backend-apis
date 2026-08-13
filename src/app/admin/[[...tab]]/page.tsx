@@ -1200,9 +1200,13 @@ export default function AdminPage() {
 
   // Filter users based on query and filter
   const filteredUsers = users.filter((u) => {
+    const city = u.clientProfile?.city || u.providerProfile?.city || u.city || '';
+    const country = u.clientProfile?.country || u.providerProfile?.country || u.country || '';
     const matchesSearch =
-      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase());
+      (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      country.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRole = roleFilter === 'all' || u.role === roleFilter;
     return matchesSearch && matchesRole && u.role !== 'admin';
   });
@@ -3497,6 +3501,8 @@ export default function AdminPage() {
                           <th className="p-4 w-12 text-center">Photo</th>
                           <th className="p-4">Name</th>
                           <th className="p-4">Email</th>
+                          <th className="p-4">City</th>
+                          <th className="p-4">Country</th>
                           <th className="p-4 text-center">Featured</th>
                           <th className="p-4">Role</th>
                           <th className="p-4 text-center">SMS Phone</th>
@@ -3539,6 +3545,12 @@ export default function AdminPage() {
                               </span>
                             </td>
                             <td className="p-4 text-gray-300">{user.email}</td>
+                            <td className="p-4 text-gray-300 font-medium">
+                              {user.clientProfile?.city || user.providerProfile?.city || user.city || '—'}
+                            </td>
+                            <td className="p-4 text-gray-300 font-medium">
+                              {user.clientProfile?.country || user.providerProfile?.country || user.country || '—'}
+                            </td>
                             <td className="p-4 text-center">
                               {user.role === 'provider' ? (
                                 <button

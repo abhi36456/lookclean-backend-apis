@@ -39,6 +39,26 @@
     {
       "name": "Stripe Payments",
       "description": "APIs for salon charges, Stripe Payment Intents, Checkout Sessions, Payment Status, and Webhook integration"
+    },
+    {
+      "name": "Reviews & Ratings",
+      "description": "Provider review and rating submission APIs"
+    },
+    {
+      "name": "Vouchers & Promo Codes",
+      "description": "Available discount voucher and promo code APIs"
+    },
+    {
+      "name": "CMS & Legal Pages",
+      "description": "CMS legal pages & FAQs content (Terms & Conditions, Privacy Policy, Refund Policy, Client/Provider Payment Policies, Client/Provider FAQs, Community Guidelines)"
+    },
+    {
+      "name": "App Settings & Version",
+      "description": "Mobile app version requirement settings API"
+    },
+    {
+      "name": "Report & Issues",
+      "description": "User feedback and app issues report submission API"
     }
   ],
   "components": {
@@ -252,7 +272,14 @@
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean", "example": true },
-                    "publishableKey": { "type": "string", "example": "pk_test_51Px..." },
+                    "publishableKey": { "type": "string", "example": "pk_test_..." },
+                    "secretKey": { "type": "string", "example": "sk_test_..." },
+                    "webhookSecret": { "type": "string", "example": "whsec_..." },
+                    "connectClientId": { "type": "string", "example": "ca_..." },
+                    "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY": { "type": "string", "example": "pk_test_..." },
+                    "STRIPE_SECRET_KEY": { "type": "string", "example": "sk_test_..." },
+                    "STRIPE_WEBHOOK_SECRET": { "type": "string", "example": "whsec_..." },
+                    "STRIPE_CONNECT_CLIENT_ID": { "type": "string", "example": "ca_..." },
                     "currency": { "type": "string", "example": "usd" },
                     "webhookRoute": { "type": "string", "example": "/api/stripe/webhook" },
                     "isConfigured": { "type": "boolean", "example": true }
@@ -2883,6 +2910,334 @@
           },
           "403": {
             "description": "Forbidden: Requires provider role"
+          }
+        }
+      }
+    },
+    "/clients/reviews": {
+      "post": {
+        "tags": [
+          "Reviews & Ratings"
+        ],
+        "summary": "Submit Rating & Review for Provider",
+        "description": "Allows a client user to submit a star rating and written review for a service provider.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "rating"
+                ],
+                "properties": {
+                  "providerId": {
+                    "type": "integer",
+                    "example": 2,
+                    "description": "ID of the service provider being reviewed"
+                  },
+                  "bookingId": {
+                    "type": "integer",
+                    "example": 5,
+                    "description": "ID of the associated booking"
+                  },
+                  "rating": {
+                    "type": "number",
+                    "example": 5,
+                    "description": "Rating score (1 to 5)"
+                  },
+                  "comment": {
+                    "type": "string",
+                    "example": "Great service! Very punctual and clean.",
+                    "description": "Optional review comment or feedback"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Review submitted successfully"
+          },
+          "400": {
+            "description": "Bad Request - Missing rating or provider/booking details"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/clients/providers/reviews": {
+      "get": {
+        "tags": [
+          "Reviews & Ratings"
+        ],
+        "summary": "Get Reviews & Ratings for Provider",
+        "description": "Retrieve rating statistics and user reviews list for a specific service provider.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "providerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID of the provider whose reviews are being requested"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reviews and ratings retrieved successfully"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/clients/vouchers": {
+      "get": {
+        "tags": [
+          "Vouchers & Promo Codes"
+        ],
+        "summary": "Get List of Active Promo / Voucher Codes",
+        "description": "Retrieve list of active discount vouchers and promo codes available for clients.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of active promo/voucher codes retrieved successfully"
+          },
+          "400": {
+            "description": "Failed to fetch promo codes"
+          }
+        }
+      }
+    },
+    "/cms": {
+      "get": {
+        "tags": [
+          "CMS & Legal Pages"
+        ],
+        "summary": "Get All CMS Pages & Legal Content",
+        "description": "Retrieve list of all CMS pages content including Terms & Conditions, Privacy Policy, Refund Policy, Payment Policies, Client/Provider FAQs, and Community Guidelines.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "All CMS pages content retrieved successfully"
+          }
+        }
+      }
+    },
+    "/cms/{slug}": {
+      "get": {
+        "tags": [
+          "CMS & Legal Pages"
+        ],
+        "summary": "Get CMS Legal Page or FAQ Content by Slug",
+        "description": "Retrieve specific CMS page or FAQ content by slug identifier.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "terms",
+                "privacy-policy",
+                "refund-policy",
+                "client-payment-policy",
+                "provider-payment-policy",
+                "client-faqs",
+                "provider-faqs",
+                "community-guidelines"
+              ]
+            },
+            "description": "CMS page slug identifier (terms, privacy-policy, refund-policy, client-payment-policy, provider-payment-policy, client-faqs, provider-faqs, community-guidelines)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CMS page content retrieved successfully"
+          },
+          "404": {
+            "description": "CMS page not found"
+          }
+        }
+      }
+    },
+    "/app-version": {
+      "get": {
+        "tags": [
+          "App Settings & Version"
+        ],
+        "summary": "Get Mobile App Current & Minimum Version Requirements",
+        "description": "Retrieve current and minimum required app version settings for mobile clients.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "App version requirements retrieved successfully"
+          },
+          "400": {
+            "description": "Failed to fetch app versions"
+          }
+        }
+      }
+    },
+    "/reports": {
+      "post": {
+        "tags": [
+          "Report & Issues"
+        ],
+        "summary": "Submit App Feedback or Issue Report",
+        "description": "Submit user feedback or app issue report with optional file attachment uploads.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "message"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Issue with booking confirmation",
+                    "description": "Short title describing the issue or feedback"
+                  },
+                  "message": {
+                    "type": "string",
+                    "example": "I encountered an error when trying to select a time slot.",
+                    "description": "Detailed explanation of the issue"
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "/uploads/reports/screenshot1.png"
+                    ],
+                    "description": "List of attachment URLs"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "message"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Issue with booking confirmation"
+                  },
+                  "message": {
+                    "type": "string",
+                    "example": "I encountered an error when trying to select a time slot."
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Uploaded image files or attachments"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Issue report submitted successfully"
+          },
+          "400": {
+            "description": "Bad Request - Title and message are required"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Report & Issues"
+        ],
+        "summary": "Get User Submitted Issue Reports",
+        "description": "Retrieve list of issue reports submitted by the logged in user, or all issue reports for administrators.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "open",
+                "closed"
+              ]
+            },
+            "description": "Filter reports by status ('open' or 'closed')"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of issue reports retrieved successfully"
+          },
+          "400": {
+            "description": "Failed to fetch reports"
+          },
+          "401": {
+            "description": "Unauthorized"
           }
         }
       }
