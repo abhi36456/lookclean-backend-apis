@@ -1199,7 +1199,7 @@ export default function AdminPage() {
 
 
   // Filter users based on query and filter
-  const filteredUsers = users.filter((u) => {
+  const filteredUsers = users.filter((u: any) => {
     const city = u.clientProfile?.city || u.providerProfile?.city || u.city || '';
     const country = u.clientProfile?.country || u.providerProfile?.country || u.country || '';
     const matchesSearch =
@@ -3546,10 +3546,10 @@ export default function AdminPage() {
                             </td>
                             <td className="p-4 text-gray-300">{user.email}</td>
                             <td className="p-4 text-gray-300 font-medium">
-                              {user.clientProfile?.city || user.providerProfile?.city || user.city || '—'}
+                              {(user as any).clientProfile?.city || (user as any).providerProfile?.city || (user as any).city || '—'}
                             </td>
                             <td className="p-4 text-gray-300 font-medium">
-                              {user.clientProfile?.country || user.providerProfile?.country || user.country || '—'}
+                              {(user as any).clientProfile?.country || (user as any).providerProfile?.country || (user as any).country || '—'}
                             </td>
                             <td className="p-4 text-center">
                               {user.role === 'provider' ? (

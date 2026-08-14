@@ -273,16 +273,7 @@
                   "properties": {
                     "success": { "type": "boolean", "example": true },
                     "publishableKey": { "type": "string", "example": "pk_test_..." },
-                    "secretKey": { "type": "string", "example": "sk_test_..." },
-                    "webhookSecret": { "type": "string", "example": "whsec_..." },
-                    "connectClientId": { "type": "string", "example": "ca_..." },
-                    "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY": { "type": "string", "example": "pk_test_..." },
-                    "STRIPE_SECRET_KEY": { "type": "string", "example": "sk_test_..." },
-                    "STRIPE_WEBHOOK_SECRET": { "type": "string", "example": "whsec_..." },
-                    "STRIPE_CONNECT_CLIENT_ID": { "type": "string", "example": "ca_..." },
-                    "currency": { "type": "string", "example": "usd" },
-                    "webhookRoute": { "type": "string", "example": "/api/stripe/webhook" },
-                    "isConfigured": { "type": "boolean", "example": true }
+                    "currency": { "type": "string", "example": "usd" }
                   }
                 }
               }
@@ -1980,6 +1971,22 @@
                   "promoCode": {
                     "type": "string",
                     "example": "SAVE20"
+                  },
+                  "stripe_transection_id": {
+                    "type": "string",
+                    "example": "pi_3MtwBwLkdIwHu7ix28a3tCvW",
+                    "description": "Stripe transaction or payment intent ID"
+                  },
+                  "stripe_transection_raw": {
+                    "type": "object",
+                    "description": "Raw Stripe transaction response object store",
+                    "example": {
+                      "id": "pi_3MtwBwLkdIwHu7ix28a3tCvW",
+                      "object": "payment_intent",
+                      "amount": 5000,
+                      "currency": "usd",
+                      "status": "succeeded"
+                    }
                   }
                 }
               }
@@ -1988,7 +1995,43 @@
         },
         "responses": {
           "200": {
-            "description": "Booking created successfully"
+            "description": "Booking created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Booking created successfully" },
+                    "booking": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "integer", "example": 1 },
+                        "clientId": { "type": "integer", "example": 2 },
+                        "providerId": { "type": "integer", "example": 3 },
+                        "numberOfPeople": { "type": "integer", "example": 2 },
+                        "date": { "type": "string", "example": "2026-07-20T00:00:00.000Z" },
+                        "timeSlot": { "type": "string", "example": "10:00 AM" },
+                        "status": { "type": "string", "example": "pending" },
+                        "serviceAmount": { "type": "number", "example": 100 },
+                        "grandTotal": { "type": "number", "example": 115 },
+                        "stripe_transection_id": { "type": "string", "example": "pi_3MtwBwLkdIwHu7ix28a3tCvW" },
+                        "stripe_transection_raw": {
+                          "type": "object",
+                          "example": {
+                            "id": "pi_3MtwBwLkdIwHu7ix28a3tCvW",
+                            "object": "payment_intent",
+                            "amount": 5000,
+                            "currency": "usd",
+                            "status": "succeeded"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

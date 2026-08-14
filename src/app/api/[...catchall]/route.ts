@@ -706,16 +706,7 @@ export async function GET(
       return NextResponse.json({
         success: true,
         publishableKey,
-        secretKey,
-        webhookSecret,
-        connectClientId,
-        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: publishableKey,
-        STRIPE_SECRET_KEY: secretKey,
-        STRIPE_WEBHOOK_SECRET: webhookSecret,
-        STRIPE_CONNECT_CLIENT_ID: connectClientId,
-        currency: 'usd',
-        webhookRoute: '/api/stripe/webhook',
-        isConfigured
+        currency: 'usd'
       });
     }
 
@@ -2119,8 +2110,23 @@ export async function GET(
             } : null;
 
             const { provider, ...rest } = b;
+            let parsedRawData = null;
+            if (b.stripeRawData) {
+              if (typeof b.stripeRawData === 'object') {
+                parsedRawData = b.stripeRawData;
+              } else {
+                try { parsedRawData = JSON.parse(b.stripeRawData); } catch { parsedRawData = b.stripeRawData; }
+              }
+            }
+            const stripeTransectionId = b.stripe_transection_id || b.stripe_transaction_id || b.transactionId || null;
+            const stripeTransectionRaw = b.stripe_transection_raw || b.stripe_transaction_raw || parsedRawData;
+
             return {
               ...rest,
+              stripe_transection_id: stripeTransectionId,
+              stripe_transaction_id: stripeTransectionId,
+              stripe_transection_raw: stripeTransectionRaw,
+              stripe_transaction_raw: stripeTransectionRaw,
               providerDetails
             };
           });
@@ -2128,7 +2134,7 @@ export async function GET(
         async () => {
           return mockDb.bookings
             .filter((b) => b.clientId === auth.userId)
-            .map((b) => {
+            .map((b: any) => {
               const services = mockDb.bookingServices
                 .filter((bs) => bs.bookingId === b.id)
                 .map((bs) => {
@@ -2159,7 +2165,26 @@ export async function GET(
                 longitude: profile?.longitude || null,
               } : null;
 
-              return { ...b, services, providerDetails };
+              let parsedRawData = null;
+              if (b.stripeRawData) {
+                if (typeof b.stripeRawData === 'object') {
+                  parsedRawData = b.stripeRawData;
+                } else {
+                  try { parsedRawData = JSON.parse(b.stripeRawData); } catch { parsedRawData = b.stripeRawData; }
+                }
+              }
+              const stripeTransectionId = b.stripe_transection_id || b.stripe_transaction_id || b.transactionId || null;
+              const stripeTransectionRaw = b.stripe_transection_raw || b.stripe_transaction_raw || parsedRawData;
+
+              return {
+                ...b,
+                stripe_transection_id: stripeTransectionId,
+                stripe_transaction_id: stripeTransectionId,
+                stripe_transection_raw: stripeTransectionRaw,
+                stripe_transaction_raw: stripeTransectionRaw,
+                services,
+                providerDetails
+              };
             })
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         }
@@ -5770,8 +5795,45 @@ export async function POST(
         return NextResponse.json({ message: 'Forbidden: Requires client role' }, { status: 403 });
       }
 
-      const { providerId, serviceIds, numberOfPeople, date, timeSlot, tipType, tipAmount, promoCode, promo_code, voucherCode, voucher_code } = body as any;
+      const {
+        providerId,
+        serviceIds,
+        numberOfPeople,
+        date,
+        timeSlot,
+        tipType,
+        tipAmount,
+        promoCode,
+        promo_code,
+        voucherCode,
+        voucher_code,
+        stripe_transection_id,
+        stripe_transaction_id,
+        stripe_transection_raw,
+        stripe_transaction_raw
+      } = body as any;
       const targetPromoCode = promoCode || promo_code || voucherCode || voucher_code;
+      const finalTransactionId = stripe_transection_id || stripe_transaction_id || (body as any).transactionId || (body as any).stripeTransactionId || null;
+      const rawInput = stripe_transection_raw !== undefined ? stripe_transection_raw : (stripe_transaction_raw !== undefined ? stripe_transaction_raw : ((body as any).stripeRawData !== undefined ? (body as any).stripeRawData : null));
+
+      const finalStripeRawStr = rawInput !== null && rawInput !== undefined
+        ? (typeof rawInput === 'object' ? JSON.stringify(rawInput) : String(rawInput))
+        : null;
+
+      let finalStripeRawObj: any = null;
+      if (rawInput !== null && rawInput !== undefined) {
+        if (typeof rawInput === 'object') {
+          finalStripeRawObj = rawInput;
+        } else if (typeof rawInput === 'string') {
+          try {
+            finalStripeRawObj = JSON.parse(rawInput);
+          } catch {
+            finalStripeRawObj = rawInput;
+          }
+        } else {
+          finalStripeRawObj = rawInput;
+        }
+      }
 
       if (!providerId || !Array.isArray(serviceIds) || serviceIds.length === 0 || !date || !timeSlot) {
         return NextResponse.json({ message: 'Missing required booking fields' }, { status: 400 });
@@ -5915,6 +5977,8 @@ export async function POST(
                 promoDiscount: discount,
                 serviceAmount,
                 grandTotal,
+                transactionId: finalTransactionId,
+                stripeRawData: finalStripeRawStr,
                 services: {
                   create: serviceIds.map((sId) => ({
                     serviceId: Number(sId)
@@ -5946,6 +6010,8 @@ export async function POST(
               promoDiscount: discount,
               serviceAmount,
               grandTotal,
+              transactionId: finalTransactionId,
+              stripeRawData: finalStripeRawStr,
               createdAt: new Date()
             };
             mockDb.bookings.push(newBooking);
@@ -5983,10 +6049,18 @@ export async function POST(
           console.error('Failed to trigger FCM booking notification:', fcmErr);
         }
 
+        const formattedBooking = {
+          ...(booking as any),
+          stripe_transection_id: finalTransactionId || (booking as any)?.transactionId || null,
+          stripe_transaction_id: finalTransactionId || (booking as any)?.transactionId || null,
+          stripe_transection_raw: finalStripeRawObj || ((booking as any)?.stripeRawData ? (() => { try { return JSON.parse((booking as any).stripeRawData); } catch { return (booking as any).stripeRawData; } })() : null),
+          stripe_transaction_raw: finalStripeRawObj || ((booking as any)?.stripeRawData ? (() => { try { return JSON.parse((booking as any).stripeRawData); } catch { return (booking as any).stripeRawData; } })() : null)
+        };
+
         return NextResponse.json({
           success: true,
           message: 'Booking created successfully',
-          booking
+          booking: formattedBooking
         });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to create booking' }, { status: 400 });
