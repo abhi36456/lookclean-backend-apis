@@ -451,6 +451,10 @@ function sanitizeUser(user: unknown, request?: any) {
       location: 'Location',
       isFeatured: false,
       featured: false,
+      isAvailable: true,
+      isAway: false,
+      isRushMode: false,
+      isTravelMode: false,
       totalDistance: '0.0 mi',
     };
   }
@@ -460,6 +464,29 @@ function sanitizeUser(user: unknown, request?: any) {
     const isFeatBool = featVal === true || featVal === 'true' || featVal === 1 || featVal === '1';
     plainUser.providerProfile.isFeatured = isFeatBool;
     plainUser.providerProfile.featured = isFeatBool;
+
+    const availVal = plainUser.providerProfile.isAvailable ?? plainUser.providerProfile.is_available ?? plainUser.isAvailable ?? plainUser.is_available;
+    const isAvailBool = availVal !== undefined && availVal !== null ? (availVal === true || availVal === 'true' || availVal === 1 || availVal === '1') : true;
+
+    const awayVal = plainUser.providerProfile.isAway ?? plainUser.providerProfile.is_away ?? plainUser.isAway ?? plainUser.is_away;
+    const isAwayBool = awayVal !== undefined && awayVal !== null ? (awayVal === true || awayVal === 'true' || awayVal === 1 || awayVal === '1') : false;
+
+    const rushVal = plainUser.providerProfile.isRushMode ?? plainUser.providerProfile.is_rush_mode ?? plainUser.isRushMode ?? plainUser.is_rush_mode;
+    const isRushBool = rushVal !== undefined && rushVal !== null ? (rushVal === true || rushVal === 'true' || rushVal === 1 || rushVal === '1') : false;
+
+    const travelVal = plainUser.providerProfile.isTravelMode ?? plainUser.providerProfile.is_travel_mode ?? plainUser.isTravelMode ?? plainUser.is_travel_mode;
+    const isTravelBool = travelVal !== undefined && travelVal !== null ? (travelVal === true || travelVal === 'true' || travelVal === 1 || travelVal === '1') : false;
+
+    plainUser.providerProfile.isAvailable = isAvailBool;
+    plainUser.providerProfile.isAway = isAwayBool;
+    plainUser.providerProfile.isRushMode = isRushBool;
+    plainUser.providerProfile.isTravelMode = isTravelBool;
+
+    plainUser.isAvailable = isAvailBool;
+    plainUser.isAway = isAwayBool;
+    plainUser.isRushMode = isRushBool;
+    plainUser.isTravelMode = isTravelBool;
+
     plainUser.providerProfile.totalDistance = plainUser.providerProfile.totalDistance ? String(plainUser.providerProfile.totalDistance).replace(/\s*km$/i, ' mi') : '0.0 mi';
     plainUser.isFeatured = isFeatBool;
     plainUser.totalDistance = plainUser.providerProfile.totalDistance;
@@ -575,6 +602,86 @@ function sanitizeUser(user: unknown, request?: any) {
   return plainUser;
 }
 
+/**
+ * Helper to process a booking object:
+ * 1. Parses stripeRawData / stripe_transection_raw
+ * 2. Determines paymentStatus (succeeded, failed, or pending)
+ * 3. Auto-confirms pending bookings if payment status is completed/succeeded
+ * 4. Attaches normalized payment and transaction fields to the booking object
+ */
+async function processBookingPaymentAndStatus(b: any) {
+  if (!b) return b;
+
+  let parsedRawData: any = null;
+  const rawInput = b.stripeRawData ?? b.stripe_transection_raw ?? b.stripe_transaction_raw ?? null;
+
+  if (rawInput) {
+    if (typeof rawInput === 'object' && rawInput !== null) {
+      parsedRawData = rawInput;
+    } else if (typeof rawInput === 'string') {
+      try {
+        parsedRawData = JSON.parse(rawInput);
+      } catch {
+        parsedRawData = null;
+      }
+    }
+  }
+
+  const txId = b.stripe_transection_id || b.stripe_transaction_id || b.transactionId || b.stripeTransactionId || null;
+  const rawDataStr = typeof rawInput === 'object' ? JSON.stringify(rawInput) : rawInput;
+
+  // Determine Stripe payment status
+  let paymentStatus = 'pending';
+  if (parsedRawData && typeof parsedRawData === 'object') {
+    const rawStatus = String(parsedRawData.status || parsedRawData.payment_status || '').toLowerCase();
+    if (['succeeded', 'paid', 'complete', 'completed'].includes(rawStatus)) {
+      paymentStatus = 'succeeded';
+    } else if (['failed', 'canceled', 'requires_payment_method'].includes(rawStatus)) {
+      paymentStatus = 'failed';
+    } else if (txId) {
+      paymentStatus = 'succeeded';
+    }
+  } else if (txId && String(txId).trim().length > 0) {
+    paymentStatus = 'succeeded';
+  }
+
+  let currentStatus = b.status || 'pending';
+  // If payment status is completed/succeeded and booking status is pending, transition to confirmed
+  if ((paymentStatus === 'succeeded' || paymentStatus === 'completed' || paymentStatus === 'paid') && currentStatus === 'pending') {
+    currentStatus = 'confirmed';
+    b.status = 'confirmed';
+
+    if (b.id) {
+      const bId = typeof b.id === 'string' ? parseInt(b.id, 10) : b.id;
+      if (!isNaN(bId)) {
+        prisma.booking.update({
+          where: { id: bId },
+          data: { status: 'confirmed' }
+        }).catch(() => {});
+
+        if (typeof mockDb !== 'undefined' && Array.isArray(mockDb.bookings)) {
+          const mockB = mockDb.bookings.find((item: any) => item.id === bId);
+          if (mockB) mockB.status = 'confirmed';
+        }
+      }
+    }
+  }
+
+  return {
+    ...b,
+    status: currentStatus,
+    transactionId: txId,
+    stripe_transection_id: txId,
+    stripe_transaction_id: txId,
+    stripeRawData: rawDataStr,
+    stripe_transection_raw: parsedRawData || rawDataStr,
+    stripe_transaction_raw: parsedRawData || rawDataStr,
+    paymentStatus: paymentStatus,
+    payment_status: paymentStatus,
+    stripe_payment_status: paymentStatus
+  };
+}
+
 async function enrichProviderProfile(providerProfile: any, request?: any) {
   if (!providerProfile) return;
 
@@ -676,6 +783,18 @@ async function enrichProviderProfile(providerProfile: any, request?: any) {
       };
     });
   }
+
+  const availVal = providerProfile.isAvailable ?? providerProfile.is_available;
+  providerProfile.isAvailable = availVal !== undefined && availVal !== null ? (availVal === true || availVal === 'true' || availVal === 1 || availVal === '1') : true;
+
+  const awayVal = providerProfile.isAway ?? providerProfile.is_away;
+  providerProfile.isAway = awayVal !== undefined && awayVal !== null ? (awayVal === true || awayVal === 'true' || awayVal === 1 || awayVal === '1') : false;
+
+  const rushVal = providerProfile.isRushMode ?? providerProfile.is_rush_mode;
+  providerProfile.isRushMode = rushVal !== undefined && rushVal !== null ? (rushVal === true || rushVal === 'true' || rushVal === 1 || rushVal === '1') : false;
+
+  const travelVal = providerProfile.isTravelMode ?? providerProfile.is_travel_mode;
+  providerProfile.isTravelMode = travelVal !== undefined && travelVal !== null ? (travelVal === true || travelVal === 'true' || travelVal === 1 || travelVal === '1') : false;
 }
 
 // ROUTE HANDLERS
@@ -1034,6 +1153,58 @@ export async function GET(
         return NextResponse.json({ message: 'User not found' }, { status: 404 });
       }
       return NextResponse.json(sanitizeUser(userData, request));
+    }
+
+    // 1. Fetch provider profile (/api/providers/profile or /api/provider/profile)
+    if (path === 'providers/profile' || path === 'provider/profile') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      }
+      if (auth.role !== 'provider' && auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      try {
+        const userData = await executeWithDbFallback(
+          async () => {
+            return await prisma.user.findUnique({
+              where: { id: auth.userId },
+              include: {
+                providerProfile: {
+                  include: { services: true, amenities: true }
+                }
+              }
+            });
+          },
+          async () => {
+            const user = mockDb.users.find((u) => u.id === auth.userId);
+            if (!user) return null;
+            const profile = mockDb.profiles.find((p) => p.userId === auth.userId);
+            let providerProfile = undefined;
+            if (profile) {
+              providerProfile = {
+                ...profile,
+                services: mockDb.services ? mockDb.services.filter((s) => s.profileId === profile.id) : [],
+                amenities: mockDb.amenities ? mockDb.amenities.filter((a) => a.profileId === profile.id) : []
+              };
+            }
+            return { ...user, providerProfile };
+          }
+        );
+
+        if (!userData) {
+          return NextResponse.json({ message: 'Provider not found' }, { status: 404 });
+        }
+
+        const sanitized = sanitizeUser(userData, request);
+        if (sanitized?.providerProfile) {
+          await enrichProviderProfile(sanitized.providerProfile, request);
+        }
+        return NextResponse.json(sanitized);
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to fetch provider profile' }, { status: 400 });
+      }
     }
 
     // 1a. Get list of all providers with search & category filters (/api/clients/providers or /api/client/providers)
@@ -2084,8 +2255,9 @@ export async function GET(
             },
             orderBy: { date: 'desc' }
           });
-          return dbBookings.map((b: any) => {
-            const providerUser = b.provider;
+          return Promise.all(dbBookings.map(async (b: any) => {
+            const processed = await processBookingPaymentAndStatus(b);
+            const providerUser = processed.provider;
             const profile = providerUser?.providerProfile;
             let profileImageUrl = profile?.profileImageUrl || null;
             if (baseUrl && profileImageUrl && profileImageUrl.startsWith('/')) {
@@ -2109,30 +2281,15 @@ export async function GET(
               longitude: profile?.longitude || null,
             } : null;
 
-            const { provider, ...rest } = b;
-            let parsedRawData = null;
-            if (b.stripeRawData) {
-              if (typeof b.stripeRawData === 'object') {
-                parsedRawData = b.stripeRawData;
-              } else {
-                try { parsedRawData = JSON.parse(b.stripeRawData); } catch { parsedRawData = b.stripeRawData; }
-              }
-            }
-            const stripeTransectionId = b.stripe_transection_id || b.stripe_transaction_id || b.transactionId || null;
-            const stripeTransectionRaw = b.stripe_transection_raw || b.stripe_transaction_raw || parsedRawData;
-
+            const { provider, ...rest } = processed;
             return {
               ...rest,
-              stripe_transection_id: stripeTransectionId,
-              stripe_transaction_id: stripeTransectionId,
-              stripe_transection_raw: stripeTransectionRaw,
-              stripe_transaction_raw: stripeTransectionRaw,
               providerDetails
             };
-          });
+          }));
         },
         async () => {
-          return mockDb.bookings
+          const rawMockList = mockDb.bookings
             .filter((b) => b.clientId === auth.userId)
             .map((b: any) => {
               const services = mockDb.bookingServices
@@ -2165,28 +2322,15 @@ export async function GET(
                 longitude: profile?.longitude || null,
               } : null;
 
-              let parsedRawData = null;
-              if (b.stripeRawData) {
-                if (typeof b.stripeRawData === 'object') {
-                  parsedRawData = b.stripeRawData;
-                } else {
-                  try { parsedRawData = JSON.parse(b.stripeRawData); } catch { parsedRawData = b.stripeRawData; }
-                }
-              }
-              const stripeTransectionId = b.stripe_transection_id || b.stripe_transaction_id || b.transactionId || null;
-              const stripeTransectionRaw = b.stripe_transection_raw || b.stripe_transaction_raw || parsedRawData;
-
               return {
                 ...b,
-                stripe_transection_id: stripeTransectionId,
-                stripe_transaction_id: stripeTransectionId,
-                stripe_transection_raw: stripeTransectionRaw,
-                stripe_transaction_raw: stripeTransectionRaw,
                 services,
                 providerDetails
               };
             })
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+          return Promise.all(rawMockList.map((b: any) => processBookingPaymentAndStatus(b)));
         }
       );
       return NextResponse.json(list);
@@ -2212,8 +2356,9 @@ export async function GET(
             },
             orderBy: { date: 'desc' }
           });
-          return dbBookings.map((b: any) => {
-            const clientUser = b.client;
+          return Promise.all(dbBookings.map(async (b: any) => {
+            const processed = await processBookingPaymentAndStatus(b);
+            const clientUser = processed.client;
             const profile = clientUser?.clientProfile;
             let profileImageUrl = profile?.profileImageUrl || null;
             if (baseUrl && profileImageUrl && profileImageUrl.startsWith('/')) {
@@ -2231,15 +2376,15 @@ export async function GET(
               longitude: profile?.longitude || null,
             } : null;
 
-            const { client, ...rest } = b;
+            const { client, ...rest } = processed;
             return {
               ...rest,
               clientDetails
             };
-          });
+          }));
         },
         async () => {
-          return mockDb.bookings
+          const rawMockList = mockDb.bookings
             .filter((b) => b.providerId === auth.userId)
             .map((b) => {
               const services = mockDb.bookingServices
@@ -2269,6 +2414,8 @@ export async function GET(
               return { ...b, services, clientDetails };
             })
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+          return Promise.all(rawMockList.map((b: any) => processBookingPaymentAndStatus(b)));
         }
       );
       return NextResponse.json(list);
@@ -2548,15 +2695,18 @@ export async function GET(
               },
               orderBy: { createdAt: 'desc' }
             });
-            return list.map((b: any) => ({
-              ...b,
-              client: sanitizeUser(b.client, request),
-              provider: sanitizeUser(b.provider, request),
-              services: b.services.map((bs: any) => bs.service)
+            return Promise.all(list.map(async (b: any) => {
+              const processed = await processBookingPaymentAndStatus(b);
+              return {
+                ...processed,
+                client: sanitizeUser(processed.client, request),
+                provider: sanitizeUser(processed.provider, request),
+                services: processed.services ? processed.services.map((bs: any) => bs.service || bs) : []
+              };
             }));
           },
           async () => {
-            return mockDb.bookings.map((b: any) => {
+            const rawMockList = mockDb.bookings.map((b: any) => {
               const client = mockDb.users.find((u) => u.id === b.clientId);
               const clientProfile = mockDb.profiles.find((p) => p.userId === b.clientId);
               const provider = mockDb.users.find((u) => u.id === b.providerId);
@@ -2570,6 +2720,8 @@ export async function GET(
                 services
               };
             }).sort((a: any, b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+
+            return Promise.all(rawMockList.map((b: any) => processBookingPaymentAndStatus(b)));
           }
         );
         return NextResponse.json({ success: true, bookings: bookingsList });
@@ -7142,8 +7294,8 @@ export async function PUT(
       return NextResponse.json(sanitized);
     }
 
-    // Update Provider Profile (/api/providers/profile)
-    if (path === 'providers/profile') {
+    // Update Provider Profile (/api/providers/profile or /api/provider/profile)
+    if (path === 'providers/profile' || path === 'provider/profile') {
       const auth = await getAuthenticatedUser(request);
       if (!auth) {
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -7153,9 +7305,7 @@ export async function PUT(
       }
 
       const { providerProfile, onboardingCompleted } = body as any;
-      if (!providerProfile) {
-        return NextResponse.json({ message: 'providerProfile is required' }, { status: 400 });
-      }
+      const profObj = providerProfile || body || {};
 
       const {
         name,
@@ -7180,8 +7330,16 @@ export async function PUT(
         lat,
         longitude,
         lng,
-        long
-      } = providerProfile;
+        long,
+        isAvailable,
+        is_available,
+        isAway,
+        is_away,
+        isRushMode,
+        is_rush_mode,
+        isTravelMode,
+        is_travel_mode
+      } = profObj;
 
       const locVal = (location || address || [city, state, country].filter(Boolean).join(', ') || '').toString();
       const salonNameVal = (salonName || salon_name) ? String(salonName || salon_name) : null;
@@ -7191,6 +7349,16 @@ export async function PUT(
       const postalCodeVal = (postalCode || postal_code || zipCode) ? String(postalCode || postal_code || zipCode) : null;
       const latVal = (latitude ?? lat) !== undefined && (latitude ?? lat) !== null && (latitude ?? lat) !== '' ? parseFloat(latitude ?? lat) : null;
       const lngVal = (longitude ?? lng ?? long) !== undefined && (longitude ?? lng ?? long) !== null && (longitude ?? lng ?? long) !== '' ? parseFloat(longitude ?? lng ?? long) : null;
+
+      const availInput = isAvailable ?? is_available ?? (body as any).isAvailable ?? (body as any).is_available;
+      const awayInput = isAway ?? is_away ?? (body as any).isAway ?? (body as any).is_away;
+      const rushInput = isRushMode ?? is_rush_mode ?? (body as any).isRushMode ?? (body as any).is_rush_mode;
+      const travelInput = isTravelMode ?? is_travel_mode ?? (body as any).isTravelMode ?? (body as any).is_travel_mode;
+
+      const isAvailableVal = availInput !== undefined && availInput !== null ? (availInput === true || availInput === 'true' || availInput === 1 || availInput === '1') : undefined;
+      const isAwayVal = awayInput !== undefined && awayInput !== null ? (awayInput === true || awayInput === 'true' || awayInput === 1 || awayInput === '1') : undefined;
+      const isRushModeVal = rushInput !== undefined && rushInput !== null ? (rushInput === true || rushInput === 'true' || rushInput === 1 || rushInput === '1') : undefined;
+      const isTravelModeVal = travelInput !== undefined && travelInput !== null ? (travelInput === true || travelInput === 'true' || travelInput === 1 || travelInput === '1') : undefined;
 
       try {
         const updatedUser = await executeWithDbFallback(
@@ -7218,7 +7386,11 @@ export async function PUT(
                 certificateUrl: certificateUrl ? (Array.isArray(certificateUrl) ? JSON.stringify(certificateUrl) : certificateUrl) : null,
                 coverImageUrl: coverImageUrl || null,
                 latitude: latVal,
-                longitude: lngVal
+                longitude: lngVal,
+                ...(isAvailableVal !== undefined && { isAvailable: isAvailableVal }),
+                ...(isAwayVal !== undefined && { isAway: isAwayVal }),
+                ...(isRushModeVal !== undefined && { isRushMode: isRushModeVal }),
+                ...(isTravelModeVal !== undefined && { isTravelMode: isTravelModeVal }),
               },
               create: {
                 userId: auth.userId,
@@ -7234,7 +7406,11 @@ export async function PUT(
                 certificateUrl: certificateUrl ? (Array.isArray(certificateUrl) ? JSON.stringify(certificateUrl) : certificateUrl) : null,
                 coverImageUrl: coverImageUrl || null,
                 latitude: latVal,
-                longitude: lngVal
+                longitude: lngVal,
+                isAvailable: isAvailableVal ?? true,
+                isAway: isAwayVal ?? false,
+                isRushMode: isRushModeVal ?? false,
+                isTravelMode: isTravelModeVal ?? false,
               }
             });
 
@@ -7311,6 +7487,10 @@ export async function PUT(
             profile.coverImageUrl = coverImageUrl || null;
             profile.latitude = latVal;
             profile.longitude = lngVal;
+            if (isAvailableVal !== undefined) profile.isAvailable = isAvailableVal;
+            if (isAwayVal !== undefined) profile.isAway = isAwayVal;
+            if (isRushModeVal !== undefined) profile.isRushMode = isRushModeVal;
+            if (isTravelModeVal !== undefined) profile.isTravelMode = isTravelModeVal;
 
             if (Array.isArray(services)) {
               mockDb.services = mockDb.services.filter((s) => s.profileId !== profile.id);

@@ -229,6 +229,22 @@
             "type": "boolean",
             "example": false
           },
+          "isAvailable": {
+            "type": "boolean",
+            "example": true
+          },
+          "isAway": {
+            "type": "boolean",
+            "example": false
+          },
+          "isRushMode": {
+            "type": "boolean",
+            "example": false
+          },
+          "isTravelMode": {
+            "type": "boolean",
+            "example": false
+          },
           "totalDistance": {
             "type": "string",
             "example": "2.5 mi"
@@ -3017,42 +3033,6 @@
         }
       }
     },
-    "/clients/providers/reviews": {
-      "get": {
-        "tags": [
-          "Reviews & Ratings"
-        ],
-        "summary": "Get Reviews & Ratings for Provider",
-        "description": "Retrieve rating statistics and user reviews list for a specific service provider.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "providerId",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer"
-            },
-            "description": "ID of the provider whose reviews are being requested"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Reviews and ratings retrieved successfully"
-          },
-          "400": {
-            "description": "Bad Request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        }
-      }
-    },
     "/clients/vouchers": {
       "get": {
         "tags": [
@@ -3240,44 +3220,6 @@
           },
           "400": {
             "description": "Bad Request - Title and message are required"
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        }
-      },
-      "get": {
-        "tags": [
-          "Report & Issues"
-        ],
-        "summary": "Get User Submitted Issue Reports",
-        "description": "Retrieve list of issue reports submitted by the logged in user, or all issue reports for administrators.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "open",
-                "closed"
-              ]
-            },
-            "description": "Filter reports by status ('open' or 'closed')"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List of issue reports retrieved successfully"
-          },
-          "400": {
-            "description": "Failed to fetch reports"
           },
           "401": {
             "description": "Unauthorized"

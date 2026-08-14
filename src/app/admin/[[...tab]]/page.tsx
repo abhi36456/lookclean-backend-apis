@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldAlert, LogOut, Search, Filter, ShieldCheck, Phone, Check, Mail,
   X, Calendar, Star, MapPin, Award, Clock, Users, Building, Activity, FileText, ChevronRight, Settings, Lock, Server, Globe, Tag, Scissors, Sparkles, Database,
-  HelpCircle, AlertCircle, Smartphone, Plus, Trash2, Edit3, Save, Eye, CheckCircle, ExternalLink, Percent, DollarSign
+  HelpCircle, AlertCircle, Smartphone, Plus, Trash2, Edit3, Save, Eye, CheckCircle, ExternalLink, Percent, DollarSign, Copy, CreditCard
 } from 'lucide-react';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
@@ -232,6 +232,14 @@ export default function AdminPage() {
   // Booking details drawer state
   const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
   const [bookingDrawerOpen, setBookingDrawerOpen] = useState(false);
+  const [copiedTxId, setCopiedTxId] = useState(false);
+
+  const handleCopyTxId = (txId: string) => {
+    if (!txId) return;
+    navigator.clipboard.writeText(txId);
+    setCopiedTxId(true);
+    setTimeout(() => setCopiedTxId(false), 2000);
+  };
 
   // Platform fee cut state
   const [platformFeeCut, setPlatformFeeCut] = useState<string>('5');
@@ -4095,6 +4103,117 @@ export default function AdminPage() {
                           <span className="text-white">Provider Payout</span>
                           <span className="text-emerald-400 text-base">${providerPayout.toFixed(2)}</span>
                         </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Section 6: Stripe Transection & Information */}
+                {(() => {
+                  const txId = selectedBooking.transactionId || selectedBooking.stripe_transaction_id || selectedBooking.stripe_transection_id || selectedBooking.stripeTransactionId || null;
+                  let rawData = selectedBooking.stripeRawData || selectedBooking.stripe_transaction_raw || selectedBooking.stripe_transection_raw || null;
+                  let parsedRawObj: Record<string, any> | null = null;
+                  if (rawData) {
+                    if (typeof rawData === 'object' && rawData !== null) {
+                      parsedRawObj = rawData;
+                    } else if (typeof rawData === 'string') {
+                      try {
+                        parsedRawObj = JSON.parse(rawData);
+                      } catch (e) {
+                        parsedRawObj = null;
+                      }
+                    }
+                  }
+
+                  const rawStatus = (
+                    selectedBooking.paymentStatus ||
+                    selectedBooking.payment_status ||
+                    selectedBooking.stripe_payment_status ||
+                    parsedRawObj?.status ||
+                    parsedRawObj?.payment_status ||
+                    (txId ? 'succeeded' : 'pending')
+                  ).toString();
+
+                  const normalizedStatus = rawStatus.toLowerCase();
+                  const isPaid = ['succeeded', 'paid', 'complete', 'completed'].includes(normalizedStatus);
+                  const isFailed = ['failed', 'canceled', 'requires_payment_method'].includes(normalizedStatus);
+
+                  return (
+                    <div className="bg-gray-900/40 border border-gray-850 p-4 rounded-2xl space-y-3">
+                      <h4 className="text-[10px] font-extrabold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5" /> Stripe Transection & Information
+                      </h4>
+
+                      {/* Transaction ID & Payment Status */}
+                      <div className="bg-gray-950/80 border border-gray-850 p-3 rounded-xl space-y-2.5">
+                        {/* Transaction ID with Copy Button */}
+                        <div className="space-y-1">
+                          <div className="text-[11px] font-semibold text-gray-400">Transaction ID</div>
+                          <div className="flex items-center justify-between gap-2">
+                            <code className="text-xs font-mono text-emerald-400 break-all select-all font-semibold">
+                              {txId || 'N/A'}
+                            </code>
+                            {txId && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyTxId(txId)}
+                                className="px-2.5 py-1 text-[11px] font-medium text-gray-300 bg-gray-900 hover:bg-gray-800 border border-gray-750 rounded-lg flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
+                                title="Copy Transaction ID"
+                              >
+                                {copiedTxId ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span className="text-emerald-400 font-semibold">Copied</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3.5 h-3.5 text-gray-400" />
+                                    <span>Copy</span>
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Payment Status Display */}
+                        <div className="flex items-center justify-between pt-2 border-t border-gray-900 text-xs">
+                          <span className="text-gray-400 font-medium">Stripe Payment Status</span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
+                            isPaid
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                              : isFailed
+                                ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                          }`}>
+                            {rawStatus}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Stripe Raw Data Object Keys Display */}
+                      <div className="space-y-1.5">
+                        <div className="text-[11px] font-semibold text-gray-400">Stripe Raw Data Keys</div>
+                        {parsedRawObj && typeof parsedRawObj === 'object' && Object.keys(parsedRawObj).length > 0 ? (
+                          <div className="bg-gray-950 border border-gray-850 rounded-xl p-3 max-h-64 overflow-y-auto space-y-2 text-xs font-mono">
+                            {Object.entries(parsedRawObj).map(([key, val]) => (
+                              <div key={key} className="flex flex-col sm:flex-row sm:items-start justify-between border-b border-gray-900/60 pb-1.5 last:border-0 last:pb-0 gap-1">
+                                <span className="text-sky-300 font-semibold shrink-0">{key}:</span>
+                                <span className="text-gray-300 break-all text-right font-normal">
+                                  {typeof val === 'object' && val !== null ? JSON.stringify(val) : String(val ?? 'null')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : typeof rawData === 'string' && rawData.trim() ? (
+                          <div className="bg-gray-950 border border-gray-850 rounded-xl p-3 max-h-64 overflow-y-auto text-xs font-mono text-gray-300 break-all">
+                            {rawData}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-500 italic p-2 bg-gray-950/50 rounded-xl border border-gray-900">
+                            No Stripe raw data recorded for this booking.
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

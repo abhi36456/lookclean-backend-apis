@@ -73,6 +73,10 @@ model ProviderProfile {
   certificateUrl  String?
   coverImageUrl   String?
   isFeatured      Boolean           @default(false)
+  isAvailable     Boolean           @default(true)
+  isAway          Boolean           @default(false)
+  isRushMode      Boolean           @default(false)
+  isTravelMode    Boolean           @default(false)
   services        ProviderService[]
   amenities       ProviderAmenity[]
   createdAt       DateTime          @default(now())
