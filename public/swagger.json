@@ -1275,6 +1275,31 @@
                   "longitude": {
                     "type": "number",
                     "example": -118.2437
+                  },
+                  "isAvailable": {
+                    "type": "boolean",
+                    "example": true,
+                    "default": true
+                  },
+                  "isAway": {
+                    "type": "boolean",
+                    "example": false,
+                    "default": false
+                  },
+                  "isRushMode": {
+                    "type": "boolean",
+                    "example": false,
+                    "default": false
+                  },
+                  "isTravelMode": {
+                    "type": "boolean",
+                    "example": false,
+                    "default": false
+                  },
+                  "isFeatured": {
+                    "type": "boolean",
+                    "example": true,
+                    "default": true
                   }
                 }
               }

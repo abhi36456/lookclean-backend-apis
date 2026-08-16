@@ -2317,6 +2317,31 @@
                     "type": "string",
                     "format": "binary",
                     "description": "Upload provider profile avatar image file"
+                  },
+                  "isAvailable": {
+                    "type": "boolean",
+                    "example": true,
+                    "default": true
+                  },
+                  "isAway": {
+                    "type": "boolean",
+                    "example": false,
+                    "default": false
+                  },
+                  "isRushMode": {
+                    "type": "boolean",
+                    "example": false,
+                    "default": false
+                  },
+                  "isTravelMode": {
+                    "type": "boolean",
+                    "example": false,
+                    "default": false
+                  },
+                  "isFeatured": {
+                    "type": "boolean",
+                    "example": true,
+                    "default": true
                   }
                 }
               }
@@ -2377,6 +2402,31 @@
                   "profileImageUrl": {
                     "type": "string",
                     "example": "/uploads/profile_2.png"
+                  },
+                  "isAvailable": {
+                    "type": "boolean",
+                    "example": true,
+                    "default": true
+                  },
+                  "isAway": {
+                    "type": "boolean",
+                    "example": false,
+                    "default": false
+                  },
+                  "isRushMode": {
+                    "type": "boolean",
+                    "example": false,
+                    "default": false
+                  },
+                  "isTravelMode": {
+                    "type": "boolean",
+                    "example": false,
+                    "default": false
+                  },
+                  "isFeatured": {
+                    "type": "boolean",
+                    "example": true,
+                    "default": true
                   }
                 }
               }
@@ -2898,6 +2948,31 @@
                       "longitude": {
                         "type": "number",
                         "example": -74.006
+                      },
+                      "isAvailable": {
+                        "type": "boolean",
+                        "example": true,
+                        "default": true
+                      },
+                      "isAway": {
+                        "type": "boolean",
+                        "example": false,
+                        "default": false
+                      },
+                      "isRushMode": {
+                        "type": "boolean",
+                        "example": false,
+                        "default": false
+                      },
+                      "isTravelMode": {
+                        "type": "boolean",
+                        "example": false,
+                        "default": false
+                      },
+                      "isFeatured": {
+                        "type": "boolean",
+                        "example": true,
+                        "default": true
                       },
                       "experience": {
                         "type": "integer",

@@ -602,6 +602,267 @@ function sanitizeUser(user: unknown, request?: any) {
   return plainUser;
 }
 
+async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
+  const auth = await getAuthenticatedUser(request);
+  if (!auth) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+  if (auth.role !== 'provider') {
+    return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
+  }
+
+  const { providerProfile, onboardingCompleted } = (bodyPayload || {}) as any;
+  const profObj = providerProfile || bodyPayload || {};
+
+  const {
+    name,
+    salonName,
+    salon_name,
+    location,
+    address,
+    city,
+    state,
+    country,
+    postalCode,
+    postal_code,
+    zipCode,
+    categories,
+    services,
+    amenities,
+    experience,
+    licenseType,
+    certificateUrl,
+    coverImageUrl,
+    latitude,
+    lat,
+    longitude,
+    lng,
+    long,
+    isAvailable,
+    is_available,
+    isAway,
+    is_away,
+    isRushMode,
+    is_rush_mode,
+    isTravelMode,
+    is_travel_mode,
+    isFeatured,
+    is_featured,
+    featured
+  } = profObj;
+
+  const locVal = (location || address || [city, state, country].filter(Boolean).join(', ') || '').toString();
+  const salonNameVal = (salonName || salon_name) ? String(salonName || salon_name) : null;
+  const cityVal = city ? String(city) : null;
+  const stateVal = state ? String(state) : null;
+  const countryVal = country ? String(country) : null;
+  const postalCodeVal = (postalCode || postal_code || zipCode) ? String(postalCode || postal_code || zipCode) : null;
+  const latVal = (latitude ?? lat) !== undefined && (latitude ?? lat) !== null && (latitude ?? lat) !== '' ? parseFloat(latitude ?? lat) : null;
+  const lngVal = (longitude ?? lng ?? long) !== undefined && (longitude ?? lng ?? long) !== null && (longitude ?? lng ?? long) !== '' ? parseFloat(longitude ?? lng ?? long) : null;
+
+  const availInput = isAvailable ?? is_available ?? profObj.isAvailable ?? profObj.is_available ?? bodyPayload?.isAvailable ?? bodyPayload?.is_available;
+  const awayInput = isAway ?? is_away ?? profObj.isAway ?? profObj.is_away ?? bodyPayload?.isAway ?? bodyPayload?.is_away;
+  const rushInput = isRushMode ?? is_rush_mode ?? profObj.isRushMode ?? profObj.is_rush_mode ?? bodyPayload?.isRushMode ?? bodyPayload?.is_rush_mode;
+  const travelInput = isTravelMode ?? is_travel_mode ?? profObj.isTravelMode ?? profObj.is_travel_mode ?? bodyPayload?.isTravelMode ?? bodyPayload?.is_travel_mode;
+  const featInput = isFeatured ?? is_featured ?? featured ?? profObj.isFeatured ?? profObj.is_featured ?? profObj.featured ?? bodyPayload?.isFeatured ?? bodyPayload?.is_featured ?? bodyPayload?.featured;
+
+  const isAvailableVal = availInput !== undefined && availInput !== null ? (availInput === true || availInput === 'true' || availInput === 1 || availInput === '1') : undefined;
+  const isAwayVal = awayInput !== undefined && awayInput !== null ? (awayInput === true || awayInput === 'true' || awayInput === 1 || awayInput === '1') : undefined;
+  const isRushModeVal = rushInput !== undefined && rushInput !== null ? (rushInput === true || rushInput === 'true' || rushInput === 1 || rushInput === '1') : undefined;
+  const isTravelModeVal = travelInput !== undefined && travelInput !== null ? (travelInput === true || travelInput === 'true' || travelInput === 1 || travelInput === '1') : undefined;
+  const isFeaturedVal = featInput !== undefined && featInput !== null ? (featInput === true || featInput === 'true' || featInput === 1 || featInput === '1') : undefined;
+
+  try {
+    const updatedUser = await executeWithDbFallback(
+      async () => {
+        if (name) {
+          await prisma.user.update({
+            where: { id: auth.userId },
+            data: { name: String(name) }
+          }).catch(() => {});
+        }
+
+        // 1. Upsert provider profile
+        const profile = await prisma.providerProfile.upsert({
+          where: { userId: auth.userId },
+          update: {
+            salonName: salonNameVal,
+            location: locVal,
+            city: cityVal,
+            state: stateVal,
+            country: countryVal,
+            postalCode: postalCodeVal,
+            categories: categories ? JSON.stringify(categories) : null,
+            experience: parseInt(experience) || 0,
+            licenseType: licenseType ? (Array.isArray(licenseType) ? JSON.stringify(licenseType) : licenseType) : null,
+            certificateUrl: certificateUrl ? (Array.isArray(certificateUrl) ? JSON.stringify(certificateUrl) : certificateUrl) : null,
+            coverImageUrl: coverImageUrl || null,
+            latitude: latVal,
+            longitude: lngVal,
+            ...(isAvailableVal !== undefined && { isAvailable: isAvailableVal }),
+            ...(isAwayVal !== undefined && { isAway: isAwayVal }),
+            ...(isRushModeVal !== undefined && { isRushMode: isRushModeVal }),
+            ...(isTravelModeVal !== undefined && { isTravelMode: isTravelModeVal }),
+            ...(isFeaturedVal !== undefined && { isFeatured: isFeaturedVal }),
+          },
+          create: {
+            userId: auth.userId,
+            salonName: salonNameVal,
+            location: locVal,
+            city: cityVal,
+            state: stateVal,
+            country: countryVal,
+            postalCode: postalCodeVal,
+            categories: categories ? JSON.stringify(categories) : null,
+            experience: parseInt(experience) || 0,
+            licenseType: licenseType ? (Array.isArray(licenseType) ? JSON.stringify(licenseType) : licenseType) : null,
+            certificateUrl: certificateUrl ? (Array.isArray(certificateUrl) ? JSON.stringify(certificateUrl) : certificateUrl) : null,
+            coverImageUrl: coverImageUrl || null,
+            latitude: latVal,
+            longitude: lngVal,
+            isAvailable: isAvailableVal ?? true,
+            isAway: isAwayVal ?? false,
+            isRushMode: isRushModeVal ?? false,
+            isTravelMode: isTravelModeVal ?? false,
+            isFeatured: isFeaturedVal ?? true,
+          }
+        });
+
+        // 2. Clear and recreate services if provided
+        if (Array.isArray(services)) {
+          await prisma.providerService.deleteMany({ where: { profileId: profile.id } });
+          if (services.length > 0) {
+            const servicesToInsert = services.map((s: any) => ({
+              profileId: profile.id,
+              name: s.name,
+              price: parseInt(s.price) || 0,
+              category: s.category || 'General'
+            }));
+            await prisma.providerService.createMany({ data: servicesToInsert });
+          }
+        }
+
+        // 3. Clear and recreate amenities if provided
+        if (Array.isArray(amenities)) {
+          await prisma.providerAmenity.deleteMany({ where: { profileId: profile.id } });
+          if (amenities.length > 0) {
+            const amenitiesToInsert = amenities.map((am: any) => {
+              const isObject = am && typeof am === 'object';
+              const amName = isObject ? (am.name || '') : String(am);
+              const amType = isObject ? (am.type || 'amenity') : 'amenity';
+              const amIcon = isObject ? (am.icon || null) : null;
+              return {
+                profileId: profile.id,
+                name: amName,
+                type: amType,
+                icon: amIcon
+              };
+            });
+            await prisma.providerAmenity.createMany({ data: amenitiesToInsert });
+          }
+        }
+
+        // 4. Update onboardingCompleted on User table
+        return await prisma.user.update({
+          where: { id: auth.userId },
+          data: {
+            onboardingCompleted: onboardingCompleted !== undefined ? onboardingCompleted : true
+          },
+          include: {
+            providerProfile: {
+              include: { services: true, amenities: true }
+            }
+          }
+        });
+      },
+      async () => {
+        // Mock fallback
+        const user = mockDb.users.find((u) => u.id === auth.userId);
+        if (!user) throw new Error('User not found');
+        user.onboardingCompleted = onboardingCompleted !== undefined ? onboardingCompleted : true;
+
+        let profile = mockDb.profiles.find((p) => p.userId === auth.userId);
+        if (!profile) {
+          profile = {
+            id: mockDb.profiles.length + 1,
+            userId: auth.userId,
+            isAvailable: isAvailableVal ?? true,
+            isAway: isAwayVal ?? false,
+            isRushMode: isRushModeVal ?? false,
+            isTravelMode: isTravelModeVal ?? false,
+            isFeatured: isFeaturedVal ?? true
+          };
+          mockDb.profiles.push(profile);
+        }
+
+        if (name) user.name = name;
+        profile.salonName = salonNameVal;
+        profile.location = locVal;
+        profile.city = cityVal;
+        profile.state = stateVal;
+        profile.country = countryVal;
+        profile.postalCode = postalCodeVal;
+        profile.categories = categories ? JSON.stringify(categories) : null;
+        profile.experience = parseInt(experience) || 0;
+        profile.licenseType = licenseType ? (Array.isArray(licenseType) ? JSON.stringify(licenseType) : licenseType) : null;
+        profile.certificateUrl = certificateUrl ? (Array.isArray(certificateUrl) ? JSON.stringify(certificateUrl) : certificateUrl) : null;
+        profile.coverImageUrl = coverImageUrl || null;
+        profile.latitude = latVal;
+        profile.longitude = lngVal;
+        if (isAvailableVal !== undefined) profile.isAvailable = isAvailableVal;
+        if (isAwayVal !== undefined) profile.isAway = isAwayVal;
+        if (isRushModeVal !== undefined) profile.isRushMode = isRushModeVal;
+        if (isTravelModeVal !== undefined) profile.isTravelMode = isTravelModeVal;
+        if (isFeaturedVal !== undefined) profile.isFeatured = isFeaturedVal;
+
+        if (Array.isArray(services)) {
+          mockDb.services = mockDb.services.filter((s) => s.profileId !== profile.id);
+          services.forEach((s: any) => {
+            mockDb.services.push({
+              id: Math.floor(Math.random() * 10000),
+              profileId: profile.id,
+              name: s.name,
+              price: parseInt(s.price) || 0,
+              category: s.category || 'General'
+            });
+          });
+        }
+
+        if (Array.isArray(amenities)) {
+          mockDb.amenities = mockDb.amenities.filter((a) => a.profileId !== profile.id);
+          amenities.forEach((am: any) => {
+            const isObject = am && typeof am === 'object';
+            const amName = isObject ? (am.name || '') : String(am);
+            mockDb.amenities.push({
+              id: Math.floor(Math.random() * 10000),
+              profileId: profile.id,
+              name: amName,
+              type: isObject ? (am.type || 'amenity') : 'amenity',
+              icon: isObject ? (am.icon || null) : null
+            });
+          });
+        }
+
+        const providerProfile = {
+          ...profile,
+          services: mockDb.services.filter((s) => s.profileId === profile.id),
+          amenities: mockDb.amenities.filter((a) => a.profileId === profile.id)
+        };
+
+        return { ...user, providerProfile };
+      }
+    );
+
+    const sanitized = sanitizeUser(updatedUser, request);
+    if (sanitized && sanitized.providerProfile) {
+      await enrichProviderProfile(sanitized.providerProfile, request);
+    }
+    return NextResponse.json(sanitized);
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message || 'Failed to update provider profile' }, { status: 400 });
+  }
+}
+
 /**
  * Helper to process a booking object:
  * 1. Parses stripeRawData / stripe_transection_raw
@@ -5128,6 +5389,11 @@ export async function POST(
       let longitude: any = undefined;
       let coverImageUrl: any = undefined;
       let profileImageUrl: any = undefined;
+      let isAvailable: any = undefined;
+      let isAway: any = undefined;
+      let isRushMode: any = undefined;
+      let isTravelMode: any = undefined;
+      let isFeatured: any = undefined;
 
       const contentType = request.headers.get('content-type') || '';
       if (contentType.includes('multipart/form-data')) {
@@ -5145,6 +5411,11 @@ export async function POST(
           longitude = formData.get('longitude') ?? formData.get('lng') ?? formData.get('long');
           const profileImageFile = formData.get('profileImage') ?? formData.get('profileImageUrl');
           const coverImageFile = formData.get('coverImage') ?? formData.get('coverImageUrl');
+          isAvailable = formData.get('isAvailable') ?? formData.get('is_available');
+          isAway = formData.get('isAway') ?? formData.get('is_away');
+          isRushMode = formData.get('isRushMode') ?? formData.get('is_rush_mode');
+          isTravelMode = formData.get('isTravelMode') ?? formData.get('is_travel_mode');
+          isFeatured = formData.get('isFeatured') ?? formData.get('is_featured') ?? formData.get('featured');
 
           const uploadDir = nodePath.join(process.cwd(), 'public', 'uploads');
           await fs.mkdir(uploadDir, { recursive: true });
@@ -5187,6 +5458,11 @@ export async function POST(
         longitude = bodyObj.longitude ?? bodyObj.lng ?? bodyObj.long;
         coverImageUrl = bodyObj.coverImageUrl;
         profileImageUrl = bodyObj.profileImageUrl;
+        isAvailable = bodyObj.isAvailable ?? bodyObj.is_available;
+        isAway = bodyObj.isAway ?? bodyObj.is_away;
+        isRushMode = bodyObj.isRushMode ?? bodyObj.is_rush_mode;
+        isTravelMode = bodyObj.isTravelMode ?? bodyObj.is_travel_mode;
+        isFeatured = bodyObj.isFeatured ?? bodyObj.is_featured ?? bodyObj.featured;
       }
 
       const locVal = (location || address || [city, state, country].filter(Boolean).join(', ') || '').toString();
@@ -5197,6 +5473,17 @@ export async function POST(
       const postalCodeVal = postalCode ? String(postalCode) : null;
       const latVal = latitude !== undefined && latitude !== null && latitude !== '' ? parseFloat(latitude) : null;
       const lngVal = longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude) : null;
+
+      const parseBool = (val: any) => {
+        if (val === undefined || val === null || val === '') return undefined;
+        return val === true || val === 'true' || val === 1 || val === '1';
+      };
+
+      const isAvailableVal = parseBool(isAvailable);
+      const isAwayVal = parseBool(isAway);
+      const isRushModeVal = parseBool(isRushMode);
+      const isTravelModeVal = parseBool(isTravelMode);
+      const isFeaturedVal = parseBool(isFeatured);
 
       if (!name) {
         return NextResponse.json({ message: 'Name is required' }, { status: 400 });
@@ -5228,7 +5515,12 @@ export async function POST(
                 coverImageUrl: finalCoverImage,
                 profileImageUrl: finalProfileImage,
                 latitude: latVal,
-                longitude: lngVal
+                longitude: lngVal,
+                ...(isAvailableVal !== undefined && { isAvailable: isAvailableVal }),
+                ...(isAwayVal !== undefined && { isAway: isAwayVal }),
+                ...(isRushModeVal !== undefined && { isRushMode: isRushModeVal }),
+                ...(isTravelModeVal !== undefined && { isTravelMode: isTravelModeVal }),
+                ...(isFeaturedVal !== undefined && { isFeatured: isFeaturedVal }),
               },
               create: {
                 userId: auth.userId,
@@ -5241,7 +5533,12 @@ export async function POST(
                 coverImageUrl: finalCoverImage,
                 profileImageUrl: finalProfileImage,
                 latitude: latVal,
-                longitude: lngVal
+                longitude: lngVal,
+                isAvailable: isAvailableVal ?? true,
+                isAway: isAwayVal ?? false,
+                isRushMode: isRushModeVal ?? false,
+                isTravelMode: isTravelModeVal ?? false,
+                isFeatured: isFeaturedVal ?? true,
               },
             });
           },
@@ -5252,7 +5549,15 @@ export async function POST(
             }
             let mockProfile = mockDb.profiles.find((p) => p.userId === auth.userId);
             if (!mockProfile) {
-              mockProfile = { id: mockDb.profiles.length + 1, userId: auth.userId };
+              mockProfile = {
+                id: mockDb.profiles.length + 1,
+                userId: auth.userId,
+                isAvailable: true,
+                isAway: false,
+                isRushMode: false,
+                isTravelMode: false,
+                isFeatured: true,
+              };
               mockDb.profiles.push(mockProfile);
             }
             mockProfile.salonName = salonNameVal;
@@ -5265,6 +5570,11 @@ export async function POST(
             if (profileImageUrl !== undefined) mockProfile.profileImageUrl = profileImageUrl;
             mockProfile.latitude = latVal;
             mockProfile.longitude = lngVal;
+            if (isAvailableVal !== undefined) mockProfile.isAvailable = isAvailableVal;
+            if (isAwayVal !== undefined) mockProfile.isAway = isAwayVal;
+            if (isRushModeVal !== undefined) mockProfile.isRushMode = isRushModeVal;
+            if (isTravelModeVal !== undefined) mockProfile.isTravelMode = isTravelModeVal;
+            if (isFeaturedVal !== undefined) mockProfile.isFeatured = isFeaturedVal;
             return mockProfile;
           }
         );
@@ -5281,7 +5591,12 @@ export async function POST(
           }
         }
 
-        return NextResponse.json({ success: true, message: 'Profile setup completed successfully' });
+        return NextResponse.json({
+          success: true,
+          message: 'Profile setup completed successfully',
+          profile: resProfile,
+          data: resProfile
+        });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to update profile' }, { status: 400 });
       }
@@ -6795,6 +7110,11 @@ export async function POST(
       }
     }
 
+    // POST Update Provider Profile (/api/providers/profile or /api/provider/profile)
+    if (path === 'providers/profile' || path === 'provider/profile') {
+      return await handleUpdateProviderProfile(request, body);
+    }
+
     return NextResponse.json({ message: 'Endpoint not found' }, { status: 404 });
   } catch (err: any) {
     console.error(`[API POST Error]`, err);
@@ -7355,248 +7675,7 @@ export async function PUT(
 
     // Update Provider Profile (/api/providers/profile or /api/provider/profile)
     if (path === 'providers/profile' || path === 'provider/profile') {
-      const auth = await getAuthenticatedUser(request);
-      if (!auth) {
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-      }
-      if (auth.role !== 'provider') {
-        return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
-      }
-
-      const { providerProfile, onboardingCompleted } = body as any;
-      const profObj = providerProfile || body || {};
-
-      const {
-        name,
-        salonName,
-        salon_name,
-        location,
-        address,
-        city,
-        state,
-        country,
-        postalCode,
-        postal_code,
-        zipCode,
-        categories,
-        services,
-        amenities,
-        experience,
-        licenseType,
-        certificateUrl,
-        coverImageUrl,
-        latitude,
-        lat,
-        longitude,
-        lng,
-        long,
-        isAvailable,
-        is_available,
-        isAway,
-        is_away,
-        isRushMode,
-        is_rush_mode,
-        isTravelMode,
-        is_travel_mode
-      } = profObj;
-
-      const locVal = (location || address || [city, state, country].filter(Boolean).join(', ') || '').toString();
-      const salonNameVal = (salonName || salon_name) ? String(salonName || salon_name) : null;
-      const cityVal = city ? String(city) : null;
-      const stateVal = state ? String(state) : null;
-      const countryVal = country ? String(country) : null;
-      const postalCodeVal = (postalCode || postal_code || zipCode) ? String(postalCode || postal_code || zipCode) : null;
-      const latVal = (latitude ?? lat) !== undefined && (latitude ?? lat) !== null && (latitude ?? lat) !== '' ? parseFloat(latitude ?? lat) : null;
-      const lngVal = (longitude ?? lng ?? long) !== undefined && (longitude ?? lng ?? long) !== null && (longitude ?? lng ?? long) !== '' ? parseFloat(longitude ?? lng ?? long) : null;
-
-      const availInput = isAvailable ?? is_available ?? (body as any).isAvailable ?? (body as any).is_available;
-      const awayInput = isAway ?? is_away ?? (body as any).isAway ?? (body as any).is_away;
-      const rushInput = isRushMode ?? is_rush_mode ?? (body as any).isRushMode ?? (body as any).is_rush_mode;
-      const travelInput = isTravelMode ?? is_travel_mode ?? (body as any).isTravelMode ?? (body as any).is_travel_mode;
-
-      const isAvailableVal = availInput !== undefined && availInput !== null ? (availInput === true || availInput === 'true' || availInput === 1 || availInput === '1') : undefined;
-      const isAwayVal = awayInput !== undefined && awayInput !== null ? (awayInput === true || awayInput === 'true' || awayInput === 1 || awayInput === '1') : undefined;
-      const isRushModeVal = rushInput !== undefined && rushInput !== null ? (rushInput === true || rushInput === 'true' || rushInput === 1 || rushInput === '1') : undefined;
-      const isTravelModeVal = travelInput !== undefined && travelInput !== null ? (travelInput === true || travelInput === 'true' || travelInput === 1 || travelInput === '1') : undefined;
-
-      try {
-        const updatedUser = await executeWithDbFallback(
-          async () => {
-            if (name) {
-              await prisma.user.update({
-                where: { id: auth.userId },
-                data: { name: String(name) }
-              }).catch(() => {});
-            }
-
-            // 1. Upsert provider profile
-            const profile = await prisma.providerProfile.upsert({
-              where: { userId: auth.userId },
-              update: {
-                salonName: salonNameVal,
-                location: locVal,
-                city: cityVal,
-                state: stateVal,
-                country: countryVal,
-                postalCode: postalCodeVal,
-                categories: categories ? JSON.stringify(categories) : null,
-                experience: parseInt(experience) || 0,
-                licenseType: licenseType ? (Array.isArray(licenseType) ? JSON.stringify(licenseType) : licenseType) : null,
-                certificateUrl: certificateUrl ? (Array.isArray(certificateUrl) ? JSON.stringify(certificateUrl) : certificateUrl) : null,
-                coverImageUrl: coverImageUrl || null,
-                latitude: latVal,
-                longitude: lngVal,
-                ...(isAvailableVal !== undefined && { isAvailable: isAvailableVal }),
-                ...(isAwayVal !== undefined && { isAway: isAwayVal }),
-                ...(isRushModeVal !== undefined && { isRushMode: isRushModeVal }),
-                ...(isTravelModeVal !== undefined && { isTravelMode: isTravelModeVal }),
-              },
-              create: {
-                userId: auth.userId,
-                salonName: salonNameVal,
-                location: locVal,
-                city: cityVal,
-                state: stateVal,
-                country: countryVal,
-                postalCode: postalCodeVal,
-                categories: categories ? JSON.stringify(categories) : null,
-                experience: parseInt(experience) || 0,
-                licenseType: licenseType ? (Array.isArray(licenseType) ? JSON.stringify(licenseType) : licenseType) : null,
-                certificateUrl: certificateUrl ? (Array.isArray(certificateUrl) ? JSON.stringify(certificateUrl) : certificateUrl) : null,
-                coverImageUrl: coverImageUrl || null,
-                latitude: latVal,
-                longitude: lngVal,
-                isAvailable: isAvailableVal ?? true,
-                isAway: isAwayVal ?? false,
-                isRushMode: isRushModeVal ?? false,
-                isTravelMode: isTravelModeVal ?? false,
-              }
-            });
-
-            // 2. Clear and recreate services if provided
-            if (Array.isArray(services)) {
-              await prisma.providerService.deleteMany({ where: { profileId: profile.id } });
-              if (services.length > 0) {
-                const servicesToInsert = services.map((s: any) => ({
-                  profileId: profile.id,
-                  name: s.name,
-                  price: parseInt(s.price) || 0,
-                  category: s.category || 'General'
-                }));
-                await prisma.providerService.createMany({ data: servicesToInsert });
-              }
-            }
-
-            // 3. Clear and recreate amenities if provided
-            if (Array.isArray(amenities)) {
-              await prisma.providerAmenity.deleteMany({ where: { profileId: profile.id } });
-              if (amenities.length > 0) {
-                const amenitiesToInsert = amenities.map((am: any) => {
-                  const isObject = am && typeof am === 'object';
-                  const amName = isObject ? (am.name || '') : String(am);
-                  const amType = isObject ? (am.type || 'amenity') : 'amenity';
-                  const amIcon = isObject ? (am.icon || null) : null;
-                  return {
-                    profileId: profile.id,
-                    name: amName,
-                    type: amType,
-                    icon: amIcon
-                  };
-                });
-                await prisma.providerAmenity.createMany({ data: amenitiesToInsert });
-              }
-            }
-
-            // 4. Update onboardingCompleted on User table
-            return await prisma.user.update({
-              where: { id: auth.userId },
-              data: {
-                onboardingCompleted: onboardingCompleted !== undefined ? onboardingCompleted : true
-              },
-              include: {
-                providerProfile: {
-                  include: { services: true, amenities: true }
-                }
-              }
-            });
-          },
-          async () => {
-            // Mock fallback
-            const user = mockDb.users.find((u) => u.id === auth.userId);
-            if (!user) throw new Error('User not found');
-            user.onboardingCompleted = onboardingCompleted !== undefined ? onboardingCompleted : true;
-
-            let profile = mockDb.profiles.find((p) => p.userId === auth.userId);
-            if (!profile) {
-              profile = { id: mockDb.profiles.length + 1, userId: auth.userId };
-              mockDb.profiles.push(profile);
-            }
-
-            if (name) user.name = name;
-            profile.salonName = salonNameVal;
-            profile.location = locVal;
-            profile.city = cityVal;
-            profile.state = stateVal;
-            profile.country = countryVal;
-            profile.postalCode = postalCodeVal;
-            profile.categories = categories ? JSON.stringify(categories) : null;
-            profile.experience = parseInt(experience) || 0;
-            profile.licenseType = licenseType ? (Array.isArray(licenseType) ? JSON.stringify(licenseType) : licenseType) : null;
-            profile.certificateUrl = certificateUrl ? (Array.isArray(certificateUrl) ? JSON.stringify(certificateUrl) : certificateUrl) : null;
-            profile.coverImageUrl = coverImageUrl || null;
-            profile.latitude = latVal;
-            profile.longitude = lngVal;
-            if (isAvailableVal !== undefined) profile.isAvailable = isAvailableVal;
-            if (isAwayVal !== undefined) profile.isAway = isAwayVal;
-            if (isRushModeVal !== undefined) profile.isRushMode = isRushModeVal;
-            if (isTravelModeVal !== undefined) profile.isTravelMode = isTravelModeVal;
-
-            if (Array.isArray(services)) {
-              mockDb.services = mockDb.services.filter((s) => s.profileId !== profile.id);
-              services.forEach((s: any) => {
-                mockDb.services.push({
-                  id: Math.floor(Math.random() * 10000),
-                  profileId: profile.id,
-                  name: s.name,
-                  price: parseInt(s.price) || 0,
-                  category: s.category || 'General'
-                });
-              });
-            }
-
-            if (Array.isArray(amenities)) {
-              mockDb.amenities = mockDb.amenities.filter((a) => a.profileId !== profile.id);
-              amenities.forEach((am: any) => {
-                const isObject = am && typeof am === 'object';
-                const amName = isObject ? (am.name || '') : String(am);
-                mockDb.amenities.push({
-                  id: Math.floor(Math.random() * 10000),
-                  profileId: profile.id,
-                  name: amName,
-                  type: isObject ? (am.type || 'amenity') : 'amenity',
-                  icon: isObject ? (am.icon || null) : null
-                });
-              });
-            }
-
-            const providerProfile = {
-              ...profile,
-              services: mockDb.services.filter((s) => s.profileId === profile.id),
-              amenities: mockDb.amenities.filter((a) => a.profileId === profile.id)
-            };
-
-            return { ...user, providerProfile };
-          }
-        );
-
-        const sanitized = sanitizeUser(updatedUser, request);
-        if (sanitized && sanitized.providerProfile) {
-          await enrichProviderProfile(sanitized.providerProfile, request);
-        }
-        return NextResponse.json(sanitized);
-      } catch (err: any) {
-        return NextResponse.json({ message: err.message || 'Failed to update provider profile' }, { status: 400 });
-      }
+      return await handleUpdateProviderProfile(request, body);
     }
 
     // PUT Admin Voucher - Update
