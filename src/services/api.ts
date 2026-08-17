@@ -29,11 +29,13 @@ let useMock = true;
 export interface RegisterData {
   email: string;
   password?: string;
+  timezone?: string;
 }
 
 export interface LoginData {
   email: string;
   password?: string;
+  timezone?: string;
 }
 
 export interface ProfileData {
@@ -41,6 +43,7 @@ export interface ProfileData {
   providerType?: 'freelancer' | 'salon' | null;
   onboardingCompleted?: boolean;
   isPhoneVerified?: boolean;
+  timezone?: string;
   providerProfile?: Record<string, unknown>;
 }
 
@@ -58,6 +61,7 @@ export const mockApi = {
       providerType: null,
       isPhoneVerified: false,
       onboardingCompleted: false,
+      timezone: data.timezone || 'UTC',
     };
     if (typeof window !== 'undefined') {
       localStorage.setItem('lc_token', token);

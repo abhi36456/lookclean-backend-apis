@@ -20,6 +20,7 @@ model User {
   socialKey           String?          @unique
   socialType          String?          // "google" | "ios"
   fcmToken            String?
+  timezone            String?          @default("UTC")
   createdAt           DateTime         @default(now())
   providerProfile     ProviderProfile?
   clientProfile       ClientProfile?

@@ -110,6 +110,22 @@ function getSlotsRange(start: string, end: string, duration: number) {
   return slots;
 }
 
+function getSlotsDetailedRange(start: string, end: string, duration: number) {
+  const startMin = parseTime(start);
+  const endMin = parseTime(end);
+  const slots: { timeSlot: string; fromTime: string; toTime: string }[] = [];
+  for (let time = startMin; time + duration <= endMin; time += duration) {
+    const fromStr = formatTime(time);
+    const toStr = formatTime(time + duration);
+    slots.push({
+      timeSlot: `${fromStr} - ${toStr}`,
+      fromTime: fromStr,
+      toTime: toStr
+    });
+  }
+  return slots;
+}
+
 // A mock in-memory store for fallback if MySQL connection is unavailable
 const mockDb = {
   users: [
@@ -125,6 +141,7 @@ const mockDb = {
       onboardingCompleted: true,
       socialKey: null,
       socialType: null,
+      timezone: 'UTC',
       createdAt: new Date(),
     },
     {
@@ -139,6 +156,7 @@ const mockDb = {
       onboardingCompleted: false,
       socialKey: null,
       socialType: null,
+      timezone: 'UTC',
       createdAt: new Date(),
     },
     {
@@ -153,6 +171,7 @@ const mockDb = {
       onboardingCompleted: true,
       socialKey: null,
       socialType: null,
+      timezone: 'UTC',
       createdAt: new Date(),
     }
   ] as any[],
@@ -290,16 +309,16 @@ try {
 }
 
 // Token helper (Base64 encoding/decoding simulation of JWT)
-function generateToken(userId: number, email: string, role: string) {
+function generateToken(userId: number, email: string, role: string, timezone?: string | null) {
   // Token does not expire automatically (100 years expiration horizon)
-  const payload = { userId, email, role, exp: Date.now() + 1000 * 60 * 60 * 24 * 365 * 100 };
+  const payload = { userId, email, role, timezone: timezone || 'UTC', exp: Date.now() + 1000 * 60 * 60 * 24 * 365 * 100 };
   return Buffer.from(JSON.stringify(payload)).toString('base64');
 }
 
 function verifyToken(token: string) {
   try {
     if (token === 'mock_jwt_token_logged_in' || token.startsWith('mock_jwt_token')) {
-      return { userId: 1, email: 'admin@lookclean.com', role: 'admin' };
+      return { userId: 1, email: 'admin@lookclean.com', role: 'admin', timezone: 'UTC' };
     }
     const jsonStr = Buffer.from(token, 'base64').toString('ascii');
     const payload = JSON.parse(jsonStr);
@@ -348,6 +367,8 @@ async function getAuthenticatedUser(request: Request) {
     );
     if (user) {
       payload.role = user.role;
+      payload.timezone = (user as any).timezone || payload.timezone || 'UTC';
+      payload.user = user;
     }
   } catch (err) {
     console.warn('[getAuthenticatedUser] Error fetching user role from database', err);
@@ -437,6 +458,7 @@ function sanitizeUser(user: unknown, request?: any) {
   if (!user) return null;
   const plainUser = JSON.parse(JSON.stringify(user)) as Record<string, any>;
   delete plainUser.password;
+  plainUser.timezone = plainUser.timezone || 'UTC';
 
   if (plainUser.clientProfile && typeof plainUser.clientProfile === 'object') {
     delete plainUser.clientProfile.id;
@@ -2322,15 +2344,17 @@ export async function GET(
         const endTime = result.config?.endTime || '06:00 PM';
         const slotDuration = result.config?.slotDuration || 60;
 
-        const slotTimes = getSlotsRange(startTime, endTime, slotDuration);
+        const detailedSlots = getSlotsDetailedRange(startTime, endTime, slotDuration);
         const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-        const slotsResponse: Record<string, { timeSlot: string; isAvailable: boolean }[]> = {};
+        const slotsResponse: Record<string, { timeSlot: string; fromTime: string; toTime: string; isAvailable: boolean }[]> = {};
 
         for (const day of days) {
-          slotsResponse[day] = slotTimes.map((time) => {
-            const match = result.activeSlots.find((s) => s.dayOfWeek.toLowerCase() === day.toLowerCase() && s.timeSlot === time);
+          slotsResponse[day] = detailedSlots.map((slot) => {
+            const match = result.activeSlots.find((s) => s.dayOfWeek.toLowerCase() === day.toLowerCase() && (s.timeSlot === slot.timeSlot || s.timeSlot === slot.fromTime));
             return {
-              timeSlot: time,
+              timeSlot: slot.timeSlot,
+              fromTime: slot.fromTime,
+              toTime: slot.toTime,
               isAvailable: match ? match.isAvailable : true
             };
           });
@@ -2362,6 +2386,7 @@ export async function GET(
         return NextResponse.json({ message: 'Missing providerId or date parameter' }, { status: 400 });
       }
 
+      const clientTimezone = searchParams.get('timezone') || searchParams.get('timeZone') || searchParams.get('clientTimezone') || auth?.timezone || (auth?.user as any)?.timezone || 'UTC';
       const currentTimeParam = searchParams.get('currentTime') || searchParams.get('time') || searchParams.get('clientTime');
 
       const providerId = parseInt(providerIdStr, 10);
@@ -2411,7 +2436,7 @@ export async function GET(
         const endTime = result.config?.endTime || '06:00 PM';
         const slotDuration = result.config?.slotDuration || 60;
 
-        const slotTimes = getSlotsRange(startTime, endTime, slotDuration);
+        const detailedSlots = getSlotsDetailedRange(startTime, endTime, slotDuration);
 
         let currentMinutes: number | null = null;
         let isPastDate = false;
@@ -2433,30 +2458,39 @@ export async function GET(
           }
         }
 
-        const availableSlots = isPastDate ? [] : slotTimes.filter((time) => {
-          const slotStatus = result.activeSlots.find((s) => s.timeSlot === time);
+        const availableSlotObjects = isPastDate ? [] : detailedSlots.filter((slot) => {
+          const slotStatus = result.activeSlots.find((s) => s.timeSlot === slot.timeSlot || s.timeSlot === slot.fromTime);
           if (slotStatus && !slotStatus.isAvailable) {
             return false;
           }
-          const isBooked = result.bookings.some((b) => b.timeSlot === time);
+          const isBooked = result.bookings.some((b) => b.timeSlot === slot.timeSlot || b.timeSlot === slot.fromTime);
           if (isBooked) return false;
           if (currentMinutes !== null) {
-            const slotMin = parseTime(time);
+            const slotMin = parseTime(slot.fromTime);
             if (slotMin <= currentMinutes) {
               return false;
             }
           }
           return true;
-        });
+        }).map(slot => ({
+          timeSlot: slot.timeSlot,
+          fromTime: slot.fromTime,
+          toTime: slot.toTime,
+          isAvailable: true
+        }));
+
+        const availableSlotTimes = availableSlotObjects.map(s => s.timeSlot);
 
         return NextResponse.json({
           providerId,
           date: dateStr,
           dayOfWeek: dayName,
+          timezone: clientTimezone,
           startTime,
           endTime,
           slotDuration,
-          availableSlots
+          availableSlots: availableSlotObjects,
+          availableSlotTimes
         });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to fetch availability' }, { status: 400 });
@@ -4202,8 +4236,10 @@ export async function POST(
 
     // 1. Sign Up (Common Register /api/auth/register)
     if (path === 'auth/register') {
-      const { email, password, fcmToken, fcm_token } = body as any;
+      const { email, password, fcmToken, fcm_token, timezone } = body as any;
       const userFcmToken = fcmToken || fcm_token || null;
+      const userTimezone = timezone && typeof timezone === 'string' && timezone.trim() ? timezone.trim() : 'UTC';
+
       if (!email || typeof email !== 'string' || !email.trim()) {
         return NextResponse.json({ message: 'Email is required' }, { status: 400 });
       }
@@ -4236,10 +4272,11 @@ export async function POST(
                 password: hashPassword(password),
                 name: "",
                 role: "",
-                fcmToken: userFcmToken
+                fcmToken: userFcmToken,
+                timezone: userTimezone
               },
             });
-            const token = generateToken(user.id, user.email, user.role);
+            const token = generateToken(user.id, user.email, user.role, user.timezone);
             return { token, user };
           },
           async () => {
@@ -4258,10 +4295,11 @@ export async function POST(
               socialKey: null,
               socialType: null,
               fcmToken: userFcmToken,
+              timezone: userTimezone,
               createdAt: new Date(),
             };
             mockDb.users.push(newUser);
-            const token = generateToken(newUser.id, newUser.email, newUser.role);
+            const token = generateToken(newUser.id, newUser.email, newUser.role, newUser.timezone);
             return { token, user: newUser };
           }
         );
@@ -4281,8 +4319,10 @@ export async function POST(
 
     // 2. Sign In (Common Login /api/auth/login)
     if (path === 'auth/login') {
-      const { email, password, fcmToken, fcm_token } = body as any;
+      const { email, password, fcmToken, fcm_token, timezone } = body as any;
       const userFcmToken = fcmToken || fcm_token || null;
+      const userTimezone = timezone && typeof timezone === 'string' && timezone.trim() ? timezone.trim() : null;
+
       if (!email || !password) {
         return NextResponse.json({ message: 'Missing fields' }, { status: 400 });
       }
@@ -4300,17 +4340,21 @@ export async function POST(
                     name: 'System Admin',
                     role: 'admin',
                     onboardingCompleted: true,
-                    fcmToken: userFcmToken
+                    fcmToken: userFcmToken,
+                    timezone: userTimezone || 'UTC'
                   },
                 });
-              } else if (userFcmToken) {
+              } else if (userFcmToken || userTimezone) {
                 adminUser = await prisma.user.update({
                   where: { id: adminUser.id },
-                  data: { fcmToken: userFcmToken }
+                  data: {
+                    ...(userFcmToken ? { fcmToken: userFcmToken } : {}),
+                    ...(userTimezone ? { timezone: userTimezone } : {})
+                  }
                 });
               }
               if (adminUser.password !== hashPassword(password)) throw new Error('Invalid credentials');
-              const token = generateToken(adminUser.id, adminUser.email, adminUser.role);
+              const token = generateToken(adminUser.id, adminUser.email, adminUser.role, adminUser.timezone);
               return { token, user: adminUser };
             }
             let user = await prisma.user.findUnique({
@@ -4323,10 +4367,13 @@ export async function POST(
               },
             });
             if (!user || user.password !== hashPassword(password)) throw new Error('Invalid credentials');
-            if (userFcmToken) {
+            if (userFcmToken || userTimezone) {
               user = await prisma.user.update({
                 where: { id: user.id },
-                data: { fcmToken: userFcmToken },
+                data: {
+                  ...(userFcmToken ? { fcmToken: userFcmToken } : {}),
+                  ...(userTimezone ? { timezone: userTimezone } : {})
+                },
                 include: {
                   providerProfile: {
                     include: { services: true, amenities: true },
@@ -4335,7 +4382,7 @@ export async function POST(
                 },
               });
             }
-            const token = generateToken(user.id, user.email, user.role);
+            const token = generateToken(user.id, user.email, user.role, user.timezone);
             return { token, user };
           },
           async () => {
@@ -4354,17 +4401,20 @@ export async function POST(
                   onboardingCompleted: true,
                   socialKey: null,
                   socialType: null,
+                  timezone: userTimezone || 'UTC',
                   createdAt: new Date(),
                 };
                 mockDb.users.push(mockAdmin);
               }
+              if (userTimezone) mockAdmin.timezone = userTimezone;
               if (mockAdmin.password !== hashPassword(password)) throw new Error('Invalid credentials');
-              const token = generateToken(mockAdmin.id, mockAdmin.email, mockAdmin.role);
+              const token = generateToken(mockAdmin.id, mockAdmin.email, mockAdmin.role, mockAdmin.timezone);
               return { token, user: mockAdmin };
             }
             const user = mockDb.users.find((u) => u.email === email && u.password === hashPassword(password));
             if (!user) throw new Error('Invalid credentials');
-            const token = generateToken(user.id, user.email, user.role);
+            if (userTimezone) user.timezone = userTimezone;
+            const token = generateToken(user.id, user.email, user.role, user.timezone);
             const profile = mockDb.profiles.find((p) => p.userId === user.id);
             let providerProfile = undefined;
             let clientProfile = undefined;
@@ -4427,10 +4477,9 @@ export async function POST(
             return user;
           }
         );
-        const authHeader = request.headers.get('Authorization') || request.headers.get('authorization');
-        const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+        const newToken = generateToken(responseObj.id, responseObj.email, responseObj.role, (responseObj as any).timezone);
         return NextResponse.json({
-          token: token,
+          token: newToken,
           user: sanitizeUser(responseObj, request),
         });
       } catch (err: any) {
@@ -4440,8 +4489,10 @@ export async function POST(
 
     // 3.5. Social Login (/api/auth/social-login)
     if (path === 'auth/social-login') {
-      const { social_key, social_type, username, email, fcmToken, fcm_token } = body as any;
+      const { social_key, social_type, username, email, fcmToken, fcm_token, timezone } = body as any;
       const userFcmToken = fcmToken || fcm_token || null;
+      const userTimezone = timezone && typeof timezone === 'string' && timezone.trim() ? timezone.trim() : null;
+
       if (!social_key || !social_type || !email) {
         return NextResponse.json({ message: 'Missing fields: social_key, social_type, and email are required' }, { status: 400 });
       }
@@ -4477,7 +4528,8 @@ export async function POST(
                     socialKey: social_key,
                     socialType: social_type,
                     name: existingEmailUser.name || username || "",
-                    ...(userFcmToken ? { fcmToken: userFcmToken } : {})
+                    ...(userFcmToken ? { fcmToken: userFcmToken } : {}),
+                    ...(userTimezone ? { timezone: userTimezone } : {})
                   },
                   include: {
                     providerProfile: {
@@ -4495,7 +4547,8 @@ export async function POST(
                     role: "",
                     socialKey: social_key,
                     socialType: social_type,
-                    fcmToken: userFcmToken
+                    fcmToken: userFcmToken,
+                    timezone: userTimezone || 'UTC'
                   },
                   include: {
                     providerProfile: {
@@ -4504,10 +4557,13 @@ export async function POST(
                   },
                 });
               }
-            } else if (userFcmToken) {
+            } else if (userFcmToken || userTimezone) {
               user = await prisma.user.update({
                 where: { id: user.id },
-                data: { fcmToken: userFcmToken },
+                data: {
+                  ...(userFcmToken ? { fcmToken: userFcmToken } : {}),
+                  ...(userTimezone ? { timezone: userTimezone } : {})
+                },
                 include: {
                   providerProfile: {
                     include: { services: true, amenities: true },
@@ -4516,7 +4572,7 @@ export async function POST(
               });
             }
 
-            const token = generateToken(user.id, user.email, user.role);
+            const token = generateToken(user.id, user.email, user.role, user.timezone);
             return { token, user };
           },
           async () => {
@@ -4531,6 +4587,7 @@ export async function POST(
                 if (!existingEmailUser.name && username) {
                   existingEmailUser.name = username;
                 }
+                if (userTimezone) existingEmailUser.timezone = userTimezone;
                 user = existingEmailUser;
               } else {
                 user = {
@@ -4545,13 +4602,16 @@ export async function POST(
                   onboardingCompleted: false,
                   socialKey: social_key,
                   socialType: social_type,
+                  timezone: userTimezone || 'UTC',
                   createdAt: new Date(),
                 };
                 mockDb.users.push(user);
               }
+            } else if (userTimezone) {
+              user.timezone = userTimezone;
             }
 
-            const token = generateToken(user.id, user.email, user.role);
+            const token = generateToken(user.id, user.email, user.role, user.timezone);
             const profile = mockDb.profiles.find((p) => p.userId === user.id);
             let providerProfile = undefined;
             if (profile) {
@@ -6109,22 +6169,23 @@ export async function POST(
         await executeWithDbFallback(
           async () => {
             for (const slot of slots) {
-              const { dayOfWeek, timeSlot, isAvailable } = slot;
-              if (!dayOfWeek || !timeSlot || isAvailable === undefined) continue;
+              const { dayOfWeek, timeSlot, fromTime, toTime, isAvailable } = slot;
+              const targetSlot = timeSlot || (fromTime && toTime ? `${fromTime} - ${toTime}` : fromTime);
+              if (!dayOfWeek || !targetSlot || isAvailable === undefined) continue;
 
               await prisma.providerActiveSlot.upsert({
                 where: {
                   providerId_dayOfWeek_timeSlot: {
                     providerId: auth.userId,
                     dayOfWeek,
-                    timeSlot
+                    timeSlot: targetSlot
                   }
                 },
                 update: { isAvailable: Boolean(isAvailable) },
                 create: {
                   providerId: auth.userId,
                   dayOfWeek,
-                  timeSlot,
+                  timeSlot: targetSlot,
                   isAvailable: Boolean(isAvailable)
                 }
               });
@@ -6132,13 +6193,14 @@ export async function POST(
           },
           async () => {
             for (const slot of slots) {
-              const { dayOfWeek, timeSlot, isAvailable } = slot;
-              if (!dayOfWeek || !timeSlot || isAvailable === undefined) continue;
+              const { dayOfWeek, timeSlot, fromTime, toTime, isAvailable } = slot;
+              const targetSlot = timeSlot || (fromTime && toTime ? `${fromTime} - ${toTime}` : fromTime);
+              if (!dayOfWeek || !targetSlot || isAvailable === undefined) continue;
 
               let match = mockDb.activeSlots.find(
                 (s) => s.providerId === auth.userId &&
                   s.dayOfWeek.toLowerCase() === dayOfWeek.toLowerCase() &&
-                  s.timeSlot === timeSlot
+                  (s.timeSlot === targetSlot || (fromTime && s.timeSlot === fromTime))
               );
 
               if (match) {
@@ -6148,7 +6210,7 @@ export async function POST(
                   id: mockDb.activeSlots.length + 1,
                   providerId: auth.userId,
                   dayOfWeek,
-                  timeSlot,
+                  timeSlot: targetSlot,
                   isAvailable: Boolean(isAvailable)
                 });
               }
@@ -6327,6 +6389,10 @@ export async function POST(
         numberOfPeople,
         date,
         timeSlot,
+        fromTime,
+        from_time,
+        toTime,
+        to_time,
         tipType,
         tipAmount,
         promoCode,
@@ -6338,6 +6404,11 @@ export async function POST(
         stripe_transection_raw,
         stripe_transaction_raw
       } = body as any;
+
+      const inputFromTime = fromTime || from_time || null;
+      const inputToTime = toTime || to_time || null;
+      const targetTimeSlot = timeSlot || (inputFromTime && inputToTime ? `${inputFromTime} - ${inputToTime}` : inputFromTime);
+
       const targetPromoCode = promoCode || promo_code || voucherCode || voucher_code;
       const finalTransactionId = stripe_transection_id || stripe_transaction_id || (body as any).transactionId || (body as any).stripeTransactionId || null;
       const rawInput = stripe_transection_raw !== undefined ? stripe_transection_raw : (stripe_transaction_raw !== undefined ? stripe_transaction_raw : ((body as any).stripeRawData !== undefined ? (body as any).stripeRawData : null));
@@ -6361,7 +6432,7 @@ export async function POST(
         }
       }
 
-      if (!providerId || !Array.isArray(serviceIds) || serviceIds.length === 0 || !date || !timeSlot) {
+      if (!providerId || !Array.isArray(serviceIds) || serviceIds.length === 0 || !date || !targetTimeSlot) {
         return NextResponse.json({ message: 'Missing required booking fields' }, { status: 400 });
       }
 
@@ -6391,7 +6462,6 @@ export async function POST(
             const existingBookings = await prisma.booking.findMany({
               where: {
                 providerId: providerIdInt,
-                timeSlot,
                 status: { not: 'cancelled' },
                 date: {
                   gte: new Date(date + 'T00:00:00.000Z'),
@@ -6408,7 +6478,7 @@ export async function POST(
             const targetDateStr = bookingDate.toISOString().split('T')[0];
             const existingBookings = mockDb.bookings.filter((b) => {
               const bDateStr = new Date(b.date).toISOString().split('T')[0];
-              return b.providerId === providerIdInt && b.timeSlot === timeSlot && bDateStr === targetDateStr && b.status !== 'cancelled';
+              return b.providerId === providerIdInt && bDateStr === targetDateStr && b.status !== 'cancelled';
             });
             return { config, activeSlots, existingBookings };
           }
@@ -6417,18 +6487,20 @@ export async function POST(
         const startTime = check.config?.startTime || '09:00 AM';
         const endTime = check.config?.endTime || '06:00 PM';
         const slotDuration = check.config?.slotDuration || 60;
-        const validSlots = getSlotsRange(startTime, endTime, slotDuration);
+        const detailedSlots = getSlotsDetailedRange(startTime, endTime, slotDuration);
+        const validTimeSlots = detailedSlots.map(s => s.timeSlot).concat(getSlotsRange(startTime, endTime, slotDuration));
 
-        if (!validSlots.includes(timeSlot)) {
+        if (!validTimeSlots.includes(targetTimeSlot) && !validTimeSlots.some(s => s.startsWith(targetTimeSlot))) {
           return NextResponse.json({ message: 'Selected time slot is out of provider working hours' }, { status: 400 });
         }
 
-        const activeStatus = check.activeSlots.find((s) => s.timeSlot === timeSlot);
+        const activeStatus = check.activeSlots.find((s) => s.timeSlot === targetTimeSlot || (inputFromTime && s.timeSlot === inputFromTime));
         if (activeStatus && !activeStatus.isAvailable) {
           return NextResponse.json({ message: 'Provider is not available at the selected time slot' }, { status: 400 });
         }
 
-        if (check.existingBookings.length > 0) {
+        const isSlotAlreadyBooked = check.existingBookings.some((b) => b.timeSlot === targetTimeSlot || (inputFromTime && b.timeSlot === inputFromTime));
+        if (isSlotAlreadyBooked) {
           return NextResponse.json({ message: 'Selected time slot is already booked' }, { status: 400 });
         }
 
@@ -6495,7 +6567,7 @@ export async function POST(
                 providerId: providerIdInt,
                 numberOfPeople: numPeople,
                 date: bookingDate,
-                timeSlot,
+                timeSlot: targetTimeSlot,
                 status: 'pending',
                 tipAmount: calculatedTip,
                 tipPercentage: tipPct,
@@ -6528,7 +6600,7 @@ export async function POST(
               providerId: providerIdInt,
               numberOfPeople: numPeople,
               date: bookingDate,
-              timeSlot,
+              timeSlot: targetTimeSlot,
               status: 'pending',
               tipAmount: calculatedTip,
               tipPercentage: tipPct,
@@ -6568,15 +6640,19 @@ export async function POST(
           sendNotificationToUser(
             providerIdInt,
             'New Booking Received! 📅',
-            `${clientName} has booked an appointment for ${bookingDateStr} at ${timeSlot}.`,
+            `${clientName} has booked an appointment for ${bookingDateStr} at ${targetTimeSlot}.`,
             { bookingId: String(booking?.id || ''), type: 'NEW_BOOKING' }
           ).catch(err => console.error('FCM Provider Notification Error:', err));
         } catch (fcmErr) {
           console.error('Failed to trigger FCM booking notification:', fcmErr);
         }
 
+        const slotParts = targetTimeSlot.split(/\s*-\s*/);
         const formattedBooking = {
           ...(booking as any),
+          fromTime: inputFromTime || slotParts[0] || targetTimeSlot,
+          toTime: inputToTime || slotParts[1] || null,
+          timezone: auth?.timezone || (auth?.user as any)?.timezone || 'UTC',
           stripe_transection_id: finalTransactionId || (booking as any)?.transactionId || null,
           stripe_transaction_id: finalTransactionId || (booking as any)?.transactionId || null,
           stripe_transection_raw: finalStripeRawObj || ((booking as any)?.stripeRawData ? (() => { try { return JSON.parse((booking as any).stripeRawData); } catch { return (booking as any).stripeRawData; } })() : null),

@@ -77,6 +77,11 @@
           "onboardingCompleted": {
             "type": "boolean"
           },
+          "timezone": {
+            "type": "string",
+            "example": "Asia/Kolkata",
+            "description": "User IANA timezone identifier"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -165,6 +170,11 @@
                   "password": {
                     "type": "string",
                     "example": "123456"
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "example": "Asia/Kolkata",
+                    "description": "User device/preferred IANA timezone"
                   }
                 }
               }
@@ -222,6 +232,11 @@
                   "password": {
                     "type": "string",
                     "example": "123456"
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "example": "Asia/Kolkata",
+                    "description": "Optional user device/preferred IANA timezone to update profile"
                   }
                 }
               }
@@ -354,6 +369,11 @@
                   "email": {
                     "type": "string",
                     "example": "sarah.connor@gmail.com"
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "example": "Asia/Kolkata",
+                    "description": "Optional device/preferred IANA timezone"
                   }
                 }
               }
@@ -954,6 +974,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "required": false,
+            "description": "IANA timezone identifier (e.g. Asia/Kolkata). If omitted, defaults to logged-in user timezone from Bearer token.",
+            "schema": {
+              "type": "string",
+              "example": "Asia/Kolkata"
+            }
           }
         ],
         "responses": {
@@ -1069,7 +1099,15 @@
                   },
                   "timeSlot": {
                     "type": "string",
+                    "example": "10:00 AM - 11:00 AM"
+                  },
+                  "fromTime": {
+                    "type": "string",
                     "example": "10:00 AM"
+                  },
+                  "toTime": {
+                    "type": "string",
+                    "example": "11:00 AM"
                   },
                   "tipType": {
                     "type": "string",
