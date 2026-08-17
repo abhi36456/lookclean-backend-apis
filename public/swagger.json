@@ -841,6 +841,110 @@
         }
       }
     },
+    "/providers/notifications": {
+      "get": {
+        "tags": [
+          "Providers Profile"
+        ],
+        "summary": "Get provider notifications list",
+        "description": "Fetch list of all notifications for the authenticated provider. Includes bookingId, clientId, providerId in top-level object and in data payload for deep-link routing.",
+        "responses": {
+          "200": {
+            "description": "Provider notifications retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "count": { "type": "integer", "example": 2 },
+                    "notifications": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "integer", "example": 1 },
+                          "userId": { "type": "integer", "example": 2 },
+                          "title": { "type": "string", "example": "New Booking Received! 📅" },
+                          "message": { "type": "string", "example": "Sarah Connor has booked an appointment." },
+                          "type": { "type": "string", "example": "NEW_BOOKING" },
+                          "bookingId": { "type": "integer", "nullable": true, "example": 12 },
+                          "clientId": { "type": "integer", "nullable": true, "example": 2 },
+                          "providerId": { "type": "integer", "nullable": true, "example": 3 },
+                          "data": {
+                            "type": "object",
+                            "example": {
+                              "type": "NEW_BOOKING",
+                              "bookingId": "12",
+                              "clientId": "2",
+                              "providerId": "3"
+                            }
+                          },
+                          "isRead": { "type": "boolean", "example": false },
+                          "createdAt": { "type": "string", "example": "2026-08-18T10:00:00.000Z" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/notifications": {
+      "get": {
+        "tags": [
+          "Clients Profile"
+        ],
+        "summary": "Get client notifications list",
+        "description": "Fetch list of all notifications for the authenticated client. Includes bookingId, clientId, providerId in top-level object and in data payload for deep-link routing.",
+        "responses": {
+          "200": {
+            "description": "Client notifications retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "count": { "type": "integer", "example": 2 },
+                    "notifications": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "integer", "example": 1 },
+                          "userId": { "type": "integer", "example": 2 },
+                          "title": { "type": "string", "example": "Booking Completed! 🎉" },
+                          "message": { "type": "string", "example": "Your appointment is complete. Tap here to rate your provider!" },
+                          "type": { "type": "string", "example": "BOOKING_COMPLETED" },
+                          "bookingId": { "type": "integer", "nullable": true, "example": 12 },
+                          "clientId": { "type": "integer", "nullable": true, "example": 2 },
+                          "providerId": { "type": "integer", "nullable": true, "example": 3 },
+                          "data": {
+                            "type": "object",
+                            "example": {
+                              "type": "BOOKING_COMPLETED",
+                              "bookingId": "12",
+                              "clientId": "2",
+                              "providerId": "3"
+                            }
+                          },
+                          "isRead": { "type": "boolean", "example": false },
+                          "createdAt": { "type": "string", "example": "2026-08-18T10:00:00.000Z" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/providers/me/availability/config": {
       "post": {
         "tags": [

@@ -229,6 +229,11 @@ export default function AdminPage() {
   const [bookingSearchQuery, setBookingSearchQuery] = useState('');
   const [bookingStatusFilter, setBookingStatusFilter] = useState<'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled'>('all');
 
+  // Promo Codes and Reports search/filter states
+  const [voucherSearch, setVoucherSearch] = useState('');
+  const [voucherStatusFilter, setVoucherStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [reportSearch, setReportSearch] = useState('');
+
   // Booking details drawer state
   const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
   const [bookingDrawerOpen, setBookingDrawerOpen] = useState(false);
@@ -1433,11 +1438,34 @@ export default function AdminPage() {
         <main className="flex-grow w-full py-8 px-4 sm:px-8 space-y-8 z-10">
           {activeTab === 'vouchers' ? (
             <div className="space-y-6">
-              <div className="border-b border-gray-900 pb-4">
-                <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-                  <Tag className="w-5 h-5 text-primary" /> Promo Codes Settings
-                </h2>
-                <p className="text-xs text-gray-400">Create, update, activate/deactivate, and delete customer discount promo codes.</p>
+              <div className="border-b border-gray-900 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                    <Tag className="w-5 h-5 text-primary" /> Promo Codes Settings
+                  </h2>
+                  <p className="text-xs text-gray-400">Create, update, activate/deactivate, and delete customer discount promo codes.</p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <Input
+                    type="text"
+                    placeholder="Search code or title..."
+                    value={voucherSearch}
+                    onChange={(e) => setVoucherSearch(e.target.value)}
+                    leftIcon={<Search className="w-4 h-4 text-gray-500" />}
+                    className="w-full sm:w-64"
+                  />
+
+                  <select
+                    value={voucherStatusFilter}
+                    onChange={(e) => setVoucherStatusFilter(e.target.value as any)}
+                    className="w-full sm:w-40 bg-gray-900 border border-gray-850 text-xs font-semibold text-gray-300 rounded-xl px-3 py-2.5 focus:outline-none focus:border-primary transition-all cursor-pointer"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="active">Active Only</option>
+                    <option value="inactive">Inactive Only</option>
+                  </select>
+                </div>
               </div>
 
               <Card className="border border-gray-850 p-6 space-y-4">
@@ -1505,7 +1533,12 @@ export default function AdminPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-900">
-                          {promoCodesList.map((voucher) => (
+                          {promoCodesList.filter((voucher) => {
+                            const search = voucherSearch.toLowerCase();
+                            const matchesSearch = !search || voucher.code.toLowerCase().includes(search) || (voucher.title || '').toLowerCase().includes(search);
+                            const matchesStatus = voucherStatusFilter === 'all' || (voucherStatusFilter === 'active' ? voucher.isActive : !voucher.isActive);
+                            return matchesSearch && matchesStatus;
+                          }).map((voucher) => (
                             <tr key={voucher.id} className="text-xs text-gray-300 hover:bg-white/2 transition-colors">
                               <td className="py-3.5 pr-4 font-bold text-white tracking-wider">{voucher.code}</td>
                               <td className="py-3.5 pr-4 text-gray-450">{voucher.title}</td>
@@ -1742,11 +1775,24 @@ export default function AdminPage() {
 
           ) : activeTab === 'reports' ? (
             <div className="space-y-6">
-              <div className="border-b border-gray-900 pb-4">
-                <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-primary" /> Report &amp; Issues
-                </h2>
-                <p className="text-xs text-gray-400">Review app feedback and bug complaints submitted by users with attachments.</p>
+              <div className="border-b border-gray-900 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-primary" /> Report &amp; Issues
+                  </h2>
+                  <p className="text-xs text-gray-400">Review app feedback and bug complaints submitted by users with attachments.</p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="text"
+                    placeholder="Search report title, user..."
+                    value={reportSearch}
+                    onChange={(e) => setReportSearch(e.target.value)}
+                    leftIcon={<Search className="w-4 h-4 text-gray-500" />}
+                    className="w-full sm:w-64"
+                  />
+                </div>
               </div>
 
               {/* Sub-tabs for Open vs Closed */}
@@ -1785,7 +1831,16 @@ export default function AdminPage() {
                 </Card>
               ) : (
                 <div className="space-y-4">
-                  {reportsList.map((report) => {
+                  {reportsList.filter((report) => {
+                    const search = reportSearch.toLowerCase();
+                    if (!search) return true;
+                    return (
+                      (report.title || '').toLowerCase().includes(search) ||
+                      (report.message || '').toLowerCase().includes(search) ||
+                      (report.user?.name || '').toLowerCase().includes(search) ||
+                      (report.user?.email || '').toLowerCase().includes(search)
+                    );
+                  }).map((report) => {
                     let attachmentsArr: string[] = [];
                     try {
                       if (typeof report.attachments === 'string') {
@@ -1864,19 +1919,19 @@ export default function AdminPage() {
               <div className="border-b border-gray-900 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-gray-400" /> Provider Requests
+                    <Sparkles className="w-5 h-5 text-primary" /> Provider Requests
                   </h2>
                   <p className="text-xs text-gray-400">Review new category and service addition requests submitted by service providers.</p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <Input
                     type="text"
-                    placeholder="Search by provider or request title..."
+                    placeholder="Search provider or request title..."
                     value={providerRequestSearch}
                     onChange={(e) => setProviderRequestSearch(e.target.value)}
                     leftIcon={<Search className="w-4 h-4 text-gray-500" />}
-                    className="w-64"
+                    className="w-full sm:w-64"
                   />
                 </div>
               </div>
@@ -1950,7 +2005,6 @@ export default function AdminPage() {
                               <th className="py-3.5 px-4">Provider</th>
                               <th className="py-3.5 px-4">Request Type</th>
                               <th className="py-3.5 px-4">Requested Title</th>
-                              <th className="py-3.5 px-4">Status</th>
                               <th className="py-3.5 px-4">Date</th>
                               <th className="py-3.5 px-4 text-right">Actions</th>
                             </tr>
@@ -1975,11 +2029,6 @@ export default function AdminPage() {
                                 </td>
                                 <td className="py-3.5 px-4 font-bold text-gray-200">
                                   {req.requestTitle}
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                    {req.status || 'pending'}
-                                  </span>
                                 </td>
                                 <td className="py-3.5 px-4 text-gray-400 text-[11px]">
                                   {new Date(req.createdAt).toLocaleDateString()} {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -2443,8 +2492,10 @@ export default function AdminPage() {
           ) : activeTab === 'settings' ? (
             <div className="space-y-6">
               <div className="border-b border-gray-900 pb-4">
-                <h2 className="text-xl font-extrabold text-white">System Settings</h2>
-                <p className="text-xs text-gray-400">Manage administrator credentials and Twilio SMS Gateway configurations.</p>
+                <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-primary" /> System Settings
+                </h2>
+                <p className="text-xs text-gray-400">Manage administrator credentials, app versioning, and system configurations.</p>
               </div>
 
               {/* Flex Container for Settings Layout */}
@@ -3461,27 +3512,29 @@ export default function AdminPage() {
             </div>
           ) : (
             /* User Management Section */
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <h2 className="text-xl font-extrabold text-white">Registered Users</h2>
+            <div className="space-y-6">
+              <div className="border-b border-gray-900 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                    <Users className="w-5 h-5 text-primary" /> Registered Users
+                  </h2>
+                  <p className="text-xs text-gray-400">View customer accounts, service provider profiles, verification status, and activity.</p>
+                </div>
 
-                {/* Search and Filters */}
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                  <div className="relative flex items-center flex-grow">
-                    <Search className="w-4 h-4 text-gray-500 absolute left-3 pointer-events-none" />
-                    <input
-                      type="text"
-                      placeholder="Search user name or email..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 pr-4 py-2 text-xs rounded-xl glass-input w-full"
-                    />
-                  </div>
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <Input
+                    type="text"
+                    placeholder="Search user name, email, city..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    leftIcon={<Search className="w-4 h-4 text-gray-500" />}
+                    className="w-full sm:w-64"
+                  />
 
                   <select
                     value={roleFilter}
                     onChange={(e) => setRoleFilter(e.target.value as any)}
-                    className="px-3 py-2 text-xs rounded-xl glass-input border border-gray-800"
+                    className="w-full sm:w-40 bg-gray-900 border border-gray-850 text-xs font-semibold text-gray-300 rounded-xl px-3 py-2.5 focus:outline-none focus:border-primary transition-all cursor-pointer"
                   >
                     <option value="all">All Roles</option>
                     <option value="client">Clients Only</option>

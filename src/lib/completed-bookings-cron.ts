@@ -122,7 +122,12 @@ export async function autoCompletePastBookings(): Promise<{ updatedCount: number
               booking.clientId,
               'Booking Completed! 🎉',
               'Your appointment is complete. Tap here to share your review and rate your provider!',
-              { bookingId: String(booking.id), type: 'BOOKING_COMPLETED' }
+              {
+                bookingId: String(booking.id),
+                clientId: String(booking.clientId),
+                providerId: String(booking.providerId || ''),
+                type: 'BOOKING_COMPLETED'
+              }
             );
           } catch (notifErr) {
             console.error(`[Cron Completed Bookings] FCM Notification error for booking #${booking.id}:`, notifErr);
@@ -152,7 +157,12 @@ export async function autoCompletePastBookings(): Promise<{ updatedCount: number
                 booking.clientId,
                 'Booking Completed! 🎉',
                 'Your appointment is complete. Tap here to share your review and rate your provider!',
-                { bookingId: String(booking.id), type: 'BOOKING_COMPLETED' }
+                {
+                  bookingId: String(booking.id),
+                  clientId: String(booking.clientId),
+                  providerId: String(booking.providerId || ''),
+                  type: 'BOOKING_COMPLETED'
+                }
               );
             } catch (notifErr) {
               console.error(`[Cron Completed Bookings] FCM Notification error for mock booking #${booking.id}:`, notifErr);

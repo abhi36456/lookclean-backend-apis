@@ -354,10 +354,28 @@
                             "type": "string",
                             "example": "NEW_BOOKING"
                           },
+                          "bookingId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 1
+                          },
+                          "clientId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 2
+                          },
+                          "providerId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 3
+                          },
                           "data": {
                             "type": "object",
                             "example": {
-                              "bookingId": "1"
+                              "type": "NEW_BOOKING",
+                              "bookingId": "1",
+                              "clientId": "2",
+                              "providerId": "3"
                             }
                           },
                           "isRead": {
@@ -528,12 +546,30 @@
                           },
                           "type": {
                             "type": "string",
-                            "example": "BOOKING_STATUS_CHANGED"
+                            "example": "BOOKING_COMPLETED"
+                          },
+                          "bookingId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 1
+                          },
+                          "clientId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 2
+                          },
+                          "providerId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 3
                           },
                           "data": {
                             "type": "object",
                             "example": {
-                              "bookingId": "1"
+                              "type": "BOOKING_COMPLETED",
+                              "bookingId": "1",
+                              "clientId": "2",
+                              "providerId": "3"
                             }
                           },
                           "isRead": {

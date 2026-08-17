@@ -1853,22 +1853,43 @@ export async function GET(
           }
         );
 
-        const list = (notifications || []).map((n: any) => {
+        const formatNotificationItem = (n: any) => {
           let dataObj = n.data;
           if (typeof dataObj === 'string') {
             try { dataObj = JSON.parse(dataObj); } catch { }
           }
+          if (!dataObj || typeof dataObj !== 'object') {
+            dataObj = {};
+          }
+          const bId = dataObj.bookingId ? (isNaN(Number(dataObj.bookingId)) ? dataObj.bookingId : Number(dataObj.bookingId)) : null;
+          const cId = dataObj.clientId ? (isNaN(Number(dataObj.clientId)) ? dataObj.clientId : Number(dataObj.clientId)) : null;
+          const pId = dataObj.providerId ? (isNaN(Number(dataObj.providerId)) ? dataObj.providerId : Number(dataObj.providerId)) : null;
+          const typeStr = n.type || dataObj.type || 'GENERAL';
+
+          const enrichedData = {
+            ...dataObj,
+            type: typeStr,
+            bookingId: bId !== null ? String(bId) : (dataObj.bookingId ? String(dataObj.bookingId) : undefined),
+            clientId: cId !== null ? String(cId) : (dataObj.clientId ? String(dataObj.clientId) : undefined),
+            providerId: pId !== null ? String(pId) : (dataObj.providerId ? String(dataObj.providerId) : undefined)
+          };
+
           return {
             id: n.id,
             userId: n.userId,
             title: n.title,
             message: n.message || n.body || '',
-            type: n.type || 'GENERAL',
-            data: dataObj || null,
+            type: typeStr,
+            bookingId: bId,
+            clientId: cId,
+            providerId: pId,
+            data: enrichedData,
             isRead: Boolean(n.isRead),
             createdAt: n.createdAt
           };
-        });
+        };
+
+        const list = (notifications || []).map(formatNotificationItem);
 
         return NextResponse.json({
           success: true,
@@ -1905,22 +1926,43 @@ export async function GET(
           }
         );
 
-        const list = (notifications || []).map((n: any) => {
+        const formatNotificationItem = (n: any) => {
           let dataObj = n.data;
           if (typeof dataObj === 'string') {
             try { dataObj = JSON.parse(dataObj); } catch { }
           }
+          if (!dataObj || typeof dataObj !== 'object') {
+            dataObj = {};
+          }
+          const bId = dataObj.bookingId ? (isNaN(Number(dataObj.bookingId)) ? dataObj.bookingId : Number(dataObj.bookingId)) : null;
+          const cId = dataObj.clientId ? (isNaN(Number(dataObj.clientId)) ? dataObj.clientId : Number(dataObj.clientId)) : null;
+          const pId = dataObj.providerId ? (isNaN(Number(dataObj.providerId)) ? dataObj.providerId : Number(dataObj.providerId)) : null;
+          const typeStr = n.type || dataObj.type || 'GENERAL';
+
+          const enrichedData = {
+            ...dataObj,
+            type: typeStr,
+            bookingId: bId !== null ? String(bId) : (dataObj.bookingId ? String(dataObj.bookingId) : undefined),
+            clientId: cId !== null ? String(cId) : (dataObj.clientId ? String(dataObj.clientId) : undefined),
+            providerId: pId !== null ? String(pId) : (dataObj.providerId ? String(dataObj.providerId) : undefined)
+          };
+
           return {
             id: n.id,
             userId: n.userId,
             title: n.title,
             message: n.message || n.body || '',
-            type: n.type || 'GENERAL',
-            data: dataObj || null,
+            type: typeStr,
+            bookingId: bId,
+            clientId: cId,
+            providerId: pId,
+            data: enrichedData,
             isRead: Boolean(n.isRead),
             createdAt: n.createdAt
           };
-        });
+        };
+
+        const list = (notifications || []).map(formatNotificationItem);
 
         return NextResponse.json({
           success: true,
@@ -3612,7 +3654,12 @@ export async function POST(
                   b.clientId,
                   'Upcoming Appointment Reminder ⏰',
                   `Your appointment with ${b.provider?.name || 'your provider'} is scheduled in 1 hour (${b.timeSlot}).`,
-                  { bookingId: String(b.id), type: 'UPCOMING_APPOINTMENT' }
+                  {
+                    bookingId: String(b.id),
+                    clientId: String(b.clientId),
+                    providerId: String(b.providerId),
+                    type: 'UPCOMING_APPOINTMENT'
+                  }
                 );
                 sentCount++;
               }
@@ -3630,7 +3677,12 @@ export async function POST(
                 b.clientId,
                 'Upcoming Appointment Reminder ⏰',
                 `Your appointment with ${provider?.name || 'your provider'} is scheduled in 1 hour (${b.timeSlot}).`,
-                { bookingId: String(b.id), type: 'UPCOMING_APPOINTMENT' }
+                {
+                  bookingId: String(b.id),
+                  clientId: String(b.clientId),
+                  providerId: String(b.providerId),
+                  type: 'UPCOMING_APPOINTMENT'
+                }
               );
               sentCount++;
             }
@@ -6641,7 +6693,12 @@ export async function POST(
             providerIdInt,
             'New Booking Received! 📅',
             `${clientName} has booked an appointment for ${bookingDateStr} at ${targetTimeSlot}.`,
-            { bookingId: String(booking?.id || ''), type: 'NEW_BOOKING' }
+            {
+              bookingId: String(booking?.id || ''),
+              clientId: String(auth.userId),
+              providerId: String(providerIdInt),
+              type: 'NEW_BOOKING'
+            }
           ).catch(err => console.error('FCM Provider Notification Error:', err));
         } catch (fcmErr) {
           console.error('Failed to trigger FCM booking notification:', fcmErr);
@@ -6763,7 +6820,13 @@ export async function POST(
             targetProviderId,
             'New Rating & Review Received ⭐',
             `${clientName} rated you ${rating} stars: "${shortComment}"`,
-            { reviewId: String(newReview?.id || ''), type: 'NEW_REVIEW' }
+            {
+              reviewId: String(newReview?.id || ''),
+              bookingId: String(numBookingId || ''),
+              clientId: String(auth.userId),
+              providerId: String(targetProviderId),
+              type: 'NEW_REVIEW'
+            }
           ).catch(err => console.error('FCM Provider Review Notification Error:', err));
         } catch (fcmErr) {
           console.error('Failed to trigger FCM review notification:', fcmErr);
@@ -7254,7 +7317,12 @@ export async function PUT(
               clientId,
               'Booking Completed! 🎉',
               'Your appointment is complete. Tap here to share your review and rate your provider!',
-              { bookingId: String(numBookingId), type: 'BOOKING_COMPLETED' }
+              {
+                bookingId: String(numBookingId),
+                clientId: String(updatedBooking.clientId || clientId),
+                providerId: String(updatedBooking.providerId || ''),
+                type: 'BOOKING_COMPLETED'
+              }
             ).catch(err => console.error('FCM Client Completed Notification Error:', err));
           }
         }
