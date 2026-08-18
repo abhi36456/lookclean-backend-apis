@@ -1029,19 +1029,24 @@ async function enrichProviderProfile(providerProfile: any, request?: any) {
     return match ? { id: match.id, title: match.title } : { id: typeof cat === 'number' ? cat : 0, title: String(cat) };
   });
 
-  // 2. Enrich services: map to original ServiceSetting ID
+  // 2. Enrich services: map to original ServiceSetting ID and include servicePortfolioImage
   if (Array.isArray(providerProfile.services)) {
     providerProfile.services = providerProfile.services.map((s: any) => {
       const match = serviceSettings.find(item =>
-        item.title.toLowerCase() === s.name.toLowerCase() &&
-        (item.mainType ? item.mainType.title.toLowerCase() === s.category.toLowerCase() : true)
+        item.title.toLowerCase() === (s.name || '').toLowerCase() &&
+        (item.mainType ? item.mainType.title.toLowerCase() === (s.category || '').toLowerCase() : true)
       );
+      let img = s.servicePortfolioImage || s.portfolioImage || s.image || (match ? (match as any).imageUrl : null) || null;
+      if (baseUrl && img && img.startsWith('/')) {
+        img = `${baseUrl}${img}`;
+      }
       return {
         id: s.id,
         serviceId: match ? match.id : null,
         name: s.name,
         price: s.price,
-        category: s.category
+        category: s.category,
+        servicePortfolioImage: img
       };
     });
   }
@@ -5766,48 +5771,193 @@ export async function POST(
       if (!auth || auth.role !== 'provider') {
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
       }
-      const { services } = body as any; // Array of { service_id, price } or { serviceId, price }
-      if (!Array.isArray(services)) {
-        return NextResponse.json({ message: 'Services must be an array' }, { status: 400 });
+      const baseUrl = getBaseUrl(request);
+      let servicesInput: any[] = [];
+
+      // 1. Check indexed form data entries e.g. services[0]['service_id'], services[0]['price'], services[0]['portfolioImage']
+      const indexedServicesMap: { [key: number]: any } = {};
+
+      if (parsedFormData) {
+        parsedFormData.forEach((value, key) => {
+          const match = key.match(/^services\[(\d+)\](?:\[|['"])(.*?)(?:\]|['"])$/i) || key.match(/^services\[(\d+)\]\[?([^\]'"]+)\]?$/i);
+          if (match) {
+            const idx = parseInt(match[1], 10);
+            const field = match[2].trim().replace(/^['"]|['"]$/g, '');
+            if (!indexedServicesMap[idx]) {
+              indexedServicesMap[idx] = {};
+            }
+            indexedServicesMap[idx][field] = value;
+          }
+        });
       }
+
+      const indexedKeys = Object.keys(indexedServicesMap);
+      if (indexedKeys.length > 0) {
+        servicesInput = indexedKeys
+          .sort((a, b) => Number(a) - Number(b))
+          .map(k => indexedServicesMap[Number(k)]);
+      } else {
+        let rawServices = (body as any).services;
+        if (!rawServices && parsedFormData) {
+          const rawServicesFd = parsedFormData.get('services');
+          if (typeof rawServicesFd === 'string') {
+            try {
+              rawServices = JSON.parse(rawServicesFd);
+            } catch {
+              rawServices = null;
+            }
+          }
+        }
+
+        if (Array.isArray(rawServices)) {
+          servicesInput = rawServices;
+        } else if (rawServices && typeof rawServices === 'object') {
+          servicesInput = [rawServices];
+        } else {
+          const sId = (body as any).service_id || (body as any).serviceId || (parsedFormData?.get('service_id') as string) || (parsedFormData?.get('serviceId') as string);
+          const price = (body as any).price || (parsedFormData?.get('price') as string);
+          if (sId) {
+            servicesInput = [{ service_id: sId, price: price || 0 }];
+          }
+        }
+      }
+
+      if (!Array.isArray(servicesInput) || servicesInput.length === 0) {
+        return NextResponse.json({ message: 'Services array or service details required' }, { status: 400 });
+      }
+
+      const uploadDir = nodePath.join(process.cwd(), 'public', 'uploads');
+      let createdUploadDir = false;
+
+      const processedServices = await Promise.all(
+        servicesInput.map(async (s: any, idx: number) => {
+          const sId = parseInt(s.service_id || s.serviceId) || 0;
+          let portfolioImage: string | null = null;
+          let rawImgVal = s.portfolioImage ?? s.servicePortfolioImage ?? s.image ?? s.file;
+
+          if (rawImgVal && typeof rawImgVal === 'object' && 'name' in rawImgVal && (rawImgVal as any).size > 0) {
+            try {
+              if (!createdUploadDir) {
+                await fs.mkdir(uploadDir, { recursive: true });
+                createdUploadDir = true;
+              }
+              const fileObj = rawImgVal as any;
+              const fileExt = nodePath.extname(fileObj.name || '').toLowerCase() || '.png';
+              const uniqueFileName = `portfolio_${auth.userId}_${sId || idx}_${Date.now()}_${Math.floor(Math.random() * 1000)}${fileExt}`;
+              const bytes = await fileObj.arrayBuffer();
+              await fs.writeFile(nodePath.join(uploadDir, uniqueFileName), Buffer.from(bytes));
+              portfolioImage = `/uploads/${uniqueFileName}`;
+            } catch (err: any) {
+              console.error('Failed to save service portfolio image from form data item:', err);
+            }
+          } else if (typeof rawImgVal === 'string' && rawImgVal.trim().length > 0) {
+            portfolioImage = rawImgVal.trim();
+          } else if (parsedFormData) {
+            const fileKeys = [
+              `services[${idx}][portfolioImage]`,
+              `services[${idx}]['portfolioImage']`,
+              `services[${idx}][servicePortfolioImage]`,
+              `services[${idx}][image]`,
+              `image_${sId}`,
+              `servicePortfolioImage_${sId}`,
+              `file_${sId}`,
+              `portfolioImage_${sId}`,
+              `image_${idx}`,
+              `servicePortfolioImage_${idx}`,
+              `file_${idx}`,
+              `image`,
+              `file`,
+              `servicePortfolioImage`,
+              `portfolioImage`
+            ];
+
+            let fileObj: any = null;
+            for (const key of fileKeys) {
+              const f = parsedFormData.get(key);
+              if (f && typeof f === 'object' && 'name' in f && (f as any).size > 0) {
+                fileObj = f;
+                break;
+              }
+            }
+
+            if (fileObj) {
+              try {
+                if (!createdUploadDir) {
+                  await fs.mkdir(uploadDir, { recursive: true });
+                  createdUploadDir = true;
+                }
+                const fileExt = nodePath.extname(fileObj.name || '').toLowerCase() || '.png';
+                const uniqueFileName = `portfolio_${auth.userId}_${sId || idx}_${Date.now()}_${Math.floor(Math.random() * 1000)}${fileExt}`;
+                const bytes = await fileObj.arrayBuffer();
+                await fs.writeFile(nodePath.join(uploadDir, uniqueFileName), Buffer.from(bytes));
+                portfolioImage = `/uploads/${uniqueFileName}`;
+              } catch (err: any) {
+                console.error('Failed to save service portfolio image from fallback key:', err);
+              }
+            }
+          }
+
+          return {
+            service_id: sId,
+            serviceId: sId,
+            price: parseInt(s.price) || 0,
+            servicePortfolioImage: portfolioImage
+          };
+        })
+      );
+
       try {
+        let insertedList: any[] = [];
         await executeWithDbFallback(
           async () => {
             let profile = await prisma.providerProfile.findUnique({ where: { userId: auth.userId } });
             if (!profile) {
-              // Auto create an empty profile
               profile = await prisma.providerProfile.create({
                 data: { userId: auth.userId, location: '' }
               });
             }
-            // Clear current services
+
             await prisma.providerService.deleteMany({ where: { profileId: profile.id } });
 
-            // Look up corresponding ServiceSetting names and categories
-            const serviceIds = services.map((s: any) => parseInt(s.service_id || s.serviceId)).filter(Boolean);
+            const serviceIds = processedServices.map(s => s.serviceId).filter(Boolean);
             const serviceSettings = await prisma.serviceSetting.findMany({
               where: { id: { in: serviceIds } },
               include: { mainType: true }
             });
 
-            const dataToInsert = services.map((s: any) => {
-              const sId = parseInt(s.service_id || s.serviceId);
-              const setting = serviceSettings.find(set => set.id === sId);
-              if (!setting) return null;
+            const dataToInsert = processedServices.map(s => {
+              const setting = serviceSettings.find(set => set.id === s.serviceId);
               return {
                 profileId: profile.id,
-                name: setting.title,
-                price: parseInt(s.price) || 0,
-                category: setting.mainType ? setting.mainType.title : 'General'
+                name: setting ? setting.title : `Service #${s.serviceId}`,
+                price: s.price,
+                category: setting && setting.mainType ? setting.mainType.title : 'General',
+                servicePortfolioImage: s.servicePortfolioImage
               };
-            }).filter(Boolean) as any[];
+            });
 
-            // Re-insert
             if (dataToInsert.length > 0) {
               await prisma.providerService.createMany({
-                data: dataToInsert,
+                data: dataToInsert
               });
             }
+
+            const dbSvcs = await prisma.providerService.findMany({
+              where: { profileId: profile.id }
+            });
+            insertedList = dbSvcs.map(s => {
+              let img = s.servicePortfolioImage;
+              if (baseUrl && img && img.startsWith('/')) {
+                img = `${baseUrl}${img}`;
+              }
+              return {
+                id: s.id,
+                name: s.name,
+                price: s.price,
+                category: s.category,
+                servicePortfolioImage: img
+              };
+            });
           },
           async () => {
             let mockProfile = mockDb.profiles.find((p) => p.userId === auth.userId);
@@ -5816,19 +5966,33 @@ export async function POST(
               mockDb.profiles.push(mockProfile);
             }
             mockDb.services = mockDb.services.filter((s) => s.profileId !== mockProfile.id);
-            services.forEach((s: any) => {
-              const sId = parseInt(s.service_id || s.serviceId) || 1;
-              mockDb.services.push({
-                id: Math.floor(Math.random() * 10000),
+            insertedList = processedServices.map((s, index) => {
+              const newId = Math.floor(Math.random() * 10000);
+              let img = s.servicePortfolioImage;
+              if (baseUrl && img && img.startsWith('/')) {
+                img = `${baseUrl}${img}`;
+              }
+              const mockSvc = {
+                id: newId,
                 profileId: mockProfile.id,
-                name: `Service #${sId}`,
-                price: parseInt(s.price) || 0,
+                name: `Service #${s.serviceId || index + 1}`,
+                price: s.price,
                 category: 'General',
-              });
+                servicePortfolioImage: s.servicePortfolioImage
+              };
+              mockDb.services.push(mockSvc);
+              return {
+                ...mockSvc,
+                servicePortfolioImage: img
+              };
             });
           }
         );
-        return NextResponse.json({ success: true, message: 'Services updated successfully.' });
+        return NextResponse.json({
+          success: true,
+          message: 'Services updated successfully.',
+          services: insertedList
+        });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to save services' }, { status: 400 });
       }

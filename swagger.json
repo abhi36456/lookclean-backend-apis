@@ -57,6 +57,10 @@
       "description": "Mobile app version requirement settings API"
     },
     {
+      "name": "Admin Service Settings",
+      "description": "Admin APIs for managing master service categories, services, images, and ambience settings"
+    },
+    {
       "name": "Report & Issues",
       "description": "User feedback and app issues report submission API"
     }
@@ -2657,6 +2661,180 @@
         }
       }
     },
+    "/admin/settings/services": {
+      "get": {
+        "tags": [
+          "Admin Service Settings"
+        ],
+        "summary": "Get all master service settings",
+        "description": "Returns list of all admin-configured services including title, mainType, and optional service image URL.",
+        "responses": {
+          "200": {
+            "description": "List of service settings retrieved successfully"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin Service Settings"
+        ],
+        "summary": "Create a new master service setting",
+        "description": "Allows admin to add a new service setting with an optional image file upload.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "mainType",
+                  "title"
+                ],
+                "properties": {
+                  "mainType": {
+                    "type": "string",
+                    "example": "Haircut & Styling"
+                  },
+                  "title": {
+                    "type": "string",
+                    "example": "Kids Haircut"
+                  },
+                  "image": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Optional service image file"
+                  }
+                }
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "mainType",
+                  "title"
+                ],
+                "properties": {
+                  "mainType": {
+                    "type": "string",
+                    "example": "Haircut & Styling"
+                  },
+                  "title": {
+                    "type": "string",
+                    "example": "Kids Haircut"
+                  },
+                  "imageUrl": {
+                    "type": "string",
+                    "example": "/uploads/service_123.png"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Service setting created successfully"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Admin Service Settings"
+        ],
+        "summary": "Edit an existing master service setting",
+        "description": "Allows admin to update service title, category (mainType), and upload/replace or remove service image.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "example": 1
+                  },
+                  "title": {
+                    "type": "string",
+                    "example": "Women Haircut & Styling"
+                  },
+                  "mainType": {
+                    "type": "string",
+                    "example": "Haircut & Styling"
+                  },
+                  "image": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "New image file object to replace current service image"
+                  }
+                }
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "example": 1
+                  },
+                  "title": {
+                    "type": "string",
+                    "example": "Women Haircut & Styling"
+                  },
+                  "mainType": {
+                    "type": "string",
+                    "example": "Haircut & Styling"
+                  },
+                  "imageUrl": {
+                    "type": "string",
+                    "example": "/uploads/service_123.png"
+                  },
+                  "removeImage": {
+                    "type": "boolean",
+                    "example": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Service setting updated successfully"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Admin Service Settings"
+        ],
+        "summary": "Delete a master service setting",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID of service setting to delete"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Service setting deleted successfully"
+          }
+        }
+      }
+    },
     "/provider/setup/services": {
       "get": {
         "tags": [
@@ -2673,10 +2851,48 @@
         "tags": [
           "Provider Onboarding Flow"
         ],
-        "summary": "Step 3: Save selected services and pricing",
+        "summary": "Step 3: Save selected services, pricing, and portfolio image",
+        "description": "Save provider selected services with pricing and optional portfolio image file attachments (supports application/json or multipart/form-data).",
         "requestBody": {
           "required": true,
           "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "services[0]['service_id']": {
+                    "type": "integer",
+                    "description": "Service ID for 1st service item",
+                    "example": 1
+                  },
+                  "services[0]['price']": {
+                    "type": "integer",
+                    "description": "Price for 1st service item",
+                    "example": 45
+                  },
+                  "services[0]['portfolioImage']": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Portfolio work image File object for 1st service item"
+                  },
+                  "services[1]['service_id']": {
+                    "type": "integer",
+                    "description": "Service ID for 2nd service item",
+                    "example": 2
+                  },
+                  "services[1]['price']": {
+                    "type": "integer",
+                    "description": "Price for 2nd service item",
+                    "example": 60
+                  },
+                  "services[1]['portfolioImage']": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Portfolio work image File object for 2nd service item"
+                  }
+                }
+              }
+            },
             "application/json": {
               "schema": {
                 "type": "object",
@@ -2696,6 +2912,10 @@
                         "price": {
                           "type": "integer",
                           "example": 45
+                        },
+                        "servicePortfolioImage": {
+                          "type": "string",
+                          "example": "http://localhost:3000/uploads/portfolio_1.png"
                         }
                       }
                     }
@@ -2707,7 +2927,7 @@
         },
         "responses": {
           "200": {
-            "description": "Services saved successfully"
+            "description": "Services saved successfully with portfolio images"
           }
         }
       }

@@ -176,18 +176,30 @@ export default function AdminPage() {
   const [categoriesLoading, setCategoriesLoading] = useState(false);
 
   // Services CRUD state
-  const [servicesList, setServicesList] = useState<{ id: number; mainType: string; title: string }[]>([]);
+  const [servicesList, setServicesList] = useState<{ id: number; mainType: string; title: string; imageUrl?: string | null }[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
 
   // Add Service Modal state
   const [addServiceModalOpen, setAddServiceModalOpen] = useState(false);
   const [activeAddServiceCategory, setActiveAddServiceCategory] = useState('');
   const [newModalServiceTitle, setNewModalServiceTitle] = useState('');
+  const [addServiceImageFile, setAddServiceImageFile] = useState<File | null>(null);
+  const [addServiceImagePreview, setAddServiceImagePreview] = useState<string | null>(null);
+
+  // Edit Service Modal state
+  const [editServiceModalOpen, setEditServiceModalOpen] = useState(false);
+  const [editingService, setEditingService] = useState<{ id: number; mainType: string; title: string; imageUrl?: string | null } | null>(null);
+  const [editServiceTitle, setEditServiceTitle] = useState('');
+  const [editServiceImageFile, setEditServiceImageFile] = useState<File | null>(null);
+  const [editServiceImagePreview, setEditServiceImagePreview] = useState<string | null>(null);
+  const [removeEditImage, setRemoveEditImage] = useState(false);
 
   // Add Category with First Service state
   const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
   const [newCategoryFormTitle, setNewCategoryFormTitle] = useState('');
   const [newCategoryFirstServiceTitle, setNewCategoryFirstServiceTitle] = useState('');
+  const [newCategoryServiceImageFile, setNewCategoryServiceImageFile] = useState<File | null>(null);
+  const [newCategoryServiceImagePreview, setNewCategoryServiceImagePreview] = useState<string | null>(null);
 
   // Ambience/Amenities CRUD state
   const [ambienceList, setAmbienceList] = useState<{ id: number; mainType: string; mainTypeIcon?: string; title: string; icon?: string }[]>([]);
@@ -2999,13 +3011,43 @@ export default function AdminPage() {
                                       ) : (
                                         filteredServices.map((service) => (
                                           <div key={service.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-900/40 border border-white/5 hover:border-primary/20 transition-all">
-                                            <span className="text-xs font-semibold text-gray-200">{service.title}</span>
-                                            <button
-                                              onClick={() => handleDeleteService(service.id)}
-                                              className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase px-2 py-1 rounded hover:bg-red-500/10 cursor-pointer"
-                                            >
-                                              Delete
-                                            </button>
+                                            <div className="flex items-center gap-3">
+                                              {service.imageUrl ? (
+                                                <img
+                                                  src={service.imageUrl}
+                                                  alt={service.title}
+                                                  className="w-9 h-9 rounded-lg object-cover border border-white/10 shrink-0"
+                                                />
+                                              ) : (
+                                                <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                                                  <Scissors className="w-4 h-4" />
+                                                </div>
+                                              )}
+                                              <span className="text-xs font-semibold text-gray-200">{service.title}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                              <button
+                                                onClick={() => {
+                                                  setEditingService(service);
+                                                  setEditServiceTitle(service.title);
+                                                  setEditServiceImagePreview(service.imageUrl || null);
+                                                  setEditServiceImageFile(null);
+                                                  setRemoveEditImage(false);
+                                                  setEditServiceModalOpen(true);
+                                                }}
+                                                className="text-[10px] text-blue-400 hover:text-blue-300 font-bold uppercase px-2 py-1 rounded hover:bg-blue-500/10 cursor-pointer flex items-center gap-1"
+                                              >
+                                                <Edit3 className="w-3 h-3" />
+                                                <span>Edit</span>
+                                              </button>
+                                              <button
+                                                onClick={() => handleDeleteService(service.id)}
+                                                className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase px-2 py-1 rounded hover:bg-red-500/10 cursor-pointer flex items-center gap-1"
+                                              >
+                                                <Trash2 className="w-3 h-3" />
+                                                <span>Delete</span>
+                                              </button>
+                                            </div>
                                           </div>
                                         ))
                                       )}
@@ -3040,14 +3082,28 @@ export default function AdminPage() {
                                     }
 
                                     // 2. Create First Service
-                                    const svcRes = await fetch('/api/admin/settings/services', {
-                                      method: 'POST',
-                                      headers: {
-                                        'Content-Type': 'application/json',
-                                        Authorization: `Bearer ${token}`,
-                                      },
-                                      body: JSON.stringify({ mainType: newCategoryFormTitle, title: newCategoryFirstServiceTitle }),
-                                    });
+                                    let svcRes: Response;
+                                    if (newCategoryServiceImageFile) {
+                                      const formData = new FormData();
+                                      formData.append('mainType', newCategoryFormTitle);
+                                      formData.append('title', newCategoryFirstServiceTitle);
+                                      formData.append('image', newCategoryServiceImageFile);
+                                      svcRes = await fetch('/api/admin/settings/services', {
+                                        method: 'POST',
+                                        headers: { Authorization: `Bearer ${token}` },
+                                        body: formData,
+                                      });
+                                    } else {
+                                      svcRes = await fetch('/api/admin/settings/services', {
+                                        method: 'POST',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                          Authorization: `Bearer ${token}`,
+                                        },
+                                        body: JSON.stringify({ mainType: newCategoryFormTitle, title: newCategoryFirstServiceTitle }),
+                                      });
+                                    }
+
                                     if (!svcRes.ok) {
                                       const errData = await svcRes.json();
                                       throw new Error(errData.message || 'Failed to create first service');
@@ -3056,6 +3112,8 @@ export default function AdminPage() {
                                     setIsAddingNewCategory(false);
                                     setNewCategoryFormTitle('');
                                     setNewCategoryFirstServiceTitle('');
+                                    setNewCategoryServiceImageFile(null);
+                                    setNewCategoryServiceImagePreview(null);
                                     fetchCategories();
                                     fetchServices();
                                   } catch (err: any) {
@@ -3082,10 +3140,38 @@ export default function AdminPage() {
                                       required
                                     />
                                   </div>
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-medium text-gray-300">Service Image (Optional)</label>
+                                    <div className="flex items-center gap-3">
+                                      {newCategoryServiceImagePreview ? (
+                                        <img src={newCategoryServiceImagePreview} alt="Preview" className="w-10 h-10 rounded-lg object-cover border border-white/10" />
+                                      ) : (
+                                        <div className="w-10 h-10 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-500">
+                                          <Scissors className="w-4 h-4" />
+                                        </div>
+                                      )}
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) {
+                                            setNewCategoryServiceImageFile(file);
+                                            setNewCategoryServiceImagePreview(URL.createObjectURL(file));
+                                          }
+                                        }}
+                                        className="text-xs text-gray-400 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                                      />
+                                    </div>
+                                  </div>
                                   <div className="flex justify-end gap-3 pt-2">
                                     <button
                                       type="button"
-                                      onClick={() => setIsAddingNewCategory(false)}
+                                      onClick={() => {
+                                        setIsAddingNewCategory(false);
+                                        setNewCategoryServiceImageFile(null);
+                                        setNewCategoryServiceImagePreview(null);
+                                      }}
                                       className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
                                     >
                                       Cancel
@@ -3115,27 +3201,42 @@ export default function AdminPage() {
                               <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
                                 <Scissors className="w-4 h-4 text-primary" /> Add Service to {activeAddServiceCategory}
                               </h3>
-                              <p className="text-xs text-gray-450">Please enter a title for the new sub-service.</p>
+                              <p className="text-xs text-gray-450">Please enter a title and optional image for the new sub-service.</p>
 
                               <form onSubmit={async (e) => {
                                 e.preventDefault();
                                 if (!newModalServiceTitle.trim()) return;
                                 setServicesLoading(true);
                                 try {
-                                  const res = await fetch('/api/admin/settings/services', {
-                                    method: 'POST',
-                                    headers: {
-                                      'Content-Type': 'application/json',
-                                      Authorization: `Bearer ${token}`,
-                                    },
-                                    body: JSON.stringify({
-                                      mainType: activeAddServiceCategory,
-                                      title: newModalServiceTitle
-                                    }),
-                                  });
+                                  let res: Response;
+                                  if (addServiceImageFile) {
+                                    const formData = new FormData();
+                                    formData.append('mainType', activeAddServiceCategory);
+                                    formData.append('title', newModalServiceTitle);
+                                    formData.append('image', addServiceImageFile);
+                                    res = await fetch('/api/admin/settings/services', {
+                                      method: 'POST',
+                                      headers: { Authorization: `Bearer ${token}` },
+                                      body: formData,
+                                    });
+                                  } else {
+                                    res = await fetch('/api/admin/settings/services', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        Authorization: `Bearer ${token}`,
+                                      },
+                                      body: JSON.stringify({
+                                        mainType: activeAddServiceCategory,
+                                        title: newModalServiceTitle
+                                      }),
+                                    });
+                                  }
                                   if (res.ok) {
                                     setAddServiceModalOpen(false);
                                     setNewModalServiceTitle('');
+                                    setAddServiceImageFile(null);
+                                    setAddServiceImagePreview(null);
                                     fetchServices();
                                   } else {
                                     const data = await res.json();
@@ -3156,16 +3257,169 @@ export default function AdminPage() {
                                   required
                                 />
 
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-gray-300">Service Image (Optional)</label>
+                                  <div className="flex items-center gap-3">
+                                    {addServiceImagePreview ? (
+                                      <img src={addServiceImagePreview} alt="Preview" className="w-10 h-10 rounded-lg object-cover border border-white/10" />
+                                    ) : (
+                                      <div className="w-10 h-10 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-500">
+                                        <Scissors className="w-4 h-4" />
+                                      </div>
+                                    )}
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          setAddServiceImageFile(file);
+                                          setAddServiceImagePreview(URL.createObjectURL(file));
+                                        }
+                                      }}
+                                      className="text-xs text-gray-400 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                                    />
+                                  </div>
+                                </div>
+
                                 <div className="flex justify-end gap-3 pt-2">
                                   <button
                                     type="button"
-                                    onClick={() => setAddServiceModalOpen(false)}
+                                    onClick={() => {
+                                      setAddServiceModalOpen(false);
+                                      setAddServiceImageFile(null);
+                                      setAddServiceImagePreview(null);
+                                    }}
                                     className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
                                   >
                                     Cancel
                                   </button>
                                   <Button type="submit" isLoading={servicesLoading} className="px-5 py-2">
                                     Add Service
+                                  </Button>
+                                </div>
+                              </form>
+                            </Card>
+                          </div>
+                        )}
+
+                        {/* Edit Service Modal Overlay */}
+                        {editServiceModalOpen && editingService && (
+                          <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <Card className="border border-gray-850 p-6 space-y-4 max-w-md w-full bg-gray-950 shadow-2xl">
+                              <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                                <Scissors className="w-4 h-4 text-primary" /> Edit Service
+                              </h3>
+                              <p className="text-xs text-gray-450">Update details for service "{editingService.title}".</p>
+
+                              <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                if (!editServiceTitle.trim()) return;
+                                setServicesLoading(true);
+                                try {
+                                  let res: Response;
+                                  if (editServiceImageFile) {
+                                    const formData = new FormData();
+                                    formData.append('id', String(editingService.id));
+                                    formData.append('title', editServiceTitle);
+                                    formData.append('mainType', editingService.mainType);
+                                    formData.append('image', editServiceImageFile);
+                                    res = await fetch('/api/admin/settings/services', {
+                                      method: 'PUT',
+                                      headers: { Authorization: `Bearer ${token}` },
+                                      body: formData,
+                                    });
+                                  } else {
+                                    res = await fetch('/api/admin/settings/services', {
+                                      method: 'PUT',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        Authorization: `Bearer ${token}`,
+                                      },
+                                      body: JSON.stringify({
+                                        id: editingService.id,
+                                        title: editServiceTitle,
+                                        mainType: editingService.mainType,
+                                        removeImage: removeEditImage,
+                                      }),
+                                    });
+                                  }
+
+                                  if (res.ok) {
+                                    setEditServiceModalOpen(false);
+                                    setEditingService(null);
+                                    fetchServices();
+                                  } else {
+                                    const data = await res.json();
+                                    alert(data.message || 'Failed to update service');
+                                  }
+                                } catch (err) {
+                                  console.error(err);
+                                } finally {
+                                  setServicesLoading(false);
+                                }
+                              }} className="space-y-4">
+                                <Input
+                                  label="Service Title"
+                                  type="text"
+                                  value={editServiceTitle}
+                                  onChange={(e) => setEditServiceTitle(e.target.value)}
+                                  required
+                                />
+
+                                <div className="space-y-2">
+                                  <label className="text-xs font-medium text-gray-300">Service Image (Optional)</label>
+                                  <div className="flex items-center gap-3">
+                                    {!removeEditImage && editServiceImagePreview ? (
+                                      <img src={editServiceImagePreview} alt="Preview" className="w-10 h-10 rounded-lg object-cover border border-white/10" />
+                                    ) : (
+                                      <div className="w-10 h-10 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-500">
+                                        <Scissors className="w-4 h-4" />
+                                      </div>
+                                    )}
+                                    <div className="space-y-1">
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) {
+                                            setEditServiceImageFile(file);
+                                            setEditServiceImagePreview(URL.createObjectURL(file));
+                                            setRemoveEditImage(false);
+                                          }
+                                        }}
+                                        className="text-xs text-gray-400 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                                      />
+                                      {!removeEditImage && editServiceImagePreview && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setRemoveEditImage(true);
+                                            setEditServiceImageFile(null);
+                                          }}
+                                          className="text-[10px] text-red-400 hover:underline font-medium block"
+                                        >
+                                          Remove current image
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-end gap-3 pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditServiceModalOpen(false);
+                                      setEditingService(null);
+                                    }}
+                                    className="px-4 py-2 rounded-xl border border-gray-800 text-xs font-semibold text-gray-400 hover:text-white transition-all cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <Button type="submit" isLoading={servicesLoading} className="px-5 py-2">
+                                    Save Changes
                                   </Button>
                                 </div>
                               </form>

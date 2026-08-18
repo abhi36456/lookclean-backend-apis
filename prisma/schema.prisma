@@ -86,14 +86,15 @@ model ProviderProfile {
 }
 
 model ProviderService {
-  id          Int             @id @default(autoincrement())
-  profileId   Int
-  profile     ProviderProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  name        String
-  price       Int
-  category    String
-  createdAt   DateTime         @default(now())
-  bookingServices BookingService[]
+  id                    Int              @id @default(autoincrement())
+  profileId             Int
+  profile               ProviderProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name                  String
+  price                 Int
+  category              String
+  servicePortfolioImage String?          @db.VarChar(500)
+  createdAt             DateTime         @default(now())
+  bookingServices       BookingService[]
 
   @@map("provider_service")
 }
