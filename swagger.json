@@ -41,6 +41,10 @@
       "description": "APIs for salon charges, Stripe Payment Intents, Checkout Sessions, Payment Status, and Webhook integration"
     },
     {
+      "name": "Provider Stripe Connect & Payouts",
+      "description": "Consolidated Stripe Connect APIs for Providers (Bank account onboarding, payout status, Express dashboard login link, and earnings payout history)"
+    },
+    {
       "name": "Reviews & Ratings",
       "description": "Provider review and rating submission APIs"
     },
@@ -3593,6 +3597,249 @@
           "401": {
             "description": "Unauthorized"
           }
+        }
+      }
+    },
+    "/provider/stripe/onboard": {
+      "post": {
+        "tags": [
+          "Provider Stripe Connect & Payouts"
+        ],
+        "summary": "Initiate Provider Stripe Connect Express Onboarding",
+        "description": "Creates a Stripe Connect Express account for the provider (if not created yet) and returns the single-use onboarding web URL to collect bank account & KYC details.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stripe Connect onboarding URL created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "stripeAccountId": { "type": "string", "example": "acct_1N9x829xZ..." },
+                    "url": { "type": "string", "example": "https://connect.stripe.com/setup/s/..." }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized - Provider Bearer JWT required" },
+          "403": { "description": "Forbidden - Provider role required" }
+        }
+      }
+    },
+    "/provider/stripe/status": {
+      "get": {
+        "tags": [
+          "Provider Stripe Connect & Payouts"
+        ],
+        "summary": "Get Provider Stripe Account & Payout Capability Status",
+        "description": "Fetches current onboarding completion status, bank account verification state, and payout enablement for the authenticated provider.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider Stripe account status retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "stripeAccountId": { "type": "string", "example": "acct_1N9x829xZ...", "nullable": true },
+                    "detailsSubmitted": { "type": "boolean", "example": true },
+                    "payoutsEnabled": { "type": "boolean", "example": true },
+                    "chargesEnabled": { "type": "boolean", "example": true },
+                    "commissionRate": { "type": "number", "example": 10.0 }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized - Provider Bearer JWT required" },
+          "403": { "description": "Forbidden - Provider role required" }
+        }
+      }
+    },
+    "/provider/stripe/login-link": {
+      "post": {
+        "tags": [
+          "Provider Stripe Connect & Payouts"
+        ],
+        "summary": "Generate Stripe Express Dashboard Single-Sign-On Link",
+        "description": "Generates a single-use login link to the Stripe Express Dashboard for the provider to update bank account details or view payout tax forms.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stripe Express dashboard login link generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "url": { "type": "string", "example": "https://connect.stripe.com/express/..." }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Provider does not have a connected Stripe account yet" },
+          "401": { "description": "Unauthorized - Provider Bearer JWT required" }
+        }
+      }
+    },
+    "/provider/stripe/payouts": {
+      "get": {
+        "tags": [
+          "Provider Stripe Connect & Payouts"
+        ],
+        "summary": "Get Provider Payout History & Commission Breakdown",
+        "description": "Returns list of all completed booking payouts with gross amounts, platform commission deducted, and net amounts transferred to provider bank account.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider payout history retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "commissionRate": { "type": "number", "example": 10.0 },
+                    "totalGrossEarnings": { "type": "number", "example": 1250.00 },
+                    "totalCommissionDeducted": { "type": "number", "example": 125.00 },
+                    "totalNetPayouts": { "type": "number", "example": 1125.00 },
+                    "payouts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "bookingId": { "type": "integer", "example": 102 },
+                          "date": { "type": "string", "format": "date-time", "example": "2026-08-19T20:00:00Z" },
+                          "serviceAmount": { "type": "number", "example": 100.00 },
+                          "platformCommission": { "type": "number", "example": 10.00 },
+                          "providerPayoutAmount": { "type": "number", "example": 90.00 },
+                          "payoutStatus": { "type": "string", "example": "transferred" },
+                          "transactionId": { "type": "string", "example": "pi_3MtwB2LkdIw..." },
+                          "stripeTransferId": { "type": "string", "example": "tr_1N9x..." }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized - Provider Bearer JWT required" }
+        }
+      }
+    },
+    "/stripe/payment-intent": {
+      "post": {
+        "tags": [
+          "Stripe Payments"
+        ],
+        "summary": "Create Booking PaymentIntent with Automatic Commission Split",
+        "description": "Creates a Stripe PaymentIntent with application_fee_amount (platform commission deduction) and transfer_data.destination (direct payout to provider's connected Stripe bank account).",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "bookingId"
+                ],
+                "properties": {
+                  "bookingId": {
+                    "type": "integer",
+                    "example": 102,
+                    "description": "ID of the booking to pay for"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "PaymentIntent created successfully with commission fee split",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "clientSecret": { "type": "string", "example": "pi_3MtwB..._secret_..." },
+                    "paymentIntentId": { "type": "string", "example": "pi_3MtwB2LkdIw..." },
+                    "amount": { "type": "number", "example": 100.00 },
+                    "platformCommission": { "type": "number", "example": 10.00 },
+                    "providerPayoutAmount": { "type": "number", "example": 90.00 }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Bad Request - Missing bookingId or Stripe payment failure" },
+          "401": { "description": "Unauthorized - Bearer JWT required" }
+        }
+      }
+    },
+    "/stripe/webhook": {
+      "post": {
+        "tags": [
+          "Stripe Payments"
+        ],
+        "summary": "Stripe Webhook Event Listener",
+        "description": "Handles asynchronous events from Stripe (payment_intent.succeeded, account.updated) to finalize booking status, confirm bank payout transfer, and send FCM notification to provider.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Raw Stripe Event payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook event processed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "received": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid Webhook Signature or Payload" }
         }
       }
     }

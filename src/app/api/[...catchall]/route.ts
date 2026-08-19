@@ -1167,6 +1167,134 @@ export async function GET(
       }
     }
 
+    // GET /api/provider/stripe/status or /api/provider/stripe-connect/status
+    if (path === 'provider/stripe/status' || path === 'provider/stripe-connect/status' || path === 'provider/stripe/account-status') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ success: false, error: 'Unauthorized. Bearer token required.' }, { status: 401 });
+      }
+      if (auth.role !== 'provider') {
+        return NextResponse.json({ success: false, error: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      let profile: any = null;
+      await executeWithDbFallback(
+        async () => {
+          profile = await prisma.providerProfile.findUnique({ where: { userId: auth.userId } });
+        },
+        async () => {
+          profile = mockDb.profiles.find((p) => p.userId === auth.userId) || null;
+        }
+      );
+
+      const stripeAccountId = profile?.stripeAccountId || null;
+      let detailsSubmitted = profile?.stripeDetailsSubmitted || false;
+      let payoutsEnabled = profile?.stripePayoutsEnabled || false;
+      let chargesEnabled = profile?.stripeChargesEnabled || false;
+
+      if (stripeAccountId) {
+        const stripe = getStripeInstance();
+        if (stripe) {
+          try {
+            const account = await stripe.accounts.retrieve(stripeAccountId);
+            detailsSubmitted = account.details_submitted || false;
+            payoutsEnabled = account.payouts_enabled || false;
+            chargesEnabled = account.charges_enabled || false;
+
+            await executeWithDbFallback(
+              async () => {
+                await prisma.providerProfile.update({
+                  where: { userId: auth.userId },
+                  data: {
+                    stripeDetailsSubmitted: detailsSubmitted,
+                    stripePayoutsEnabled: payoutsEnabled,
+                    stripeChargesEnabled: chargesEnabled,
+                  }
+                });
+              },
+              async () => {
+                if (profile) {
+                  profile.stripeDetailsSubmitted = detailsSubmitted;
+                  profile.stripePayoutsEnabled = payoutsEnabled;
+                  profile.stripeChargesEnabled = chargesEnabled;
+                }
+              }
+            ).catch(() => {});
+          } catch (stripeErr: any) {
+            console.error('Failed to retrieve Stripe Connect account:', stripeErr);
+          }
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        stripeAccountId,
+        detailsSubmitted,
+        payoutsEnabled,
+        chargesEnabled,
+        commissionRate: profile?.commissionRate || 10.0,
+      });
+    }
+
+    // GET /api/provider/stripe/payouts or /api/provider/stripe-connect/payouts
+    if (path === 'provider/stripe/payouts' || path === 'provider/stripe-connect/payouts') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ success: false, error: 'Unauthorized. Bearer token required.' }, { status: 401 });
+      }
+      if (auth.role !== 'provider') {
+        return NextResponse.json({ success: false, error: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      let bookings: any[] = [];
+      await executeWithDbFallback(
+        async () => {
+          bookings = await prisma.booking.findMany({
+            where: { providerId: auth.userId, status: { in: ['confirmed', 'completed'] } },
+            orderBy: { createdAt: 'desc' }
+          });
+        },
+        async () => {
+          bookings = mockDb.bookings.filter((b) => b.providerId === auth.userId && ['confirmed', 'completed'].includes(b.status));
+        }
+      );
+
+      const commissionRate = 10.0;
+      let totalGrossEarnings = 0;
+      let totalCommissionDeducted = 0;
+      let totalNetPayouts = 0;
+
+      const payouts = bookings.map((b) => {
+        const serviceAmount = b.serviceAmount || b.grandTotal || 0;
+        const commission = b.platformCommission ?? (serviceAmount * (commissionRate / 100));
+        const netPayout = b.providerPayoutAmount ?? (serviceAmount - commission);
+
+        totalGrossEarnings += serviceAmount;
+        totalCommissionDeducted += commission;
+        totalNetPayouts += netPayout;
+
+        return {
+          bookingId: b.id,
+          date: b.date || b.createdAt,
+          serviceAmount,
+          platformCommission: commission,
+          providerPayoutAmount: netPayout,
+          payoutStatus: b.payoutStatus || (b.transactionId ? 'transferred' : 'pending'),
+          transactionId: b.transactionId || null,
+          stripeTransferId: b.stripeTransferId || null
+        };
+      });
+
+      return NextResponse.json({
+        success: true,
+        commissionRate,
+        totalGrossEarnings,
+        totalCommissionDeducted,
+        totalNetPayouts,
+        payouts
+      });
+    }
+
     // GET Test FCM Push Notification Endpoint (/api/test-notification?userId=2)
     if (path === 'test-notification' || path === 'users/test-notification' || path === 'fcm/test' || path === 'admin/test-notification') {
       const logs: string[] = [];
@@ -5021,6 +5149,291 @@ export async function POST(
         }
         return NextResponse.json({ message: err.message || 'Verification failed' }, { status: 400 });
       }
+    }
+
+    // POST /api/provider/stripe/onboard or /api/provider/stripe-connect/onboard
+    if (path === 'provider/stripe/onboard' || path === 'provider/stripe-connect/onboard') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ success: false, error: 'Unauthorized. Bearer token required.' }, { status: 401 });
+      }
+      if (auth.role !== 'provider') {
+        return NextResponse.json({ success: false, error: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      const stripe = getStripeInstance();
+      if (!stripe) {
+        return NextResponse.json({ success: false, error: 'Stripe is not configured on server. Missing STRIPE_SECRET_KEY.' }, { status: 500 });
+      }
+
+      let profile: any = null;
+      await executeWithDbFallback(
+        async () => {
+          profile = await prisma.providerProfile.findUnique({ where: { userId: auth.userId } });
+        },
+        async () => {
+          profile = mockDb.profiles.find((p) => p.userId === auth.userId) || null;
+        }
+      );
+
+      let stripeAccountId = profile?.stripeAccountId || null;
+
+      try {
+        if (!stripeAccountId) {
+          const account = await stripe.accounts.create({
+            type: 'express',
+            country: 'US',
+            email: auth.email,
+            capabilities: {
+              card_payments: { requested: true },
+              transfers: { requested: true },
+            },
+            business_type: 'individual',
+          });
+          stripeAccountId = account.id;
+
+          await executeWithDbFallback(
+            async () => {
+              await prisma.providerProfile.upsert({
+                where: { userId: auth.userId },
+                update: { stripeAccountId },
+                create: { userId: auth.userId, stripeAccountId }
+              });
+            },
+            async () => {
+              if (profile) profile.stripeAccountId = stripeAccountId;
+              else mockDb.profiles.push({ userId: auth.userId, stripeAccountId });
+            }
+          );
+        }
+
+        const baseUrl = getBaseUrl(request);
+        const accountLink = await stripe.accountLinks.create({
+          account: stripeAccountId,
+          refresh_url: `${baseUrl}/provider/stripe-connect/refresh`,
+          return_url: `${baseUrl}/provider/stripe-connect/callback?status=success`,
+          type: 'account_onboarding',
+        });
+
+        return NextResponse.json({
+          success: true,
+          stripeAccountId,
+          url: accountLink.url
+        });
+      } catch (err: any) {
+        return NextResponse.json({ success: false, error: err.message || 'Failed to create Stripe onboarding link' }, { status: 400 });
+      }
+    }
+
+    // POST /api/provider/stripe/login-link or /api/provider/stripe-connect/login-link
+    if (path === 'provider/stripe/login-link' || path === 'provider/stripe-connect/login-link') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ success: false, error: 'Unauthorized. Bearer token required.' }, { status: 401 });
+      }
+      if (auth.role !== 'provider') {
+        return NextResponse.json({ success: false, error: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      const stripe = getStripeInstance();
+      if (!stripe) {
+        return NextResponse.json({ success: false, error: 'Stripe is not configured on server. Missing STRIPE_SECRET_KEY.' }, { status: 500 });
+      }
+
+      let profile: any = null;
+      await executeWithDbFallback(
+        async () => {
+          profile = await prisma.providerProfile.findUnique({ where: { userId: auth.userId } });
+        },
+        async () => {
+          profile = mockDb.profiles.find((p) => p.userId === auth.userId) || null;
+        }
+      );
+
+      if (!profile?.stripeAccountId) {
+        return NextResponse.json({ success: false, error: 'Provider does not have a connected Stripe account yet.' }, { status: 400 });
+      }
+
+      try {
+        const loginLink = await stripe.accounts.createLoginLink(profile.stripeAccountId);
+        return NextResponse.json({
+          success: true,
+          url: loginLink.url
+        });
+      } catch (err: any) {
+        return NextResponse.json({ success: false, error: err.message || 'Failed to create Stripe login link' }, { status: 400 });
+      }
+    }
+
+    // POST /api/stripe/payment-intent (Create payment intent with commission deduction & provider payout)
+    if (path === 'stripe/payment-intent' || path === 'stripe/create-payment-intent') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ success: false, error: 'Unauthorized. Bearer token required.' }, { status: 401 });
+      }
+
+      const { bookingId } = body as any;
+      if (!bookingId) {
+        return NextResponse.json({ success: false, error: 'bookingId is required' }, { status: 400 });
+      }
+
+      let booking: any = null;
+      await executeWithDbFallback(
+        async () => {
+          booking = await prisma.booking.findUnique({
+            where: { id: parseInt(bookingId) },
+            include: { provider: { include: { providerProfile: true } } }
+          });
+        },
+        async () => {
+          booking = mockDb.bookings.find((b) => b.id === parseInt(bookingId));
+        }
+      );
+
+      if (!booking) {
+        return NextResponse.json({ success: false, error: 'Booking not found' }, { status: 404 });
+      }
+
+      const stripe = getStripeInstance();
+      if (!stripe) {
+        return NextResponse.json({ success: false, error: 'Stripe is not configured on server' }, { status: 500 });
+      }
+
+      const serviceAmount = booking.serviceAmount || booking.grandTotal || 0;
+      const commissionRate = booking.provider?.providerProfile?.commissionRate || 10.0;
+      const amountCents = Math.round(serviceAmount * 100);
+      const commissionCents = Math.round(amountCents * (commissionRate / 100));
+      const providerPayoutCents = amountCents - commissionCents;
+      const providerStripeAccountId = booking.provider?.providerProfile?.stripeAccountId;
+
+      try {
+        const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
+          amount: amountCents,
+          currency: 'usd',
+          automatic_payment_methods: { enabled: true },
+          metadata: {
+            bookingId: String(booking.id),
+            providerId: String(booking.providerId),
+            commissionAmount: String(commissionCents / 100),
+            providerPayoutAmount: String(providerPayoutCents / 100),
+          }
+        };
+
+        if (providerStripeAccountId) {
+          paymentIntentParams.application_fee_amount = commissionCents;
+          paymentIntentParams.transfer_data = {
+            destination: providerStripeAccountId,
+          };
+        }
+
+        const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams);
+
+        return NextResponse.json({
+          success: true,
+          clientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id,
+          amount: serviceAmount,
+          platformCommission: commissionCents / 100,
+          providerPayoutAmount: providerPayoutCents / 100,
+        });
+      } catch (err: any) {
+        return NextResponse.json({ success: false, error: err.message || 'Failed to create PaymentIntent' }, { status: 400 });
+      }
+    }
+
+    // POST /api/stripe/webhook (Stripe Webhook Listener)
+    if (path === 'stripe/webhook') {
+      const stripe = getStripeInstance();
+      if (!stripe) {
+        return NextResponse.json({ success: false, error: 'Stripe is not configured' }, { status: 500 });
+      }
+
+      const sig = request.headers.get('stripe-signature');
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+      let event: Stripe.Event;
+      try {
+        const rawBody = await request.text();
+        if (webhookSecret && sig) {
+          event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+        } else {
+          event = JSON.parse(rawBody);
+        }
+      } catch (err: any) {
+        return NextResponse.json({ success: false, error: `Webhook Error: ${err.message}` }, { status: 400 });
+      }
+
+      if (event.type === 'payment_intent.succeeded') {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        const bookingId = paymentIntent.metadata?.bookingId;
+
+        if (bookingId) {
+          const bId = parseInt(bookingId, 10);
+          const commissionAmount = parseFloat(paymentIntent.metadata?.commissionAmount || '0');
+          const providerPayoutAmount = parseFloat(paymentIntent.metadata?.providerPayoutAmount || '0');
+
+          await executeWithDbFallback(
+            async () => {
+              await prisma.booking.update({
+                where: { id: bId },
+                data: {
+                  status: 'confirmed',
+                  transactionId: paymentIntent.id,
+                  platformCommission: commissionAmount,
+                  providerPayoutAmount: providerPayoutAmount,
+                  payoutStatus: 'transferred',
+                  stripeRawData: JSON.stringify(paymentIntent)
+                }
+              });
+            },
+            async () => {
+              const b = mockDb.bookings.find((item) => item.id === bId);
+              if (b) {
+                b.status = 'confirmed';
+                b.transactionId = paymentIntent.id;
+                b.platformCommission = commissionAmount;
+                b.providerPayoutAmount = providerPayoutAmount;
+                b.payoutStatus = 'transferred';
+              }
+            }
+          ).catch(() => {});
+
+          const booking = mockDb.bookings.find((item) => item.id === bId);
+          if (booking?.providerId) {
+            await sendNotificationToUser(
+              booking.providerId,
+              'Payout Transferred! 💰',
+              `Payment of $${providerPayoutAmount.toFixed(2)} has been transferred directly to your bank account after platform commission deduction.`
+            );
+          }
+        }
+      }
+
+      if (event.type === 'account.updated') {
+        const account = event.data.object as Stripe.Account;
+        await executeWithDbFallback(
+          async () => {
+            await prisma.providerProfile.updateMany({
+              where: { stripeAccountId: account.id },
+              data: {
+                stripeDetailsSubmitted: account.details_submitted,
+                stripePayoutsEnabled: account.payouts_enabled,
+                stripeChargesEnabled: account.charges_enabled
+              }
+            });
+          },
+          async () => {
+            const profile = mockDb.profiles.find((p) => p.stripeAccountId === account.id);
+            if (profile) {
+              profile.stripeDetailsSubmitted = account.details_submitted;
+              profile.stripePayoutsEnabled = account.payouts_enabled;
+              profile.stripeChargesEnabled = account.charges_enabled;
+            }
+          }
+        ).catch(() => {});
+      }
+
+      return NextResponse.json({ received: true });
     }
 
     // 9. Save Twilio Settings (/api/admin/settings/twilio)

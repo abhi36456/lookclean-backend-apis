@@ -78,6 +78,11 @@ model ProviderProfile {
   isAway          Boolean           @default(false)
   isRushMode      Boolean           @default(false)
   isTravelMode    Boolean           @default(false)
+  stripeAccountId String?           @db.VarChar(255)
+  stripeDetailsSubmitted Boolean    @default(false)
+  stripePayoutsEnabled   Boolean    @default(false)
+  stripeChargesEnabled   Boolean    @default(false)
+  commissionRate         Float      @default(10.0)
   services        ProviderService[]
   amenities       ProviderAmenity[]
   createdAt       DateTime          @default(now())
@@ -176,6 +181,10 @@ model Booking {
   serviceAmount   Float
   grandTotal      Float
   transactionId   String?          @db.VarChar(255)
+  stripeTransferId String?         @db.VarChar(255)
+  platformCommission Float         @default(0)
+  providerPayoutAmount Float       @default(0)
+  payoutStatus    String           @default("pending") // "pending", "transferred", "paid_out", "failed"
   stripeRawData   String?          @db.LongText
   createdAt       DateTime         @default(now())
   services        BookingService[]
