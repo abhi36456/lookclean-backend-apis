@@ -1226,13 +1226,33 @@ export async function GET(
         }
       }
 
+      // Fetch Platform Fee Cut setting
+      let platformFeeCut = 5;
+      await executeWithDbFallback(
+        async () => {
+          const setting = await prisma.systemSetting.findUnique({ where: { key: 'platform_fee_cut' } });
+          if (setting && setting.value) {
+            platformFeeCut = parseFloat(setting.value);
+          }
+        },
+        async () => {
+          if (mockDb.platformFeeCut !== undefined) {
+            platformFeeCut = mockDb.platformFeeCut;
+          }
+        }
+      ).catch(() => {});
+
+      const commissionRate = (profile?.commissionRate && profile.commissionRate !== 10.0)
+        ? profile.commissionRate
+        : platformFeeCut;
+
       return NextResponse.json({
         success: true,
         stripeAccountId,
         detailsSubmitted,
         payoutsEnabled,
         chargesEnabled,
-        commissionRate: profile?.commissionRate || 10.0,
+        commissionRate,
       });
     }
 
@@ -1259,7 +1279,22 @@ export async function GET(
         }
       );
 
-      const commissionRate = 10.0;
+      let platformFeeCut = 5;
+      await executeWithDbFallback(
+        async () => {
+          const setting = await prisma.systemSetting.findUnique({ where: { key: 'platform_fee_cut' } });
+          if (setting && setting.value) {
+            platformFeeCut = parseFloat(setting.value);
+          }
+        },
+        async () => {
+          if (mockDb.platformFeeCut !== undefined) {
+            platformFeeCut = mockDb.platformFeeCut;
+          }
+        }
+      ).catch(() => {});
+
+      const commissionRate = platformFeeCut;
       let totalGrossEarnings = 0;
       let totalCommissionDeducted = 0;
       let totalNetPayouts = 0;
@@ -5300,7 +5335,24 @@ export async function POST(
       }
 
       const serviceAmount = booking.serviceAmount || booking.grandTotal || 0;
-      const commissionRate = booking.provider?.providerProfile?.commissionRate || 10.0;
+      let platformFeeCut = 5;
+      await executeWithDbFallback(
+        async () => {
+          const setting = await prisma.systemSetting.findUnique({ where: { key: 'platform_fee_cut' } });
+          if (setting && setting.value) {
+            platformFeeCut = parseFloat(setting.value);
+          }
+        },
+        async () => {
+          if (mockDb.platformFeeCut !== undefined) {
+            platformFeeCut = mockDb.platformFeeCut;
+          }
+        }
+      ).catch(() => {});
+
+      const commissionRate = (booking.provider?.providerProfile?.commissionRate && booking.provider.providerProfile.commissionRate !== 10.0)
+        ? booking.provider.providerProfile.commissionRate
+        : platformFeeCut;
       const amountCents = Math.round(serviceAmount * 100);
       const commissionCents = Math.round(amountCents * (commissionRate / 100));
       const providerPayoutCents = amountCents - commissionCents;
