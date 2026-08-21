@@ -1155,7 +1155,7 @@
         "description": "Updates the authenticated user's profile info (e.g. timezone) and returns updated token and user object (same response format as login API).",
         "security": [
           {
-            "bearerAuth": []
+            "BearerAuth": []
           }
         ],
         "requestBody": {
