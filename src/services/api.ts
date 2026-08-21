@@ -185,6 +185,20 @@ export const mockApi = {
       localStorage.setItem('lc_user', JSON.stringify(user));
     }
     return { success: true, message: 'FCM Token updated' };
+  },
+
+  async updateTimezone(timezone: string) {
+    console.log('[Mock API] updateTimezone', timezone);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const storedUserStr = typeof window !== 'undefined' ? localStorage.getItem('lc_user') : null;
+    let user = storedUserStr ? JSON.parse(storedUserStr) : { id: 1, email: 'client@lookclean.com', role: 'client' };
+    user.timezone = timezone;
+    const token = 'mock_jwt_token_' + (user.role || 'user') + '_' + Math.random().toString(36).substring(7);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lc_token', token);
+      localStorage.setItem('lc_user', JSON.stringify(user));
+    }
+    return { token, user };
   }
 };
 
@@ -340,6 +354,23 @@ export const usersApi = {
       return response.data;
     } catch {
       return mockApi.verifySmsOtp(phoneNumber, code);
+    }
+  },
+
+  updateTimezone: async (timezone: string) => {
+    if (useMock) return mockApi.updateTimezone(timezone);
+    try {
+      const response = await apiClient.patch('/users/me', { timezone });
+      if (response.data && response.data.token) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lc_token', response.data.token);
+          localStorage.setItem('lc_user', JSON.stringify(response.data.user));
+        }
+      }
+      return response.data;
+    } catch (err: any) {
+      console.warn('Real API updateTimezone failed, using mock API', err);
+      return mockApi.updateTimezone(timezone);
     }
   }
 };

@@ -2779,6 +2779,7 @@ export async function GET(
               email: providerUser.email,
               phoneNumber: providerUser.phoneNumber || null,
               providerType: providerUser.providerType || null,
+              timezone: providerUser.timezone || 'UTC',
               location: profile?.location || null,
               profileImageUrl,
               coverImageUrl,
@@ -2789,6 +2790,7 @@ export async function GET(
             const { provider, ...rest } = processed;
             return {
               ...rest,
+              timezone: rest.timezone || providerUser?.timezone || auth.timezone || 'UTC',
               providerDetails
             };
           }));
@@ -2820,6 +2822,7 @@ export async function GET(
                 email: providerUser.email,
                 phoneNumber: providerUser.phoneNumber || null,
                 providerType: providerUser.providerType || null,
+                timezone: providerUser?.timezone || 'UTC',
                 location: profile?.location || null,
                 profileImageUrl,
                 coverImageUrl,
@@ -2829,6 +2832,7 @@ export async function GET(
 
               return {
                 ...b,
+                timezone: b.timezone || providerUser?.timezone || auth.timezone || 'UTC',
                 services,
                 providerDetails
               };
@@ -2875,6 +2879,7 @@ export async function GET(
               name: clientUser.name || '',
               email: clientUser.email,
               phoneNumber: clientUser.phoneNumber || null,
+              timezone: clientUser.timezone || 'UTC',
               location: profile?.location || null,
               profileImageUrl,
               latitude: profile?.latitude || null,
@@ -2884,6 +2889,7 @@ export async function GET(
             const { client, ...rest } = processed;
             return {
               ...rest,
+              timezone: rest.timezone || clientUser?.timezone || auth.timezone || 'UTC',
               clientDetails
             };
           }));
@@ -2910,13 +2916,19 @@ export async function GET(
                 name: clientUser.name || '',
                 email: clientUser.email,
                 phoneNumber: clientUser.phoneNumber || null,
+                timezone: clientUser?.timezone || 'UTC',
                 location: profile?.location || null,
                 profileImageUrl,
                 latitude: profile?.latitude || null,
                 longitude: profile?.longitude || null,
               } : null;
 
-              return { ...b, services, clientDetails };
+              return {
+                ...b,
+                timezone: b.timezone || clientUser?.timezone || auth.timezone || 'UTC',
+                services,
+                clientDetails
+              };
             })
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -9017,3 +9029,105 @@ export async function DELETE(
     return NextResponse.json({ message: err.message || 'DELETE failed', error: String(err) }, { status: 500 });
   }
 }
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ catchall?: string[] }> }
+) {
+  try {
+    const { catchall } = await params;
+    const rawPath = catchall?.join('/') || '';
+    const path = rawPath.replace(/^api\//i, '').replace(/\/$/, '').trim();
+    console.log(`[API PATCH] rawPath='${rawPath}' -> path='${path}'`);
+
+    const auth = await getAuthenticatedUser(request);
+    if (!auth) {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      body = {};
+    }
+
+    // PATCH /api/users/me or /api/user/me
+    if (path === 'users/me' || path === 'user/me') {
+      const { timezone, name, phoneNumber, fcmToken, fcm_token } = body as any;
+      const userFcmToken = fcmToken || fcm_token || undefined;
+      const userTimezone = timezone && typeof timezone === 'string' && timezone.trim() ? timezone.trim() : undefined;
+
+      try {
+        const updatedUser = await executeWithDbFallback(
+          async () => {
+            const dataToUpdate: any = {};
+            if (userTimezone !== undefined) dataToUpdate.timezone = userTimezone;
+            if (name !== undefined) dataToUpdate.name = String(name);
+            if (phoneNumber !== undefined) dataToUpdate.phoneNumber = String(phoneNumber);
+            if (userFcmToken !== undefined) dataToUpdate.fcmToken = String(userFcmToken);
+
+            return await prisma.user.update({
+              where: { id: auth.userId },
+              data: dataToUpdate,
+              include: {
+                providerProfile: {
+                  include: { services: true, amenities: true },
+                },
+                clientProfile: true,
+              },
+            });
+          },
+          async () => {
+            const user = mockDb.users.find((u) => u.id === auth.userId);
+            if (!user) throw new Error('User not found');
+
+            if (userTimezone !== undefined) user.timezone = userTimezone;
+            if (name !== undefined) user.name = String(name);
+            if (phoneNumber !== undefined) user.phoneNumber = String(phoneNumber);
+            if (userFcmToken !== undefined) user.fcmToken = String(userFcmToken);
+
+            const profile = mockDb.profiles.find((p) => p.userId === user.id);
+            let providerProfile = undefined;
+            let clientProfile = undefined;
+            if (profile) {
+              if (user.role === 'provider') {
+                providerProfile = {
+                  ...profile,
+                  services: mockDb.services.filter((s) => s.profileId === profile.id),
+                  amenities: mockDb.amenities.filter((a) => a.profileId === profile.id),
+                };
+              } else if (user.role === 'client') {
+                clientProfile = { ...profile };
+              }
+            }
+            return { ...user, providerProfile, clientProfile };
+          }
+        );
+
+        if (!updatedUser) {
+          return NextResponse.json({ message: 'User not found' }, { status: 404 });
+        }
+
+        const token = generateToken(updatedUser.id, updatedUser.email, updatedUser.role, updatedUser.timezone);
+        const sanitized = sanitizeUser(updatedUser, request);
+        if (sanitized && sanitized.providerProfile) {
+          await enrichProviderProfile(sanitized.providerProfile, request);
+        }
+
+        return NextResponse.json({
+          token,
+          user: sanitized,
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to update user' }, { status: 400 });
+      }
+    }
+
+    return NextResponse.json({ message: 'Endpoint not found' }, { status: 404 });
+  } catch (err: any) {
+    console.error(`[API PATCH Error]`, err);
+    return NextResponse.json({ message: err.message || 'PATCH failed', error: String(err) }, { status: 500 });
+  }
+}
+

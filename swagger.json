@@ -1146,6 +1146,59 @@
         }
       }
     },
+    "/users/me": {
+      "patch": {
+        "tags": [
+          "Authenticate"
+        ],
+        "summary": "Update user profile / timezone (Common for Client & Provider)",
+        "description": "Updates the authenticated user's profile info (e.g. timezone) and returns updated token and user object (same response format as login API).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "timezone": {
+                    "type": "string",
+                    "example": "Asia/Kolkata"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User updated successfully. Same structure as login response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized access"
+          }
+        }
+      }
+    },
     "/clients/me": {
       "get": {
         "tags": [
