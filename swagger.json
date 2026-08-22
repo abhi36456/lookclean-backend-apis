@@ -2924,8 +2924,13 @@
                   },
                   "services[0]['price']": {
                     "type": "integer",
-                    "description": "Price for 1st service item",
+                    "description": "Standard price for 1st service item",
                     "example": 45
+                  },
+                  "services[0]['rushPrice']": {
+                    "type": "integer",
+                    "description": "Rush price for 1st service item",
+                    "example": 60
                   },
                   "services[0]['portfolioImage']": {
                     "type": "string",
@@ -2939,8 +2944,13 @@
                   },
                   "services[1]['price']": {
                     "type": "integer",
-                    "description": "Price for 2nd service item",
+                    "description": "Standard price for 2nd service item",
                     "example": 60
+                  },
+                  "services[1]['rushPrice']": {
+                    "type": "integer",
+                    "description": "Rush price for 2nd service item",
+                    "example": 80
                   },
                   "services[1]['portfolioImage']": {
                     "type": "string",
@@ -2969,6 +2979,10 @@
                         "price": {
                           "type": "integer",
                           "example": 45
+                        },
+                        "rushPrice": {
+                          "type": "integer",
+                          "example": 60
                         },
                         "servicePortfolioImage": {
                           "type": "string",

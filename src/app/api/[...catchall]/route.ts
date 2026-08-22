@@ -758,6 +758,7 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
               profileId: profile.id,
               name: s.name,
               price: parseInt(s.price) || 0,
+              rushPrice: parseInt(s.rushPrice ?? s.rush_price) || 0,
               category: s.category || 'General'
             }));
             await prisma.providerService.createMany({ data: servicesToInsert });
@@ -845,6 +846,7 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
               profileId: profile.id,
               name: s.name,
               price: parseInt(s.price) || 0,
+              rushPrice: parseInt(s.rushPrice ?? s.rush_price) || 0,
               category: s.category || 'General'
             });
           });
@@ -1045,6 +1047,7 @@ async function enrichProviderProfile(providerProfile: any, request?: any) {
         serviceId: match ? match.id : null,
         name: s.name,
         price: s.price,
+        rushPrice: s.rushPrice ?? s.rush_price ?? 0,
         category: s.category,
         servicePortfolioImage: img
       };
@@ -6293,8 +6296,9 @@ export async function POST(
         } else {
           const sId = (body as any).service_id || (body as any).serviceId || (parsedFormData?.get('service_id') as string) || (parsedFormData?.get('serviceId') as string);
           const price = (body as any).price || (parsedFormData?.get('price') as string);
+          const rushPrice = (body as any).rushPrice || (body as any).rush_price || (parsedFormData?.get('rushPrice') as string) || (parsedFormData?.get('rush_price') as string);
           if (sId) {
-            servicesInput = [{ service_id: sId, price: price || 0 }];
+            servicesInput = [{ service_id: sId, price: price || 0, rushPrice: rushPrice || 0 }];
           }
         }
       }
@@ -6378,6 +6382,7 @@ export async function POST(
             service_id: sId,
             serviceId: sId,
             price: parseInt(s.price) || 0,
+            rushPrice: parseInt(s.rushPrice ?? s.rush_price) || 0,
             servicePortfolioImage: portfolioImage
           };
         })
@@ -6408,6 +6413,7 @@ export async function POST(
                 profileId: profile.id,
                 name: setting ? setting.title : `Service #${s.serviceId}`,
                 price: s.price,
+                rushPrice: s.rushPrice,
                 category: setting && setting.mainType ? setting.mainType.title : 'General',
                 servicePortfolioImage: s.servicePortfolioImage
               };
@@ -6431,6 +6437,7 @@ export async function POST(
                 id: s.id,
                 name: s.name,
                 price: s.price,
+                rushPrice: s.rushPrice || 0,
                 category: s.category,
                 servicePortfolioImage: img
               };
@@ -6454,6 +6461,7 @@ export async function POST(
                 profileId: mockProfile.id,
                 name: `Service #${s.serviceId || index + 1}`,
                 price: s.price,
+                rushPrice: s.rushPrice || 0,
                 category: 'General',
                 servicePortfolioImage: s.servicePortfolioImage
               };

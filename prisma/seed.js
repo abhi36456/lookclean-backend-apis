@@ -48,9 +48,9 @@ async function main() {
           coverImageUrl: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=600',
           services: {
             create: [
-              { name: 'Women’s Haircut', price: 35, category: 'Haircut & Styling' },
-              { name: 'Men’s Haircut', price: 45, category: 'Haircut & Styling' },
-              { name: 'Beard Styling', price: 25, category: 'Men’s Grooming' },
+              { name: 'Women’s Haircut', price: 35, rushPrice: 50, category: 'Haircut & Styling' },
+              { name: 'Men’s Haircut', price: 45, rushPrice: 60, category: 'Haircut & Styling' },
+              { name: 'Beard Styling', price: 25, rushPrice: 35, category: 'Men’s Grooming' },
             ],
           },
           amenities: {

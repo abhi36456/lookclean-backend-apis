@@ -96,6 +96,7 @@ model ProviderService {
   profile               ProviderProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   name                  String
   price                 Int
+  rushPrice             Int?             @default(0)
   category              String
   servicePortfolioImage String?          @db.VarChar(500)
   createdAt             DateTime         @default(now())
