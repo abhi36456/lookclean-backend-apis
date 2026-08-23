@@ -1028,7 +1028,11 @@ async function enrichProviderProfile(providerProfile: any, request?: any) {
 
   providerProfile.categories = categoryIds.map((cat: any) => {
     const match = categorySettings.find(c => c.id === Number(cat) || c.title.toLowerCase() === String(cat).toLowerCase());
-    return match ? { id: match.id, title: match.title } : { id: typeof cat === 'number' ? cat : 0, title: String(cat) };
+    let categoryIcon = match ? (match as any).categoryIcon || (match as any).icon || null : null;
+    if (baseUrl && categoryIcon && categoryIcon.startsWith('/')) {
+      categoryIcon = `${baseUrl}${categoryIcon}`;
+    }
+    return match ? { id: match.id, title: match.title, categoryIcon } : { id: typeof cat === 'number' ? cat : 0, title: String(cat), categoryIcon: null };
   });
 
   // 2. Enrich services: map to original ServiceSetting ID and include servicePortfolioImage
@@ -2338,29 +2342,40 @@ export async function GET(
       if (path === 'provider/setup/categories' && auth.role !== 'provider' && auth.role !== 'admin' && auth.role !== 'client') {
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
       }
+      const baseUrl = getBaseUrl(request);
       const list = await executeWithDbFallback(
         async () => {
-          return await prisma.categorySetting.findMany({ orderBy: { title: 'asc' } });
+          const dbCats = await prisma.categorySetting.findMany({ orderBy: { title: 'asc' } });
+          return dbCats.map((item: any) => {
+            let categoryIcon = item.categoryIcon || null;
+            if (baseUrl && categoryIcon && categoryIcon.startsWith('/')) {
+              categoryIcon = `${baseUrl}${categoryIcon}`;
+            }
+            return {
+              ...item,
+              categoryIcon,
+            };
+          });
         },
         async () => {
           return [
-            { id: 1, title: 'Haircut & Styling' },
-            { id: 2, title: 'Hair Colour' },
-            { id: 3, title: 'Hair Treatments' },
-            { id: 4, title: 'Hair Extensions' },
-            { id: 5, title: 'Bridal & Event Hair' },
-            { id: 6, title: 'Nails' },
-            { id: 7, title: 'Brows & Lashes' },
-            { id: 8, title: 'Facials & Skincare' },
-            { id: 9, title: 'Waxing' },
-            { id: 10, title: 'Threading' },
-            { id: 11, title: 'Makeup' },
-            { id: 12, title: 'Massage & Spa' },
-            { id: 13, title: 'Tanning' },
-            { id: 14, title: 'Advanced Beauty' },
-            { id: 15, title: 'Piercing' },
-            { id: 16, title: 'Men’s Grooming' },
-            { id: 17, title: 'Kids’ Services' },
+            { id: 1, title: 'Haircut & Styling', categoryIcon: null },
+            { id: 2, title: 'Hair Colour', categoryIcon: null },
+            { id: 3, title: 'Hair Treatments', categoryIcon: null },
+            { id: 4, title: 'Hair Extensions', categoryIcon: null },
+            { id: 5, title: 'Bridal & Event Hair', categoryIcon: null },
+            { id: 6, title: 'Nails', categoryIcon: null },
+            { id: 7, title: 'Brows & Lashes', categoryIcon: null },
+            { id: 8, title: 'Facials & Skincare', categoryIcon: null },
+            { id: 9, title: 'Waxing', categoryIcon: null },
+            { id: 10, title: 'Threading', categoryIcon: null },
+            { id: 11, title: 'Makeup', categoryIcon: null },
+            { id: 12, title: 'Massage & Spa', categoryIcon: null },
+            { id: 13, title: 'Tanning', categoryIcon: null },
+            { id: 14, title: 'Advanced Beauty', categoryIcon: null },
+            { id: 15, title: 'Piercing', categoryIcon: null },
+            { id: 16, title: 'Men’s Grooming', categoryIcon: null },
+            { id: 17, title: 'Kids’ Services', categoryIcon: null },
           ];
         }
       );
@@ -2369,6 +2384,7 @@ export async function GET(
           list.map((item: any) => ({
             id: item.id,
             title: item.title,
+            categoryIcon: item.categoryIcon || null,
           }))
         );
       }
@@ -5731,17 +5747,68 @@ export async function POST(
       if (!auth || auth.role !== 'admin') {
         return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
       }
-      const { title } = body as any;
-      if (!title) {
+
+      let title: string = '';
+      let categoryIconUrl: string | null = null;
+      const contentType = request.headers.get('content-type') || '';
+
+      if (contentType.includes('multipart/form-data')) {
+        try {
+          const formData = parsedFormData || await request.formData();
+          title = (formData.get('title') as string) || '';
+          const iconFile = (formData.get('categoryIcon') || formData.get('icon') || formData.get('image') || formData.get('svgFile') || formData.get('file')) as any;
+
+          if (iconFile && typeof iconFile === 'object' && 'name' in iconFile && iconFile.size > 0) {
+            const fileName = iconFile.name || '';
+            const fileExt = nodePath.extname(fileName).toLowerCase() || '.png';
+            const allowedExts = ['.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif'];
+            if (!allowedExts.includes(fileExt)) {
+              return NextResponse.json(
+                { message: 'Category icon must be an SVG or image file (.svg, .png, .jpg, .jpeg, .webp, .gif)' },
+                { status: 400 }
+              );
+            }
+            const bytes = await iconFile.arrayBuffer();
+            const buffer = Buffer.from(bytes);
+            const uploadDir = nodePath.join(process.cwd(), 'public', 'uploads');
+            await fs.mkdir(uploadDir, { recursive: true });
+            const uniqueFileName = `category_${Date.now()}_${Math.floor(Math.random() * 1000)}${fileExt}`;
+            const filePath = nodePath.join(uploadDir, uniqueFileName);
+            await fs.writeFile(filePath, buffer);
+            categoryIconUrl = `/uploads/${uniqueFileName}`;
+          } else if (typeof formData.get('categoryIcon') === 'string') {
+            categoryIconUrl = formData.get('categoryIcon') as string;
+          }
+        } catch (err: any) {
+          return NextResponse.json({ message: 'Failed to process category icon upload: ' + err.message }, { status: 400 });
+        }
+      } else {
+        const bodyObj = body as any;
+        title = bodyObj?.title || '';
+        categoryIconUrl = bodyObj?.categoryIcon || bodyObj?.icon || null;
+      }
+
+      if (!title || !title.trim()) {
         return NextResponse.json({ message: 'Category title is required' }, { status: 400 });
       }
+
       try {
         const category = await executeWithDbFallback(
           async () => {
-            return await prisma.categorySetting.create({ data: { title: title.trim() } });
+            return await (prisma.categorySetting as any).create({
+              data: {
+                title: title.trim(),
+                categoryIcon: categoryIconUrl,
+              }
+            });
           },
           async () => {
-            return { id: Math.floor(Math.random() * 10000), title: title.trim() };
+            return {
+              id: Math.floor(Math.random() * 10000),
+              title: title.trim(),
+              categoryIcon: categoryIconUrl,
+              createdAt: new Date(),
+            };
           }
         );
         return NextResponse.json({ success: true, category });
@@ -8527,6 +8594,107 @@ export async function PUT(
         });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to update voucher' }, { status: 400 });
+      }
+    }
+
+    // PUT Category Setting - Update (/api/admin/settings/categories)
+    if (path === 'admin/settings/categories') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
+      }
+
+      let idVal: number = 0;
+      let title: string = '';
+      let categoryIconUrl: string | null | undefined = undefined;
+      let removeIcon = false;
+
+      const contentType = request.headers.get('content-type') || '';
+      if (contentType.includes('multipart/form-data')) {
+        try {
+          const formData = await request.formData();
+          const idStr = (formData.get('id') as string) || '';
+          idVal = parseInt(idStr, 10);
+          title = (formData.get('title') as string) || '';
+          if (formData.has('removeIcon')) {
+            removeIcon = formData.get('removeIcon') === 'true';
+          }
+          const iconFile = (formData.get('categoryIcon') || formData.get('icon') || formData.get('image') || formData.get('svgFile') || formData.get('file')) as any;
+
+          if (iconFile && typeof iconFile === 'object' && 'name' in iconFile && iconFile.size > 0) {
+            const fileName = iconFile.name || '';
+            const fileExt = nodePath.extname(fileName).toLowerCase() || '.png';
+            const allowedExts = ['.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif'];
+            if (!allowedExts.includes(fileExt)) {
+              return NextResponse.json(
+                { message: 'Category icon must be an SVG or image file (.svg, .png, .jpg, .jpeg, .webp, .gif)' },
+                { status: 400 }
+              );
+            }
+            const bytes = await iconFile.arrayBuffer();
+            const buffer = Buffer.from(bytes);
+            const uploadDir = nodePath.join(process.cwd(), 'public', 'uploads');
+            await fs.mkdir(uploadDir, { recursive: true });
+            const uniqueFileName = `category_${Date.now()}_${Math.floor(Math.random() * 1000)}${fileExt}`;
+            const filePath = nodePath.join(uploadDir, uniqueFileName);
+            await fs.writeFile(filePath, buffer);
+            categoryIconUrl = `/uploads/${uniqueFileName}`;
+          } else if (removeIcon) {
+            categoryIconUrl = null;
+          }
+        } catch (err: any) {
+          return NextResponse.json({ message: 'Failed to process category icon upload: ' + err.message }, { status: 400 });
+        }
+      } else {
+        let bodyObj: any = {};
+        try {
+          bodyObj = await request.json();
+        } catch {
+          bodyObj = {};
+        }
+        idVal = parseInt(bodyObj.id, 10);
+        title = bodyObj.title;
+        removeIcon = Boolean(bodyObj.removeIcon);
+        if (removeIcon) {
+          categoryIconUrl = null;
+        } else if (bodyObj.categoryIcon !== undefined) {
+          categoryIconUrl = bodyObj.categoryIcon;
+        }
+      }
+
+      if (!idVal || isNaN(idVal)) {
+        return NextResponse.json({ message: 'Category ID is required' }, { status: 400 });
+      }
+
+      try {
+        const updateData: any = {};
+        if (title && title.trim()) {
+          updateData.title = title.trim();
+        }
+        if (categoryIconUrl !== undefined) {
+          updateData.categoryIcon = categoryIconUrl;
+        }
+
+        const category = await executeWithDbFallback(
+          async () => {
+            return await (prisma.categorySetting as any).update({
+              where: { id: idVal },
+              data: updateData,
+            });
+          },
+          async () => {
+            return {
+              id: idVal,
+              title: title ? title.trim() : 'Updated Category',
+              categoryIcon: categoryIconUrl,
+              createdAt: new Date(),
+            };
+          }
+        );
+
+        return NextResponse.json({ success: true, message: 'Category updated successfully', category });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to update category' }, { status: 400 });
       }
     }
 

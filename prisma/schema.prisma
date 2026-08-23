@@ -125,10 +125,11 @@ model SystemSetting {
 }
 
 model CategorySetting {
-  id        Int              @id @default(autoincrement())
-  title     String           @unique @db.VarChar(100)
-  services  ServiceSetting[]
-  createdAt DateTime         @default(now())
+  id           Int              @id @default(autoincrement())
+  title        String           @unique @db.VarChar(100)
+  categoryIcon String?          @db.LongText
+  services     ServiceSetting[]
+  createdAt    DateTime         @default(now())
 
   @@map("setting_category")
 }

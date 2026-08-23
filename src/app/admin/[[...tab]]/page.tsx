@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldAlert, LogOut, Search, Filter, ShieldCheck, Phone, Check, Mail,
   X, Calendar, Star, MapPin, Award, Clock, Users, Building, Activity, FileText, ChevronRight, Settings, Lock, Server, Globe, Tag, Scissors, Sparkles, Database,
-  HelpCircle, AlertCircle, Smartphone, Plus, Trash2, Edit3, Save, Eye, CheckCircle, ExternalLink, Percent, DollarSign, Copy, CreditCard
+  HelpCircle, AlertCircle, Smartphone, Plus, Trash2, Edit3, Save, Eye, CheckCircle, ExternalLink, Percent, DollarSign, Copy, CreditCard, Upload, Image as ImageIcon, FileCode
 } from 'lucide-react';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
@@ -171,9 +171,20 @@ export default function AdminPage() {
   const [editVoucherIsActive, setEditVoucherIsActive] = useState(true);
 
   // Categories CRUD state
-  const [categoriesList, setCategoriesList] = useState<{ id: number; title: string }[]>([]);
+  const [categoriesList, setCategoriesList] = useState<{ id: number; title: string; categoryIcon?: string | null }[]>([]);
   const [newCategoryTitle, setNewCategoryTitle] = useState('');
+  const [newCategoryIconFile, setNewCategoryIconFile] = useState<File | null>(null);
+  const [newCategoryIconPreview, setNewCategoryIconPreview] = useState<string | null>(null);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
+
+  // Edit Category Modal state
+  const [editCategoryModalOpen, setEditCategoryModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<{ id: number; title: string; categoryIcon?: string | null } | null>(null);
+  const [editCategoryTitle, setEditCategoryTitle] = useState('');
+  const [editCategoryIconFile, setEditCategoryIconFile] = useState<File | null>(null);
+  const [editCategoryIconPreview, setEditCategoryIconPreview] = useState<string | null>(null);
+  const [removeCategoryIcon, setRemoveCategoryIcon] = useState(false);
+  const [editCategoryLoading, setEditCategoryLoading] = useState(false);
 
   // Services CRUD state
   const [servicesList, setServicesList] = useState<{ id: number; mainType: string; title: string; imageUrl?: string | null }[]>([]);
@@ -642,16 +653,31 @@ export default function AdminPage() {
     if (!newCategoryTitle.trim()) return;
     setCategoriesLoading(true);
     try {
-      const res = await fetch('/api/admin/settings/categories', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ title: newCategoryTitle }),
-      });
+      let res: Response;
+      if (newCategoryIconFile) {
+        const formData = new FormData();
+        formData.append('title', newCategoryTitle.trim());
+        formData.append('categoryIcon', newCategoryIconFile);
+        res = await fetch('/api/admin/settings/categories', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+      } else {
+        res = await fetch('/api/admin/settings/categories', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ title: newCategoryTitle.trim() }),
+        });
+      }
+
       if (res.ok) {
         setNewCategoryTitle('');
+        setNewCategoryIconFile(null);
+        setNewCategoryIconPreview(null);
         fetchCategories();
       } else {
         const data = await res.json();
@@ -661,6 +687,60 @@ export default function AdminPage() {
       console.error(err);
     } finally {
       setCategoriesLoading(false);
+    }
+  };
+
+  const handleEditCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory || !editCategoryTitle.trim()) return;
+    setEditCategoryLoading(true);
+    try {
+      let res: Response;
+      if (editCategoryIconFile || removeCategoryIcon) {
+        const formData = new FormData();
+        formData.append('id', String(editingCategory.id));
+        formData.append('title', editCategoryTitle.trim());
+        if (editCategoryIconFile) {
+          formData.append('categoryIcon', editCategoryIconFile);
+        }
+        if (removeCategoryIcon) {
+          formData.append('removeIcon', 'true');
+        }
+        res = await fetch('/api/admin/settings/categories', {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+      } else {
+        res = await fetch('/api/admin/settings/categories', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            id: editingCategory.id,
+            title: editCategoryTitle.trim(),
+          }),
+        });
+      }
+
+      if (res.ok) {
+        setEditCategoryModalOpen(false);
+        setEditingCategory(null);
+        setEditCategoryTitle('');
+        setEditCategoryIconFile(null);
+        setEditCategoryIconPreview(null);
+        setRemoveCategoryIcon(false);
+        fetchCategories();
+      } else {
+        const data = await res.json();
+        alert(data.message || 'Failed to update category');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setEditCategoryLoading(false);
     }
   };
 
@@ -2900,21 +2980,67 @@ export default function AdminPage() {
                       <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
                         <Tag className="w-4 h-4 text-primary" /> Category Settings
                       </h3>
-                      <p className="text-xs text-gray-400">Add or remove master categories for providers to select from.</p>
+                      <p className="text-xs text-gray-400">Add, edit, or remove master categories and upload custom SVG or image icons.</p>
 
-                      <form onSubmit={handleAddCategory} className="flex gap-3 items-end pt-2">
-                        <div className="flex-1">
-                          <Input
-                            label="Category Title"
-                            type="text"
-                            placeholder="e.g. Hair, Nails, Massage..."
-                            value={newCategoryTitle}
-                            onChange={(e) => setNewCategoryTitle(e.target.value)}
-                          />
+                      <form onSubmit={handleAddCategory} className="space-y-4 pt-2 border border-gray-900 bg-gray-900/30 p-4 rounded-xl">
+                        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+                          <div className="flex-1 w-full">
+                            <Input
+                              label="Category Title"
+                              type="text"
+                              placeholder="e.g. Hair, Nails, Massage..."
+                              value={newCategoryTitle}
+                              onChange={(e) => setNewCategoryTitle(e.target.value)}
+                              required
+                            />
+                          </div>
+                          <div className="flex-1 w-full space-y-1.5">
+                            <label className="text-xs font-medium text-gray-300 flex items-center gap-1.5">
+                              <Upload className="w-3.5 h-3.5 text-primary" /> Category Icon (SVG / Image)
+                            </label>
+                            <div className="flex items-center gap-3">
+                              {newCategoryIconPreview ? (
+                                <div className="relative group shrink-0">
+                                  <img
+                                    src={newCategoryIconPreview}
+                                    alt="Icon Preview"
+                                    className="w-10 h-10 rounded-lg object-contain bg-gray-900 border border-primary/30 p-1"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewCategoryIconFile(null);
+                                      setNewCategoryIconPreview(null);
+                                    }}
+                                    className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors shadow"
+                                    title="Remove icon"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="w-10 h-10 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-500 shrink-0">
+                                  <Tag className="w-4 h-4 text-gray-500" />
+                                </div>
+                              )}
+                              <input
+                                type="file"
+                                accept=".svg,.png,.jpg,.jpeg,.webp,.gif"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    setNewCategoryIconFile(file);
+                                    setNewCategoryIconPreview(URL.createObjectURL(file));
+                                  }
+                                }}
+                                className="text-xs text-gray-400 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer w-full"
+                              />
+                            </div>
+                          </div>
+                          <Button type="submit" isLoading={categoriesLoading} className="py-2.5 whitespace-nowrap shrink-0">
+                            + Add Category
+                          </Button>
                         </div>
-                        <Button type="submit" isLoading={categoriesLoading} className="py-2.5">
-                          Add Category
-                        </Button>
                       </form>
 
                       <div className="border-t border-gray-900 pt-4">
@@ -2925,18 +3051,131 @@ export default function AdminPage() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             {categoriesList.map((cat) => (
                               <div key={cat.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-900/40 border border-white/5 hover:border-primary/20 transition-all">
-                                <span className="text-xs font-semibold text-gray-200">{cat.title}</span>
-                                <button
-                                  onClick={() => handleDeleteCategory(cat.id)}
-                                  className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase px-2 py-1 rounded hover:bg-red-500/10 cursor-pointer"
-                                >
-                                  Delete
-                                </button>
+                                <div className="flex items-center gap-3 min-w-0">
+                                  {cat.categoryIcon ? (
+                                    <img
+                                      src={cat.categoryIcon}
+                                      alt={cat.title}
+                                      className="w-8 h-8 rounded-lg object-contain bg-gray-900/80 border border-white/10 p-1 shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                                      <Tag className="w-3.5 h-3.5" />
+                                    </div>
+                                  )}
+                                  <span className="text-xs font-semibold text-gray-200 truncate">{cat.title}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    onClick={() => {
+                                      setEditingCategory(cat);
+                                      setEditCategoryTitle(cat.title);
+                                      setEditCategoryIconPreview(cat.categoryIcon || null);
+                                      setEditCategoryIconFile(null);
+                                      setRemoveCategoryIcon(false);
+                                      setEditCategoryModalOpen(true);
+                                    }}
+                                    className="text-[10px] text-blue-400 hover:text-blue-300 font-bold uppercase px-2 py-1 rounded hover:bg-blue-500/10 cursor-pointer flex items-center gap-1"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                    <span>Edit</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteCategory(cat.id)}
+                                    className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase px-2 py-1 rounded hover:bg-red-500/10 cursor-pointer flex items-center gap-1"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    <span>Delete</span>
+                                  </button>
+                                </div>
                               </div>
                             ))}
                           </div>
                         )}
                       </div>
+
+                      {/* Edit Category Modal Overlay */}
+                      {editCategoryModalOpen && editingCategory && (
+                        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                          <Card className="border border-gray-850 p-6 space-y-4 max-w-md w-full bg-gray-950 shadow-2xl">
+                            <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                              <Tag className="w-4 h-4 text-primary" /> Edit Category
+                            </h3>
+                            <p className="text-xs text-gray-400">Update title and SVG/image icon for "{editingCategory.title}".</p>
+
+                            <form onSubmit={handleEditCategory} className="space-y-4">
+                              <Input
+                                label="Category Title"
+                                type="text"
+                                value={editCategoryTitle}
+                                onChange={(e) => setEditCategoryTitle(e.target.value)}
+                                required
+                              />
+
+                              <div className="space-y-2">
+                                <label className="text-xs font-medium text-gray-300">Category Icon (SVG / Image)</label>
+                                <div className="flex items-center gap-3">
+                                  {!removeCategoryIcon && editCategoryIconPreview ? (
+                                    <img
+                                      src={editCategoryIconPreview}
+                                      alt="Preview"
+                                      className="w-10 h-10 rounded-lg object-contain bg-gray-900 border border-white/10 p-1"
+                                    />
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-500">
+                                      <Tag className="w-4 h-4 text-gray-500" />
+                                    </div>
+                                  )}
+                                  <div className="space-y-1 flex-1">
+                                    <input
+                                      type="file"
+                                      accept=".svg,.png,.jpg,.jpeg,.webp,.gif"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          setEditCategoryIconFile(file);
+                                          setEditCategoryIconPreview(URL.createObjectURL(file));
+                                          setRemoveCategoryIcon(false);
+                                        }
+                                      }}
+                                      className="text-xs text-gray-400 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer w-full"
+                                    />
+                                    {!removeCategoryIcon && (editCategoryIconPreview || editingCategory.categoryIcon) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setRemoveCategoryIcon(true);
+                                          setEditCategoryIconFile(null);
+                                          setEditCategoryIconPreview(null);
+                                        }}
+                                        className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase underline cursor-pointer"
+                                      >
+                                        Remove current icon
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex justify-end gap-3 pt-2">
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  onClick={() => {
+                                    setEditCategoryModalOpen(false);
+                                    setEditingCategory(null);
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button type="submit" isLoading={editCategoryLoading}>
+                                  Save Changes
+                                </Button>
+                              </div>
+                            </form>
+                          </Card>
+                        </div>
+                      )}
                     </Card>
                   ) : settingsSubTab === 'services' ? (
                     <div className="space-y-6">
