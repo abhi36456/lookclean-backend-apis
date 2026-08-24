@@ -1167,6 +1167,11 @@
                   "tipType"
                 ],
                 "properties": {
+                  "providerId": {
+                    "type": "integer",
+                    "example": 2,
+                    "description": "Provider ID to evaluate provider rush mode pricing if active"
+                  },
                   "serviceIds": {
                     "type": "array",
                     "items": {

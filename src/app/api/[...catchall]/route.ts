@@ -1037,6 +1037,7 @@ async function enrichProviderProfile(providerProfile: any, request?: any) {
 
   // 2. Enrich services: map to original ServiceSetting ID and include servicePortfolioImage
   if (Array.isArray(providerProfile.services)) {
+    const isRushOn = providerProfile.isRushMode ?? providerProfile.is_rush_mode ?? false;
     providerProfile.services = providerProfile.services.map((s: any) => {
       const match = serviceSettings.find(item =>
         item.title.toLowerCase() === (s.name || '').toLowerCase() &&
@@ -1046,12 +1047,16 @@ async function enrichProviderProfile(providerProfile: any, request?: any) {
       if (baseUrl && img && img.startsWith('/')) {
         img = `${baseUrl}${img}`;
       }
+      const rushP = Number(s.rushPrice ?? s.rush_price) || 0;
+      const normalP = Number(s.price) || 0;
+      const effectiveP = (isRushOn && rushP > 0) ? rushP : normalP;
       return {
         id: s.id,
         serviceId: match ? match.id : null,
         name: s.name,
-        price: s.price,
-        rushPrice: s.rushPrice ?? s.rush_price ?? 0,
+        price: normalP,
+        rushPrice: rushP,
+        effectivePrice: effectiveP,
         category: s.category,
         servicePortfolioImage: img
       };
@@ -7063,8 +7068,9 @@ export async function POST(
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
       }
 
-      const { serviceIds, numberOfPeople, tipType, tipAmount, promoCode, promo_code, voucherCode, voucher_code } = body as any;
+      const { serviceIds, numberOfPeople, tipType, tipAmount, promoCode, promo_code, voucherCode, voucher_code, providerId, provider_id } = body as any;
       const targetPromoCode = promoCode || promo_code || voucherCode || voucher_code;
+      const targetProviderId = providerId || provider_id ? Number(providerId || provider_id) : null;
       if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
         return NextResponse.json({ message: 'At least one service is required' }, { status: 400 });
       }
@@ -7073,11 +7079,43 @@ export async function POST(
 
       try {
         const servicesList = await executeWithDbFallback(
-          async () => await prisma.providerService.findMany({ where: { id: { in: serviceIds.map(Number) } } }),
+          async () => await prisma.providerService.findMany({
+            where: { id: { in: serviceIds.map(Number) } },
+            include: { profile: true }
+          }),
           async () => mockDb.services.filter((s) => serviceIds.map(Number).includes(s.id))
         );
 
-        const baseServiceAmount = servicesList.reduce((sum, s) => sum + s.price, 0);
+        let providerRushMode = false;
+        if (targetProviderId) {
+          const pProfile = await executeWithDbFallback(
+            async () => await prisma.providerProfile.findFirst({
+              where: { OR: [{ userId: targetProviderId }, { id: targetProviderId }] }
+            }),
+            async () => mockDb.profiles.find((p) => p.userId === targetProviderId || p.id === targetProviderId)
+          );
+          providerRushMode = pProfile?.isRushMode ?? false;
+        }
+
+        let isRushModeActive = providerRushMode;
+
+        const baseServiceAmount = servicesList.reduce((sum, s) => {
+          let serviceRushOn = providerRushMode;
+          if (!serviceRushOn) {
+            if ((s as any).profile) {
+              serviceRushOn = (s as any).profile.isRushMode ?? false;
+            } else {
+              const prof = mockDb.profiles.find((p) => p.id === s.profileId);
+              serviceRushOn = prof?.isRushMode ?? false;
+            }
+          }
+          if (serviceRushOn) isRushModeActive = true;
+          const rushP = Number(s.rushPrice ?? (s as any).rush_price) || 0;
+          const normalP = Number(s.price) || 0;
+          const effectivePrice = (serviceRushOn && rushP > 0) ? rushP : normalP;
+          return sum + effectivePrice;
+        }, 0);
+
         const serviceAmount = baseServiceAmount * numPeople;
 
         let calculatedTip = 0;
@@ -7134,7 +7172,8 @@ export async function POST(
           promoDiscount: discount,
           grandTotal,
           isValidPromoCode,
-          promoCodeMessage
+          promoCodeMessage,
+          isRushMode: isRushModeActive
         });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to calculate summary' }, { status: 400 });
@@ -7272,8 +7311,19 @@ export async function POST(
           return NextResponse.json({ message: 'Selected time slot is already booked' }, { status: 400 });
         }
 
+        const providerProfile = await executeWithDbFallback(
+          async () => await prisma.providerProfile.findFirst({
+            where: { OR: [{ userId: providerIdInt }, { id: providerIdInt }] }
+          }),
+          async () => mockDb.profiles.find((p) => p.userId === providerIdInt || p.id === providerIdInt)
+        );
+        const isRushActive = providerProfile?.isRushMode ?? false;
+
         const servicesList = await executeWithDbFallback(
-          async () => await prisma.providerService.findMany({ where: { id: { in: serviceIds.map(Number) } } }),
+          async () => await prisma.providerService.findMany({
+            where: { id: { in: serviceIds.map(Number) } },
+            include: { profile: true }
+          }),
           async () => mockDb.services.filter((s) => serviceIds.map(Number).includes(s.id))
         );
 
@@ -7281,7 +7331,22 @@ export async function POST(
           return NextResponse.json({ message: 'No valid services selected' }, { status: 400 });
         }
 
-        const baseServiceAmount = servicesList.reduce((sum, s) => sum + s.price, 0);
+        const baseServiceAmount = servicesList.reduce((sum, s) => {
+          let serviceRushOn = isRushActive;
+          if (!serviceRushOn) {
+            if ((s as any).profile) {
+              serviceRushOn = (s as any).profile.isRushMode ?? false;
+            } else {
+              const prof = mockDb.profiles.find((p) => p.id === s.profileId);
+              serviceRushOn = prof?.isRushMode ?? false;
+            }
+          }
+          const rushP = Number(s.rushPrice ?? (s as any).rush_price) || 0;
+          const normalP = Number(s.price) || 0;
+          const effectivePrice = (serviceRushOn && rushP > 0) ? rushP : normalP;
+          return sum + effectivePrice;
+        }, 0);
+
         const serviceAmount = baseServiceAmount * numPeople;
 
         let calculatedTip = 0;
@@ -7423,6 +7488,7 @@ export async function POST(
         const slotParts = targetTimeSlot.split(/\s*-\s*/);
         const formattedBooking = {
           ...(booking as any),
+          isRushMode: isRushActive,
           fromTime: inputFromTime || slotParts[0] || targetTimeSlot,
           toTime: inputToTime || slotParts[1] || null,
           timezone: auth?.timezone || (auth?.user as any)?.timezone || 'UTC',
