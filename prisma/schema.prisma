@@ -72,6 +72,7 @@ model ProviderProfile {
   experience      Int               @default(0)
   licenseType     String?
   certificateUrl  String?
+  licenseVerifications String?
   coverImageUrl   String?
   isFeatured      Boolean           @default(false)
   isAvailable     Boolean           @default(true)

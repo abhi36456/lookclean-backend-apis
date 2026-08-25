@@ -602,6 +602,47 @@ function sanitizeUser(user: unknown, request?: any) {
       plainUser.providerProfile.licenseTypes = [];
     }
 
+    // Process licenseVerifications (supporting JSON array string or boolean array)
+    const rawVerifications = plainUser.providerProfile.licenseVerifications;
+    let parsedVerifications: boolean[] = [];
+    if (rawVerifications) {
+      if (typeof rawVerifications === 'string') {
+        try {
+          const parsed = JSON.parse(rawVerifications);
+          if (Array.isArray(parsed)) {
+            parsedVerifications = parsed.map((v: any) => Boolean(v));
+          } else {
+            parsedVerifications = [Boolean(parsed)];
+          }
+        } catch {
+          if (rawVerifications.includes(',')) {
+            parsedVerifications = rawVerifications.split(',').map((s: string) => s.trim().toLowerCase() === 'true');
+          } else {
+            parsedVerifications = [rawVerifications.toLowerCase() === 'true'];
+          }
+        }
+      } else if (Array.isArray(rawVerifications)) {
+        parsedVerifications = (rawVerifications as any[]).map((v: any) => Boolean(v));
+      }
+    }
+
+    const licCount = Math.max(plainUser.providerProfile.licenseTypes?.length || 0, plainUser.providerProfile.certificateUrls?.length || 0, 1);
+    const finalVerifications: boolean[] = [];
+    for (let i = 0; i < licCount; i++) {
+      finalVerifications[i] = parsedVerifications[i] !== undefined ? Boolean(parsedVerifications[i]) : false;
+    }
+    plainUser.providerProfile.licenseVerifications = finalVerifications;
+
+    // Attach structured licenses array
+    const licTypes = plainUser.providerProfile.licenseTypes || [];
+    const certUrls = plainUser.providerProfile.certificateUrls || [];
+    const namesList = licTypes.length > 0 ? licTypes : (plainUser.providerProfile.licenseType ? [plainUser.providerProfile.licenseType] : ['License']);
+    plainUser.providerProfile.licenses = namesList.map((name: string, i: number) => ({
+      name: name || `License #${i + 1}`,
+      certificateUrl: certUrls[i] || plainUser.providerProfile.certificateUrl || null,
+      isVerified: Boolean(finalVerifications[i]),
+    }));
+
     const img = plainUser.providerProfile.profileImageUrl;
     if (baseUrl && img && img.startsWith('/')) {
       plainUser.providerProfile.profileImageUrl = `${baseUrl}${img}`;
@@ -8031,9 +8072,99 @@ export async function POST(
       }
     }
 
-    // POST Update Provider Profile (/api/providers/profile or /api/provider/profile)
-    if (path === 'providers/profile' || path === 'provider/profile') {
-      return await handleUpdateProviderProfile(request, body);
+    // POST Admin verifies or disapproves provider license/certificate (/api/admin/licenses/verify or /api/admin/users/verify-license)
+    if (
+      path === 'admin/licenses/verify' ||
+      path === 'admin/users/verify-license' ||
+      path === 'admin/providers/verify-license' ||
+      path === 'admin/license/verify'
+    ) {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth || auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
+      }
+
+      const { userId, licenseIndex, isVerified, status } = body as any;
+      const { searchParams } = new URL(request.url);
+      const targetUserId = Number(userId || searchParams.get('userId') || searchParams.get('id'));
+      const idx = Number(licenseIndex !== undefined ? licenseIndex : searchParams.get('licenseIndex') || 0);
+      const newVerified = isVerified !== undefined
+        ? Boolean(isVerified)
+        : status !== undefined
+        ? status === 'approved' || status === 'verified' || status === true
+        : true;
+
+      if (!targetUserId || isNaN(targetUserId)) {
+        return NextResponse.json({ message: 'Missing or invalid userId' }, { status: 400 });
+      }
+
+      try {
+        const result = await executeWithDbFallback(
+          async () => {
+            const profile = await prisma.providerProfile.findUnique({
+              where: { userId: targetUserId },
+            });
+            let verifications: boolean[] = [];
+            if (profile?.licenseVerifications) {
+              try {
+                const parsed = JSON.parse(profile.licenseVerifications);
+                if (Array.isArray(parsed)) verifications = parsed.map(Boolean);
+              } catch {}
+            }
+
+            while (verifications.length <= idx) {
+              verifications.push(false);
+            }
+            verifications[idx] = newVerified;
+
+            const updatedProfile = await prisma.providerProfile.upsert({
+              where: { userId: targetUserId },
+              update: { licenseVerifications: JSON.stringify(verifications) },
+              create: {
+                userId: targetUserId,
+                location: 'Location',
+                licenseVerifications: JSON.stringify(verifications),
+              },
+            });
+            return { profile: updatedProfile, verifications };
+          },
+          async () => {
+            let mockProfile = mockDb.profiles.find((p) => p.userId === targetUserId);
+            let verifications: boolean[] = [];
+            if (mockProfile?.licenseVerifications) {
+              try {
+                const parsed = typeof mockProfile.licenseVerifications === 'string'
+                  ? JSON.parse(mockProfile.licenseVerifications)
+                  : mockProfile.licenseVerifications;
+                if (Array.isArray(parsed)) verifications = parsed.map(Boolean);
+              } catch {}
+            }
+            while (verifications.length <= idx) {
+              verifications.push(false);
+            }
+            verifications[idx] = newVerified;
+
+            if (!mockProfile) {
+              mockProfile = { id: mockDb.profiles.length + 1, userId: targetUserId, location: 'Location', licenseVerifications: JSON.stringify(verifications) };
+              mockDb.profiles.push(mockProfile);
+            } else {
+              mockProfile.licenseVerifications = JSON.stringify(verifications);
+            }
+            return { profile: mockProfile, verifications };
+          }
+        );
+
+        return NextResponse.json({
+          success: true,
+          message: `License verification updated to ${newVerified}`,
+          isVerified: newVerified,
+          licenseIndex: idx,
+          licenseVerifications: result.verifications,
+          profile: result.profile,
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to update license verification status' }, { status: 400 });
+      }
     }
 
     return NextResponse.json({ message: 'Endpoint not found' }, { status: 404 });
@@ -8174,6 +8305,100 @@ export async function PUT(
         });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to update featured status' }, { status: 400 });
+      }
+    }
+
+    // Admin verifies or disapproves provider license/certificate (/api/admin/licenses/verify or /api/admin/users/verify-license)
+    if (
+      path === 'admin/licenses/verify' ||
+      path === 'admin/users/verify-license' ||
+      path === 'admin/providers/verify-license' ||
+      path === 'admin/license/verify'
+    ) {
+      if (auth.role !== 'admin') {
+        return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
+      }
+
+      const { userId, licenseIndex, isVerified, status } = body as any;
+      const { searchParams } = new URL(request.url);
+      const targetUserId = Number(userId || searchParams.get('userId') || searchParams.get('id'));
+      const idx = Number(licenseIndex !== undefined ? licenseIndex : searchParams.get('licenseIndex') || 0);
+      const newVerified = isVerified !== undefined
+        ? Boolean(isVerified)
+        : status !== undefined
+        ? status === 'approved' || status === 'verified' || status === true
+        : true;
+
+      if (!targetUserId || isNaN(targetUserId)) {
+        return NextResponse.json({ message: 'Missing or invalid userId' }, { status: 400 });
+      }
+
+      try {
+        const result = await executeWithDbFallback(
+          async () => {
+            const profile = await prisma.providerProfile.findUnique({
+              where: { userId: targetUserId },
+            });
+            let verifications: boolean[] = [];
+            if (profile?.licenseVerifications) {
+              try {
+                const parsed = JSON.parse(profile.licenseVerifications);
+                if (Array.isArray(parsed)) verifications = parsed.map(Boolean);
+              } catch {}
+            }
+
+            while (verifications.length <= idx) {
+              verifications.push(false);
+            }
+            verifications[idx] = newVerified;
+
+            const updatedProfile = await prisma.providerProfile.upsert({
+              where: { userId: targetUserId },
+              update: { licenseVerifications: JSON.stringify(verifications) },
+              create: {
+                userId: targetUserId,
+                location: 'Location',
+                licenseVerifications: JSON.stringify(verifications),
+              },
+            });
+            return { profile: updatedProfile, verifications };
+          },
+          async () => {
+            let mockProfile = mockDb.profiles.find((p) => p.userId === targetUserId);
+            let verifications: boolean[] = [];
+            if (mockProfile?.licenseVerifications) {
+              try {
+                const parsed = typeof mockProfile.licenseVerifications === 'string'
+                  ? JSON.parse(mockProfile.licenseVerifications)
+                  : mockProfile.licenseVerifications;
+                if (Array.isArray(parsed)) verifications = parsed.map(Boolean);
+              } catch {}
+            }
+            while (verifications.length <= idx) {
+              verifications.push(false);
+            }
+            verifications[idx] = newVerified;
+
+            if (!mockProfile) {
+              mockProfile = { id: mockDb.profiles.length + 1, userId: targetUserId, location: 'Location', licenseVerifications: JSON.stringify(verifications) };
+              mockDb.profiles.push(mockProfile);
+            } else {
+              mockProfile.licenseVerifications = JSON.stringify(verifications);
+            }
+            return { profile: mockProfile, verifications };
+          }
+        );
+
+        return NextResponse.json({
+          success: true,
+          message: `License verification updated to ${newVerified}`,
+          isVerified: newVerified,
+          licenseIndex: idx,
+          licenseVerifications: result.verifications,
+          profile: result.profile,
+        });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to update license verification status' }, { status: 400 });
       }
     }
 

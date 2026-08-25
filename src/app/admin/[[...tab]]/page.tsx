@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldAlert, LogOut, Search, Filter, ShieldCheck, Phone, Check, Mail,
   X, Calendar, Star, MapPin, Award, Clock, Users, Building, Activity, FileText, ChevronRight, Settings, Lock, Server, Globe, Tag, Scissors, Sparkles, Database,
-  HelpCircle, AlertCircle, Smartphone, Plus, Trash2, Edit3, Save, Eye, CheckCircle, ExternalLink, Percent, DollarSign, Copy, CreditCard, Upload, Image as ImageIcon, FileCode
+  HelpCircle, AlertCircle, Smartphone, Plus, Trash2, Edit3, Save, Eye, CheckCircle, XCircle, ExternalLink, Percent, DollarSign, Copy, CreditCard, Upload, Image as ImageIcon, FileCode
 } from 'lucide-react';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
@@ -36,6 +36,8 @@ interface UserData {
     certificateUrl?: string;
     licenseTypes?: string[];
     certificateUrls?: string[];
+    licenseVerifications?: boolean[];
+    licenses?: { name: string; certificateUrl?: string | null; isVerified: boolean }[];
     coverImageUrl?: string;
     isFeatured?: boolean;
     featured?: boolean;
@@ -261,6 +263,87 @@ export default function AdminPage() {
   const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
   const [bookingDrawerOpen, setBookingDrawerOpen] = useState(false);
   const [copiedTxId, setCopiedTxId] = useState(false);
+
+  // License Preview & Verification state
+  const [licensePreviewModal, setLicensePreviewModal] = useState<{
+    userId: number;
+    licenseIndex: number;
+    name: string;
+    certUrl: string;
+    isVerified: boolean;
+  } | null>(null);
+  const [licenseConfirmDialog, setLicenseConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    actionType: 'approve' | 'disapprove';
+  } | null>(null);
+  const [verifyingLicenseLoading, setVerifyingLicenseLoading] = useState(false);
+
+  const handleVerifyLicenseSubmit = async (userId: number, licenseIndex: number, targetVerifiedState: boolean) => {
+    setVerifyingLicenseLoading(true);
+    try {
+      const res = await fetch('/api/admin/licenses/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({
+          userId,
+          licenseIndex,
+          isVerified: targetVerifiedState,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSelectedUser((prev) => {
+          if (!prev || prev.id !== userId) return prev;
+          const updatedProfile = { ...prev.providerProfile };
+          const verifications = Array.isArray(data.licenseVerifications)
+            ? data.licenseVerifications
+            : [...(updatedProfile.licenseVerifications || [])];
+          verifications[licenseIndex] = targetVerifiedState;
+          updatedProfile.licenseVerifications = verifications;
+
+          if (updatedProfile.licenses) {
+            updatedProfile.licenses = updatedProfile.licenses.map((l, i) =>
+              i === licenseIndex ? { ...l, isVerified: targetVerifiedState } : l
+            );
+          }
+          return { ...prev, providerProfile: updatedProfile as any };
+        });
+
+        setUsers((prevUsers) =>
+          prevUsers.map((u) => {
+            if (u.id !== userId || !u.providerProfile) return u;
+            const updatedProfile = { ...u.providerProfile };
+            const verifications = Array.isArray(data.licenseVerifications)
+              ? data.licenseVerifications
+              : [...(updatedProfile.licenseVerifications || [])];
+            verifications[licenseIndex] = targetVerifiedState;
+            updatedProfile.licenseVerifications = verifications;
+
+            if (updatedProfile.licenses) {
+              updatedProfile.licenses = updatedProfile.licenses.map((l, i) =>
+                i === licenseIndex ? { ...l, isVerified: targetVerifiedState } : l
+              );
+            }
+            return { ...u, providerProfile: updatedProfile as any };
+          })
+        );
+
+        setLicensePreviewModal((prev) => (prev ? { ...prev, isVerified: targetVerifiedState } : null));
+        setLicenseConfirmDialog(null);
+      } else {
+        alert(data.message || 'Failed to update license verification status');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error updating license status');
+    } finally {
+      setVerifyingLicenseLoading(false);
+    }
+  };
 
   const handleCopyTxId = (txId: string) => {
     if (!txId) return;
@@ -4310,60 +4393,123 @@ export default function AdminPage() {
                         {selectedUser.providerProfile?.licenseTypes && selectedUser.providerProfile.licenseTypes.length > 0 ? (
                           selectedUser.providerProfile.licenseTypes.map((lic, idx) => {
                             const certUrl = selectedUser.providerProfile?.certificateUrls?.[idx];
+                            const isVerified = Boolean(
+                              selectedUser.providerProfile?.licenses?.[idx]?.isVerified ??
+                              selectedUser.providerProfile?.licenseVerifications?.[idx]
+                            );
                             return (
-                              <div key={idx} className="flex justify-between items-center text-xs py-1.5 border-b last:border-0 border-gray-850/40">
+                              <div key={idx} className="flex justify-between items-center text-xs py-1.5 border-b last:border-0 border-gray-850/40 gap-2">
                                 <div className="flex items-center gap-2">
                                   <Award className="w-4 h-4 text-purple-500" />
                                   <span className="font-semibold text-gray-350">{lic || 'Unnamed License'}</span>
                                 </div>
-                                {certUrl && (
-                                  <div className="flex items-center gap-2">
-                                    <a
-                                      href={certUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-[10px] text-primary hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
-                                    >
-                                      View
-                                    </a>
-                                    <a
-                                      href={certUrl}
-                                      download
-                                      className="text-[10px] text-gray-400 hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-gray-850 border border-gray-850/50 hover:bg-gray-750 transition-all cursor-pointer"
-                                    >
-                                      Download
-                                    </a>
+                                <div className="flex items-center gap-2">
+                                  {/* Verification status icon before view */}
+                                  <div
+                                    title={isVerified ? 'Verified License' : 'Unverified License'}
+                                    className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                      isVerified
+                                        ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                                        : 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+                                    }`}
+                                  >
+                                    {isVerified ? (
+                                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                                    ) : (
+                                      <XCircle className="w-3.5 h-3.5 text-amber-400" />
+                                    )}
+                                    <span className="hidden sm:inline">{isVerified ? 'Verified' : 'Unverified'}</span>
                                   </div>
-                                )}
+
+                                  {certUrl && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setLicensePreviewModal({
+                                            userId: selectedUser.id,
+                                            licenseIndex: idx,
+                                            name: lic || 'License Certificate',
+                                            certUrl,
+                                            isVerified,
+                                          })
+                                        }
+                                        className="text-[10px] text-primary hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
+                                      >
+                                        View
+                                      </button>
+                                      <a
+                                        href={certUrl}
+                                        download
+                                        className="text-[10px] text-gray-400 hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-gray-850 border border-gray-850/50 hover:bg-gray-750 transition-all cursor-pointer"
+                                      >
+                                        Download
+                                      </a>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             );
                           })
                         ) : (
-                          <div className="flex justify-between items-center text-xs py-1.5">
-                            <div className="flex items-center gap-2">
-                              <Award className="w-4 h-4 text-purple-500" />
-                              <span className="font-semibold text-gray-350">{selectedUser.providerProfile?.licenseType || 'N/A'}</span>
-                            </div>
-                            {selectedUser.providerProfile?.certificateUrl && (
-                              <div className="flex items-center gap-2">
-                                <a
-                                  href={selectedUser.providerProfile.certificateUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-[10px] text-primary hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
-                                >
-                                  View
-                                </a>
-                                <a
-                                  href={selectedUser.providerProfile.certificateUrl}
-                                  download
-                                  className="text-[10px] text-gray-400 hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-gray-850 border border-gray-850/50 hover:bg-gray-750 transition-all cursor-pointer"
-                                >
-                                  Download
-                                </a>
+                          (() => {
+                            const isVerified = Boolean(
+                              selectedUser.providerProfile?.licenses?.[0]?.isVerified ??
+                              selectedUser.providerProfile?.licenseVerifications?.[0]
+                            );
+                            const certUrl = selectedUser.providerProfile?.certificateUrl;
+                            return (
+                              <div className="flex justify-between items-center text-xs py-1.5 gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Award className="w-4 h-4 text-purple-500" />
+                                  <span className="font-semibold text-gray-350">{selectedUser.providerProfile?.licenseType || 'N/A'}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    title={isVerified ? 'Verified License' : 'Unverified License'}
+                                    className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                      isVerified
+                                        ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                                        : 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+                                    }`}
+                                  >
+                                    {isVerified ? (
+                                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                                    ) : (
+                                      <XCircle className="w-3.5 h-3.5 text-amber-400" />
+                                    )}
+                                    <span className="hidden sm:inline">{isVerified ? 'Verified' : 'Unverified'}</span>
+                                  </div>
+                                  {certUrl && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setLicensePreviewModal({
+                                            userId: selectedUser.id,
+                                            licenseIndex: 0,
+                                            name: selectedUser.providerProfile?.licenseType || 'License Certificate',
+                                            certUrl,
+                                            isVerified,
+                                          })
+                                        }
+                                        className="text-[10px] text-primary hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-primary/10 border border-primary/20 hover:bg-primary transition-all cursor-pointer"
+                                      >
+                                        View
+                                      </button>
+                                      <a
+                                        href={certUrl}
+                                        download
+                                        className="text-[10px] text-gray-400 hover:text-white font-extrabold uppercase px-2 py-1 rounded bg-gray-850 border border-gray-850/50 hover:bg-gray-750 transition-all cursor-pointer"
+                                      >
+                                        Download
+                                      </a>
+                                    </>
+                                  )}
+                                </div>
                               </div>
-                            )}
-                          </div>
+                            );
+                          })()
                         )}
                       </div>
                     </div>
@@ -4818,6 +4964,208 @@ export default function AdminPage() {
               </Card>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* License Preview Modal Popup */}
+      <AnimatePresence>
+        {licensePreviewModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-gray-950 border border-gray-800 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="flex justify-between items-center p-4 border-b border-gray-850 bg-gray-900/60">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                    <Award className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-bold text-base flex items-center gap-2">
+                      {licensePreviewModal.name}
+                    </h3>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-gray-400">License Document Preview</span>
+                      <span
+                        className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+                          licensePreviewModal.isVerified
+                            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                            : 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+                        }`}
+                      >
+                        {licensePreviewModal.isVerified ? '✓ Approved & Verified' : '⚠ Unapproved / Pending'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLicensePreviewModal(null)}
+                  className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Preview Area */}
+              <div className="flex-1 p-4 overflow-auto bg-black/40 flex items-center justify-center min-h-[350px]">
+                {licensePreviewModal.certUrl ? (
+                  licensePreviewModal.certUrl.toLowerCase().endsWith('.pdf') ? (
+                    <iframe
+                      src={licensePreviewModal.certUrl}
+                      className="w-full h-[55vh] rounded-xl border border-gray-800 bg-white/5"
+                      title={licensePreviewModal.name}
+                    />
+                  ) : (
+                    <img
+                      src={licensePreviewModal.certUrl}
+                      alt={licensePreviewModal.name}
+                      className="max-h-[60vh] max-w-full object-contain rounded-xl border border-gray-800 shadow-lg"
+                    />
+                  )
+                ) : (
+                  <div className="text-gray-500 text-sm">No document file available for preview</div>
+                )}
+              </div>
+
+              {/* Modal Footer / Actions */}
+              <div className="p-4 border-t border-gray-850 bg-gray-900/60 flex flex-wrap items-center justify-between gap-3">
+                <a
+                  href={licensePreviewModal.certUrl}
+                  download
+                  className="inline-flex items-center gap-2 text-xs font-semibold text-gray-300 hover:text-white bg-gray-850 hover:bg-gray-800 border border-gray-750 px-3 py-2 rounded-xl transition-all cursor-pointer"
+                >
+                  Download Certificate
+                </a>
+
+                <div className="flex items-center gap-3">
+                  {licensePreviewModal.isVerified ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLicenseConfirmDialog({
+                          isOpen: true,
+                          title: 'Mark License as Disapproved',
+                          message: `Are you sure you want to mark "${licensePreviewModal.name}" as DISAPPROVED? The license status will change to unverified.`,
+                          actionType: 'disapprove',
+                        })
+                      }
+                      className="inline-flex items-center gap-2 text-xs font-bold text-red-400 hover:text-white bg-red-500/10 hover:bg-red-600 border border-red-500/30 px-4 py-2 rounded-xl transition-all cursor-pointer"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Mark as Disapproved
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLicenseConfirmDialog({
+                          isOpen: true,
+                          title: 'Approve License Certificate',
+                          message: `Are you sure you want to approve and verify "${licensePreviewModal.name}"? The license status will change to verified.`,
+                          actionType: 'approve',
+                        })
+                      }
+                      className="inline-flex items-center gap-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/30 px-4 py-2 rounded-xl transition-all shadow-lg shadow-emerald-900/30 cursor-pointer"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Mark as Approve
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setLicensePreviewModal(null)}
+                    className="text-xs font-semibold text-gray-400 hover:text-white px-4 py-2 rounded-xl border border-gray-800 hover:bg-gray-800 transition-all cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmation Dialog Modal */}
+      <AnimatePresence>
+        {licenseConfirmDialog && licenseConfirmDialog.isOpen && licensePreviewModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[130] bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-gray-950 border border-gray-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`p-3 rounded-xl border ${
+                    licenseConfirmDialog.actionType === 'approve'
+                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                      : 'bg-red-500/10 border-red-500/20 text-red-400'
+                  }`}
+                >
+                  {licenseConfirmDialog.actionType === 'approve' ? (
+                    <CheckCircle className="w-6 h-6" />
+                  ) : (
+                    <AlertCircle className="w-6 h-6" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-base">{licenseConfirmDialog.title}</h3>
+                  <p className="text-xs text-gray-400 mt-1">{licenseConfirmDialog.message}</p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={verifyingLicenseLoading}
+                  onClick={() => setLicenseConfirmDialog(null)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white bg-gray-850 hover:bg-gray-800 border border-gray-750 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={verifyingLicenseLoading}
+                  onClick={() =>
+                    handleVerifyLicenseSubmit(
+                      licensePreviewModal.userId,
+                      licensePreviewModal.licenseIndex,
+                      licenseConfirmDialog.actionType === 'approve'
+                    )
+                  }
+                  className={`px-4 py-2 text-xs font-bold text-white rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+                    licenseConfirmDialog.actionType === 'approve'
+                      ? 'bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/30 shadow-lg shadow-emerald-900/40'
+                      : 'bg-red-600 hover:bg-red-500 border border-red-500/30 shadow-lg shadow-red-900/40'
+                  }`}
+                >
+                  {verifyingLicenseLoading ? (
+                    <span className="inline-block animate-spin">⏳</span>
+                  ) : licenseConfirmDialog.actionType === 'approve' ? (
+                    'Confirm Approval'
+                  ) : (
+                    'Confirm Disapproval'
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

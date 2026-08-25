@@ -1562,6 +1562,45 @@
         }
       }
     },
+    "/admin/licenses/verify": {
+      "post": {
+        "tags": [
+          "Admin Licenses"
+        ],
+        "summary": "Verify or disapprove a provider license certificate",
+        "description": "Allows admin to update isVerified boolean status for a specific license/certificate of a provider.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["userId", "licenseIndex", "isVerified"],
+                "properties": {
+                  "userId": {
+                    "type": "integer",
+                    "example": 12
+                  },
+                  "licenseIndex": {
+                    "type": "integer",
+                    "example": 0
+                  },
+                  "isVerified": {
+                    "type": "boolean",
+                    "example": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "License verification updated successfully"
+          }
+        }
+      }
+    },
     "/admin/settings/services": {
       "get": {
         "tags": [
