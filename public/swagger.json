@@ -31,6 +31,42 @@
     {
       "name": "Providers Profile",
       "description": "Service provider profile details and settings"
+    },
+    {
+      "name": "Provider Requests",
+      "description": "APIs for providers to request new Categories and Services"
+    },
+    {
+      "name": "Stripe Payments",
+      "description": "APIs for salon charges, Stripe Payment Intents, Checkout Sessions, Payment Status, and Webhook integration"
+    },
+    {
+      "name": "Provider Stripe Connect & Payouts",
+      "description": "Consolidated Stripe Connect APIs for Providers (Bank account onboarding, payout status, Express dashboard login link, and earnings payout history)"
+    },
+    {
+      "name": "Reviews & Ratings",
+      "description": "Provider review and rating submission APIs"
+    },
+    {
+      "name": "Vouchers & Promo Codes",
+      "description": "Available discount voucher and promo code APIs"
+    },
+    {
+      "name": "CMS & Legal Pages",
+      "description": "CMS legal pages & FAQs content (Terms & Conditions, Privacy Policy, Refund Policy, Client/Provider Payment Policies, Client/Provider FAQs, Community Guidelines)"
+    },
+    {
+      "name": "App Settings & Version",
+      "description": "Mobile app version requirement settings API"
+    },
+    {
+      "name": "Admin Service Settings",
+      "description": "Admin APIs for managing master service categories, services, images, and ambience settings"
+    },
+    {
+      "name": "Report & Issues",
+      "description": "User feedback and app issues report submission API"
     }
   ],
   "components": {
@@ -101,6 +137,140 @@
             "type": "string"
           }
         }
+      },
+      "ClientProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "userId": {
+            "type": "integer",
+            "example": 3
+          },
+          "location": {
+            "type": "string",
+            "example": "72 Fifth Ave, New York, NY"
+          },
+          "city": {
+            "type": "string",
+            "example": "New York"
+          },
+          "state": {
+            "type": "string",
+            "example": "NY"
+          },
+          "country": {
+            "type": "string",
+            "example": "USA"
+          },
+          "postalCode": {
+            "type": "string",
+            "example": "10011"
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "example": "/uploads/profile_3.png"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 40.7128
+          },
+          "longitude": {
+            "type": "number",
+            "example": -74.006
+          },
+          "stripeCustomerId": {
+            "type": "string",
+            "example": "cus_N9x..."
+          }
+        }
+      },
+      "ProviderProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "userId": {
+            "type": "integer",
+            "example": 2
+          },
+          "salonName": {
+            "type": "string",
+            "example": "Maison Lumiere Beauty Salon"
+          },
+          "location": {
+            "type": "string",
+            "example": "72 Fifth Ave, New York, NY"
+          },
+          "city": {
+            "type": "string",
+            "example": "New York"
+          },
+          "state": {
+            "type": "string",
+            "example": "NY"
+          },
+          "country": {
+            "type": "string",
+            "example": "USA"
+          },
+          "postalCode": {
+            "type": "string",
+            "example": "10011"
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "example": "/uploads/profile_2.png"
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "example": "https://images.unsplash.com/photo-1560066984-138dadb4c035"
+          },
+          "experience": {
+            "type": "integer",
+            "example": 6
+          },
+          "categories": {
+            "type": "string",
+            "example": "[\"Haircut & Styling\", \"Hair Colour\"]"
+          },
+          "isFeatured": {
+            "type": "boolean",
+            "example": false
+          },
+          "isAvailable": {
+            "type": "boolean",
+            "example": true
+          },
+          "isAway": {
+            "type": "boolean",
+            "example": false
+          },
+          "isRushMode": {
+            "type": "boolean",
+            "example": false
+          },
+          "isTravelMode": {
+            "type": "boolean",
+            "example": false
+          },
+          "totalDistance": {
+            "type": "string",
+            "example": "2.5 mi"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 40.7128
+          },
+          "longitude": {
+            "type": "number",
+            "example": -74.006
+          }
+        }
       }
     }
   },
@@ -116,7 +286,7 @@
           "Stripe Payments"
         ],
         "summary": "Get Stripe app configuration",
-        "description": "Fetch Stripe publishable key and currency for client SDK initialization.",
+        "description": "Fetch Stripe publishable key, currency, and configuration status for client SDK initialization.",
         "security": [
           {
             "BearerAuth": []
@@ -140,6 +310,394 @@
           },
           "401": {
             "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/providers/notification": {
+      "get": {
+        "tags": [
+          "Providers Profile"
+        ],
+        "summary": "Get provider notifications list",
+        "description": "Fetch list of all notifications for the authenticated provider.",
+        "responses": {
+          "200": {
+            "description": "Provider notifications retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "count": {
+                      "type": "integer",
+                      "example": 2
+                    },
+                    "notifications": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 1
+                          },
+                          "userId": {
+                            "type": "integer",
+                            "example": 2
+                          },
+                          "title": {
+                            "type": "string",
+                            "example": "New Booking Request! 📅"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Sarah Connor booked a service with you."
+                          },
+                          "type": {
+                            "type": "string",
+                            "example": "NEW_BOOKING"
+                          },
+                          "bookingId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 1
+                          },
+                          "clientId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 2
+                          },
+                          "providerId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 3
+                          },
+                          "data": {
+                            "type": "object",
+                            "example": {
+                              "type": "NEW_BOOKING",
+                              "bookingId": "1",
+                              "clientId": "2",
+                              "providerId": "3"
+                            }
+                          },
+                          "isRead": {
+                            "type": "boolean",
+                            "example": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "example": "2026-07-29T23:27:25.000Z"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/provider/requests": {
+      "post": {
+        "tags": [
+          "Provider Requests"
+        ],
+        "summary": "Request a new Category or Service",
+        "description": "Allows a Service Provider to submit a request for adding a new Category or Service to the platform.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "requestType",
+                  "requestTitle"
+                ],
+                "properties": {
+                  "requestType": {
+                    "type": "string",
+                    "enum": [
+                      "Category",
+                      "Service"
+                    ],
+                    "example": "Category",
+                    "description": "Type of request: Category or Service"
+                  },
+                  "requestTitle": {
+                    "type": "string",
+                    "example": "Organic Hair Treatment",
+                    "description": "Title/Name of the proposed Category or Service"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Request submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Request submitted successfully"
+                    },
+                    "request": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "example": 1
+                        },
+                        "providerId": {
+                          "type": "integer",
+                          "example": 2
+                        },
+                        "requestType": {
+                          "type": "string",
+                          "example": "Category"
+                        },
+                        "requestTitle": {
+                          "type": "string",
+                          "example": "Organic Hair Treatment"
+                        },
+                        "status": {
+                          "type": "string",
+                          "example": "pending"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "example": "2026-07-30T08:33:41.000Z"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid requestType or requestTitle"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - Requires provider role"
+          }
+        }
+      }
+    },
+    "/clients/notification": {
+      "get": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Get client notifications list",
+        "description": "Fetch list of all notifications for the authenticated client.",
+        "responses": {
+          "200": {
+            "description": "Client notifications retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "count": {
+                      "type": "integer",
+                      "example": 2
+                    },
+                    "notifications": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 1
+                          },
+                          "userId": {
+                            "type": "integer",
+                            "example": 3
+                          },
+                          "title": {
+                            "type": "string",
+                            "example": "Booking Confirmed! ✅"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Your appointment with Maison Lumière has been confirmed."
+                          },
+                          "type": {
+                            "type": "string",
+                            "example": "BOOKING_COMPLETED"
+                          },
+                          "bookingId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 1
+                          },
+                          "clientId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 2
+                          },
+                          "providerId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 3
+                          },
+                          "data": {
+                            "type": "object",
+                            "example": {
+                              "type": "BOOKING_COMPLETED",
+                              "bookingId": "1",
+                              "clientId": "2",
+                              "providerId": "3"
+                            }
+                          },
+                          "isRead": {
+                            "type": "boolean",
+                            "example": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "example": "2026-07-29T23:27:25.000Z"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/providers/daily/transactions": {
+      "post": {
+        "tags": [
+          "Providers Profile"
+        ],
+        "summary": "Get daily transactions",
+        "description": "Returns daily aggregated transactions (bookings, service amounts) for the authenticated provider.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sortBy": {
+                    "type": "string",
+                    "enum": [
+                      "currently month",
+                      "all"
+                    ],
+                    "example": "currently month",
+                    "description": "Filter mode: 'currently month' or 'all'"
+                  },
+                  "page": {
+                    "type": "integer",
+                    "example": 1,
+                    "description": "Page number for pagination when sortBy is 'all'"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Daily transactions retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "date": {
+                        "type": "string",
+                        "format": "date",
+                        "example": "2026-07-25"
+                      },
+                      "totalServiceAmount": {
+                        "type": "number",
+                        "example": 25
+                      },
+                      "transactions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "integer"
+                            },
+                            "client": {
+                              "$ref": "#/components/schemas/User"
+                            },
+                            "services": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/Service"
+                              }
+                            },
+                            "rating": {
+                              "type": "object",
+                              "nullable": true,
+                              "properties": {
+                                "rating": {
+                                  "type": "number"
+                                },
+                                "comment": {
+                                  "type": "string",
+                                  "nullable": true
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized access"
+          },
+          "403": {
+            "description": "Forbidden: Requires provider role"
           }
         }
       }
@@ -420,12 +978,12 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "email"
+                  "phoneNumber"
                 ],
                 "properties": {
-                  "email": {
+                  "phoneNumber": {
                     "type": "string",
-                    "example": "user@lookclean.com"
+                    "example": "+15197749197"
                   }
                 }
               }
@@ -440,7 +998,7 @@
             "description": "Invalid input or account lacks a verified phone number"
           },
           "404": {
-            "description": "User email address not found"
+            "description": "Phone number not registered"
           }
         }
       }
@@ -451,7 +1009,7 @@
           "Authenticate"
         ],
         "summary": "Verify Forgot Password OTP",
-        "description": "Verifies the 6-digit verification code sent to the email address. Yields a short-lived reset token.",
+        "description": "Verifies the 6-digit verification code sent to the phone number. Yields a short-lived reset token.",
         "security": [],
         "requestBody": {
           "required": true,
@@ -460,13 +1018,13 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "email",
+                  "phoneNumber",
                   "code"
                 ],
                 "properties": {
-                  "email": {
+                  "phoneNumber": {
                     "type": "string",
-                    "example": "user@lookclean.com"
+                    "example": "+15197749197"
                   },
                   "code": {
                     "type": "string",
@@ -497,7 +1055,7 @@
             "description": "Invalid or expired OTP code"
           },
           "404": {
-            "description": "User email address not found"
+            "description": "Phone number not registered"
           }
         }
       }
@@ -706,17 +1264,41 @@
                   },
                   "location": {
                     "type": "string",
-                    "example": "Los Angeles, CA"
+                    "example": "72 Fifth Ave, New York, NY"
+                  },
+                  "city": {
+                    "type": "string",
+                    "example": "New York"
+                  },
+                  "state": {
+                    "type": "string",
+                    "example": "NY"
+                  },
+                  "country": {
+                    "type": "string",
+                    "example": "USA"
+                  },
+                  "postalCode": {
+                    "type": "string",
+                    "example": "10011",
+                    "description": "Postal code / Zip code (accepts postalCode or postal_code)"
                   },
                   "latitude": {
                     "type": "number",
                     "format": "float",
-                    "example": 34.0522
+                    "example": 40.7128,
+                    "description": "Latitude (accepts latitude or lat)"
                   },
                   "longitude": {
                     "type": "number",
                     "format": "float",
-                    "example": -118.2437
+                    "example": -74.006,
+                    "description": "Longitude (accepts longitude, long, or lng)"
+                  },
+                  "profileImageUrl": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Upload client profile image file"
                   },
                   "profileImage": {
                     "type": "string",
@@ -736,21 +1318,40 @@
                   },
                   "location": {
                     "type": "string",
-                    "example": "Los Angeles, CA"
+                    "example": "72 Fifth Ave, New York, NY"
+                  },
+                  "city": {
+                    "type": "string",
+                    "example": "New York"
+                  },
+                  "state": {
+                    "type": "string",
+                    "example": "NY"
+                  },
+                  "country": {
+                    "type": "string",
+                    "example": "USA"
+                  },
+                  "postalCode": {
+                    "type": "string",
+                    "example": "10011",
+                    "description": "Postal code / Zip code (accepts postalCode or postal_code)"
                   },
                   "latitude": {
                     "type": "number",
                     "format": "float",
-                    "example": 34.0522
+                    "example": 40.7128,
+                    "description": "Latitude (accepts latitude or lat)"
                   },
                   "longitude": {
                     "type": "number",
                     "format": "float",
-                    "example": -118.2437
+                    "example": -74.006,
+                    "description": "Longitude (accepts longitude, long, or lng)"
                   },
                   "profileImageUrl": {
                     "type": "string",
-                    "example": "https://..."
+                    "example": "/uploads/profile_3.png"
                   }
                 }
               }
@@ -760,6 +1361,380 @@
         "responses": {
           "200": {
             "description": "Profile saved successfully"
+          },
+          "401": {
+            "description": "Unauthorized access"
+          },
+          "403": {
+            "description": "Forbidden: Requires client role"
+          }
+        }
+      }
+    },
+    "/clients/providers": {
+      "get": {
+        "tags": [
+          "Client Profile"
+        ],
+        "summary": "Get All Providers list with category filter",
+        "description": "Returns list of all registered service providers. Supports filtering by category, search term, city, country, and location. When a provider has active Travel Mode (isTravelMode = true and current date <= travelEndDate), the provider is displayed for clients searching in their destination city/country, and hidden from clients searching in their home profile city/country until travelEndDate passes.",
+        "parameters": [
+          {
+            "name": "city",
+            "in": "query",
+            "required": false,
+            "description": "Filter providers by city or active travel destination city",
+            "schema": {
+              "type": "string",
+              "example": "Los Angeles"
+            }
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "description": "Filter providers by country or active travel destination country",
+            "schema": {
+              "type": "string",
+              "example": "USA"
+            }
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "required": false,
+            "description": "Filter providers by location string / address",
+            "schema": {
+              "type": "string",
+              "example": "Los Angeles, CA"
+            }
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "description": "The main category ID or name to filter providers (e.g. 1 or 'Haircut')",
+            "schema": {
+              "type": "string",
+              "example": "1"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Search by provider name, salon name, or service",
+            "schema": {
+              "type": "string",
+              "example": "abc"
+            }
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "required": false,
+            "description": "Sort providers by Nearest, Earliest, Ratings, or Featured (Nearest calculates distance using lat/long coordinates)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "Nearest",
+                "Earliest",
+                "Ratings",
+                "Featured"
+              ],
+              "example": "Nearest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Providers list retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "email": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string"
+                      },
+                      "providerProfile": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "location": {
+                            "type": "string"
+                          },
+                          "experience": {
+                            "type": "integer"
+                          },
+                          "categories": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer"
+                                },
+                                "title": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "services": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer"
+                                },
+                                "serviceId": {
+                                  "type": "integer",
+                                  "nullable": true
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "price": {
+                                  "type": "integer"
+                                }
+                              }
+                            }
+                          },
+                          "reviews": {
+                            "type": "number",
+                            "example": 4.9
+                          },
+                          "earliestTime": {
+                            "type": "string",
+                            "example": "00:00 AM"
+                          },
+                          "isWishlisted": {
+                            "type": "boolean",
+                            "example": false
+                          }
+                        }
+                      },
+                      "isWishlisted": {
+                        "type": "boolean",
+                        "example": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized access"
+          },
+          "403": {
+            "description": "Forbidden: Requires client role"
+          }
+        }
+      }
+    },
+    "/clients/wishlist": {
+      "post": {
+        "tags": [
+          "Client Profile"
+        ],
+        "summary": "Toggle provider in client wishlist",
+        "description": "Adds a provider to the client's wishlist if not present, or removes them if they already exist.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "providerId"
+                ],
+                "properties": {
+                  "providerId": {
+                    "type": "integer",
+                    "description": "The user ID of the provider",
+                    "example": 2
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Wishlist status toggled successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "isWishlisted": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized access"
+          },
+          "403": {
+            "description": "Forbidden: Requires client role"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Client Profile"
+        ],
+        "summary": "Get all wishlisted providers",
+        "description": "Returns list of all registered service providers currently in the authenticated client's wishlist.",
+        "responses": {
+          "200": {
+            "description": "Wishlisted providers retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "email": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string"
+                      },
+                      "isWishlisted": {
+                        "type": "boolean",
+                        "example": true
+                      },
+                      "providerProfile": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "location": {
+                            "type": "string"
+                          },
+                          "experience": {
+                            "type": "integer"
+                          },
+                          "isWishlisted": {
+                            "type": "boolean",
+                            "example": true
+                          },
+                          "categories": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer"
+                                },
+                                "title": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "services": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer"
+                                },
+                                "serviceId": {
+                                  "type": "integer",
+                                  "nullable": true
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "price": {
+                                  "type": "integer"
+                                }
+                              }
+                            }
+                          },
+                          "reviews": {
+                            "type": "number",
+                            "example": 4.9
+                          },
+                          "earliestTime": {
+                            "type": "string",
+                            "example": "00:00 AM"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized access"
+          },
+          "403": {
+            "description": "Forbidden: Requires client role"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Client Profile"
+        ],
+        "summary": "Delete provider from wishlist by ID",
+        "description": "Removes a service provider from the client's wishlist by provider ID.",
+        "parameters": [
+          {
+            "name": "providerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "example": 2
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider removed from wishlist successfully"
+          },
+          "400": {
+            "description": "Missing or invalid providerId"
           },
           "401": {
             "description": "Unauthorized access"
@@ -890,110 +1865,6 @@
           },
           "403": {
             "description": "Forbidden: Requires provider role"
-          }
-        }
-      }
-    },
-    "/providers/notifications": {
-      "get": {
-        "tags": [
-          "Providers Profile"
-        ],
-        "summary": "Get provider notifications list",
-        "description": "Fetch list of all notifications for the authenticated provider. Includes bookingId, clientId, providerId in top-level object and in data payload for deep-link routing.",
-        "responses": {
-          "200": {
-            "description": "Provider notifications retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "count": { "type": "integer", "example": 2 },
-                    "notifications": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": { "type": "integer", "example": 1 },
-                          "userId": { "type": "integer", "example": 2 },
-                          "title": { "type": "string", "example": "New Booking Received! 📅" },
-                          "message": { "type": "string", "example": "Sarah Connor has booked an appointment." },
-                          "type": { "type": "string", "example": "NEW_BOOKING" },
-                          "bookingId": { "type": "integer", "nullable": true, "example": 12 },
-                          "clientId": { "type": "integer", "nullable": true, "example": 2 },
-                          "providerId": { "type": "integer", "nullable": true, "example": 3 },
-                          "data": {
-                            "type": "object",
-                            "example": {
-                              "type": "NEW_BOOKING",
-                              "bookingId": "12",
-                              "clientId": "2",
-                              "providerId": "3"
-                            }
-                          },
-                          "isRead": { "type": "boolean", "example": false },
-                          "createdAt": { "type": "string", "example": "2026-08-18T10:00:00.000Z" }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/clients/notifications": {
-      "get": {
-        "tags": [
-          "Clients Profile"
-        ],
-        "summary": "Get client notifications list",
-        "description": "Fetch list of all notifications for the authenticated client. Includes bookingId, clientId, providerId in top-level object and in data payload for deep-link routing.",
-        "responses": {
-          "200": {
-            "description": "Client notifications retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "count": { "type": "integer", "example": 2 },
-                    "notifications": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": { "type": "integer", "example": 1 },
-                          "userId": { "type": "integer", "example": 2 },
-                          "title": { "type": "string", "example": "Booking Completed! 🎉" },
-                          "message": { "type": "string", "example": "Your appointment is complete. Tap here to rate your provider!" },
-                          "type": { "type": "string", "example": "BOOKING_COMPLETED" },
-                          "bookingId": { "type": "integer", "nullable": true, "example": 12 },
-                          "clientId": { "type": "integer", "nullable": true, "example": 2 },
-                          "providerId": { "type": "integer", "nullable": true, "example": 3 },
-                          "data": {
-                            "type": "object",
-                            "example": {
-                              "type": "BOOKING_COMPLETED",
-                              "bookingId": "12",
-                              "clientId": "2",
-                              "providerId": "3"
-                            }
-                          },
-                          "isRead": { "type": "boolean", "example": false },
-                          "createdAt": { "type": "string", "example": "2026-08-18T10:00:00.000Z" }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
           }
         }
       }
@@ -1182,6 +2053,10 @@
                       2
                     ]
                   },
+                  "numberOfPeople": {
+                    "type": "integer",
+                    "example": 2
+                  },
                   "tipType": {
                     "type": "string",
                     "example": "10%"
@@ -1360,6 +2235,234 @@
         }
       }
     },
+    "/provider/bookings/{id}/complete": {
+      "post": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Complete Provider Booking & Process Payout",
+        "description": "Provider completes a booking. Automatically captures the held Stripe payment, calculates platform commission cut, transfers provider payout to connected Stripe account, updates booking status to 'completed', and sends FCM completion notifications.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Booking ID to complete",
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Booking successfully completed and payout processed"
+          },
+          "400": {
+            "description": "Invalid booking ID or payment capture failure"
+          },
+          "404": {
+            "description": "Booking not found"
+          }
+        }
+      }
+    },
+    "/provider/bookings/status": {
+      "post": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Update Provider Booking Status",
+        "description": "Update status of a booking (pending, confirmed, completed, cancelled). Setting status to 'completed' captures held Stripe payment and transfers payout.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "bookingId",
+                  "status"
+                ],
+                "properties": {
+                  "bookingId": {
+                    "type": "integer",
+                    "example": 1
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "confirmed",
+                      "completed",
+                      "cancelled"
+                    ],
+                    "example": "completed"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Booking status updated successfully"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Update Provider Booking Status (PUT)",
+        "description": "Update status of a booking (pending, confirmed, completed, cancelled). Setting status to 'completed' captures held Stripe payment and transfers payout.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "bookingId",
+                  "status"
+                ],
+                "properties": {
+                  "bookingId": {
+                    "type": "integer",
+                    "example": 1
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "confirmed",
+                      "completed",
+                      "cancelled"
+                    ],
+                    "example": "completed"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Booking status updated successfully"
+          }
+        }
+      }
+    },
+    "/providers/me/licence": {
+      "put": {
+        "tags": [
+          "Providers Profile"
+        ],
+        "summary": "Update Provider License/Certificate by Index",
+        "description": "Updates the license name and/or certificate file/URL at a specific array index.",
+        "parameters": [
+          {
+            "name": "index",
+            "in": "query",
+            "required": true,
+            "description": "Index of the license/certificate to update",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "licenseType": {
+                    "type": "string",
+                    "example": "Cosmetology License"
+                  },
+                  "certificate": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Upload certificate file (image or PDF)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "License/certificate updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized access"
+          },
+          "403": {
+            "description": "Forbidden: Requires provider role"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Providers Profile"
+        ],
+        "summary": "Delete Provider License/Certificate by Index",
+        "description": "Deletes the license name and certificate URL at a specific array index.",
+        "parameters": [
+          {
+            "name": "index",
+            "in": "query",
+            "required": true,
+            "description": "Index of the license/certificate to delete",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "License/certificate deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized access"
+          },
+          "403": {
+            "description": "Forbidden: Requires provider role"
+          }
+        }
+      }
+    },
     "/users/verify/mobile/send": {
       "post": {
         "tags": [
@@ -1444,37 +2547,171 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
                 "type": "object",
                 "required": [
-                  "name",
-                  "location"
+                  "name"
                 ],
                 "properties": {
                   "name": {
                     "type": "string",
-                    "example": "Glamour Cuts"
+                    "example": "Maison Lumiere"
+                  },
+                  "salonName": {
+                    "type": "string",
+                    "example": "Maison Lumiere Beauty Salon",
+                    "description": "Salon Name (accepts salonName or salon_name)"
                   },
                   "location": {
                     "type": "string",
-                    "example": "Los Angeles, CA"
+                    "example": "72 Fifth Ave, New York, NY"
                   },
-                  "coverImageUrl": {
+                  "city": {
                     "type": "string",
-                    "example": "https://..."
+                    "example": "New York"
                   },
-                  "profileImageUrl": {
+                  "state": {
                     "type": "string",
-                    "example": "https://..."
+                    "example": "NY"
+                  },
+                  "country": {
+                    "type": "string",
+                    "example": "USA"
+                  },
+                  "postalCode": {
+                    "type": "string",
+                    "example": "10011",
+                    "description": "Postal code / Zip code (accepts postalCode or postal_code)"
                   },
                   "latitude": {
                     "type": "number",
-                    "example": 34.0522
+                    "format": "float",
+                    "example": 40.7128,
+                    "description": "Latitude (accepts latitude or lat)"
                   },
                   "longitude": {
                     "type": "number",
-                    "example": -118.2437
+                    "format": "float",
+                    "example": -74.006,
+                    "description": "Longitude (accepts longitude, long, or lng)"
+                  },
+                  "coverImageUrl": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Upload provider cover header image file"
+                  },
+                  "profileImageUrl": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Upload provider profile avatar image file"
+                  },
+                  "isAvailable": {
+                    "type": "boolean",
+                    "example": true,
+                    "default": true
+                  },
+                  "isAway": {
+                    "type": "boolean",
+                    "example": false,
+                    "default": false
+                  },
+                  "isRushMode": {
+                    "type": "boolean",
+                    "example": false,
+                    "default": false
+                  },
+                  "isTravelMode": {
+                    "type": "boolean",
+                    "example": false,
+                    "default": false
+                  },
+                  "travelCity": {
+                    "type": "string",
+                    "example": "Los Angeles"
+                  },
+                  "travelState": {
+                    "type": "string",
+                    "example": "CA"
+                  },
+                  "travelCountry": {
+                    "type": "string",
+                    "example": "USA"
+                  },
+                  "travelStartDate": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2026-09-01T00:00:00Z"
+                  },
+                  "travelEndDate": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2026-09-15T23:59:59Z"
+                  },
+                  "isFeatured": {
+                    "type": "boolean",
+                    "example": true,
+                    "default": true
+                  }
+                }
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Maison Lumiere"
+                  },
+                  "salonName": {
+                    "type": "string",
+                    "example": "Maison Lumiere Beauty Salon",
+                    "description": "Salon Name (accepts salonName or salon_name)"
+                  },
+                  "location": {
+                    "type": "string",
+                    "example": "72 Fifth Ave, New York, NY"
+                  },
+                  "city": {
+                    "type": "string",
+                    "example": "New York"
+                  },
+                  "state": {
+                    "type": "string",
+                    "example": "NY"
+                  },
+                  "country": {
+                    "type": "string",
+                    "example": "USA"
+                  },
+                  "postalCode": {
+                    "type": "string",
+                    "example": "10011",
+                    "description": "Postal code / Zip code (accepts postalCode or postal_code)"
+                  },
+                  "latitude": {
+                    "type": "number",
+                    "format": "float",
+                    "example": 40.7128,
+                    "description": "Latitude (accepts latitude or lat)"
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "format": "float",
+                    "example": -74.006,
+                    "description": "Longitude (accepts longitude, long, or lng)"
+                  },
+                  "coverImageUrl": {
+                    "type": "string",
+                    "example": "https://images.unsplash.com/photo-1560066984-138dadb4c035"
+                  },
+                  "profileImageUrl": {
+                    "type": "string",
+                    "example": "/uploads/profile_2.png"
                   },
                   "isAvailable": {
                     "type": "boolean",
@@ -1543,7 +2780,101 @@
         "summary": "Step 2: Get all admin-defined categories",
         "responses": {
           "200": {
-            "description": "Returns list of category titles"
+            "description": "Returns list of category objects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "example": 1
+                      },
+                      "name": {
+                        "type": "string",
+                        "example": "Haircut"
+                      },
+                      "title": {
+                        "type": "string",
+                        "example": "Haircut"
+                      }
+                    }
+                  }
+                },
+                "example": [
+                  {
+                    "id": 1,
+                    "title": "Haircut & Styling"
+                  },
+                  {
+                    "id": 2,
+                    "title": "Hair Colour"
+                  },
+                  {
+                    "id": 3,
+                    "title": "Hair Treatments"
+                  },
+                  {
+                    "id": 4,
+                    "title": "Hair Extensions"
+                  },
+                  {
+                    "id": 5,
+                    "title": "Bridal & Event Hair"
+                  },
+                  {
+                    "id": 6,
+                    "title": "Nails"
+                  },
+                  {
+                    "id": 7,
+                    "title": "Brows & Lashes"
+                  },
+                  {
+                    "id": 8,
+                    "title": "Facials & Skincare"
+                  },
+                  {
+                    "id": 9,
+                    "title": "Waxing"
+                  },
+                  {
+                    "id": 10,
+                    "title": "Threading"
+                  },
+                  {
+                    "id": 11,
+                    "title": "Makeup"
+                  },
+                  {
+                    "id": 12,
+                    "title": "Massage & Spa"
+                  },
+                  {
+                    "id": 13,
+                    "title": "Tanning"
+                  },
+                  {
+                    "id": 14,
+                    "title": "Advanced Beauty"
+                  },
+                  {
+                    "id": 15,
+                    "title": "Piercing"
+                  },
+                  {
+                    "id": 16,
+                    "title": "Mens Grooming"
+                  },
+                  {
+                    "id": 17,
+                    "title": "Kids Services"
+                  }
+                ]
+              }
+            }
           }
         }
       },
@@ -1565,11 +2896,11 @@
                   "categories": {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "type": "integer"
                     },
                     "example": [
-                      "Hair",
-                      "Nails"
+                      1,
+                      2
                     ]
                   }
                 }
@@ -2060,6 +3391,784 @@
           "200": {
             "description": "Onboarding complete and profile finalized"
           }
+        }
+      }
+    },
+    "/providers/client-profile": {
+      "get": {
+        "tags": [
+          "Providers Profile"
+        ],
+        "summary": "Get customer profile and transactions",
+        "description": "Returns the client information and all past transactions (with ratings) in descending order.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID of the client"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer profile retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "client": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "clientProfile": {
+                          "type": "object"
+                        },
+                        "transactions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "date": {
+                                "type": "string",
+                                "format": "date"
+                              },
+                              "serviceAmount": {
+                                "type": "number"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "services": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object"
+                                }
+                              },
+                              "rating": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "rating": {
+                                    "type": "number"
+                                  },
+                                  "comment": {
+                                    "type": "string",
+                                    "nullable": true
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/providers/profile": {
+      "post": {
+        "tags": [
+          "Providers Profile"
+        ],
+        "summary": "Update Provider Profile Details",
+        "description": "Update comprehensive provider profile including salonName, location (location, city, state, country, postalCode, lat, long), services, categories, and amenities.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "providerProfile"
+                ],
+                "properties": {
+                  "onboardingCompleted": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "providerProfile": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "example": "Maison Lumiere"
+                      },
+                      "salonName": {
+                        "type": "string",
+                        "example": "Maison Lumiere Beauty Salon"
+                      },
+                      "location": {
+                        "type": "string",
+                        "example": "72 Fifth Ave, New York, NY"
+                      },
+                      "city": {
+                        "type": "string",
+                        "example": "New York"
+                      },
+                      "state": {
+                        "type": "string",
+                        "example": "NY"
+                      },
+                      "country": {
+                        "type": "string",
+                        "example": "USA"
+                      },
+                      "postalCode": {
+                        "type": "string",
+                        "example": "10011"
+                      },
+                      "latitude": {
+                        "type": "number",
+                        "example": 40.7128
+                      },
+                      "longitude": {
+                        "type": "number",
+                        "example": -74.006
+                      },
+                      "isAvailable": {
+                        "type": "boolean",
+                        "example": true,
+                        "default": true
+                      },
+                      "isAway": {
+                        "type": "boolean",
+                        "example": false,
+                        "default": false
+                      },
+                      "isRushMode": {
+                        "type": "boolean",
+                        "example": false,
+                        "default": false
+                      },
+                      "isTravelMode": {
+                        "type": "boolean",
+                        "example": false,
+                        "default": false
+                      },
+                      "travelCity": {
+                        "type": "string",
+                        "example": "Los Angeles"
+                      },
+                      "travelState": {
+                        "type": "string",
+                        "example": "CA"
+                      },
+                      "travelCountry": {
+                        "type": "string",
+                        "example": "USA"
+                      },
+                      "travelStartDate": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-09-01T00:00:00Z"
+                      },
+                      "travelEndDate": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-09-15T23:59:59Z"
+                      },
+                      "isTravelActive": {
+                        "type": "boolean",
+                        "example": true
+                      },
+                      "isFeatured": {
+                        "type": "boolean",
+                        "example": true,
+                        "default": true
+                      },
+                      "experience": {
+                        "type": "integer",
+                        "example": 6
+                      },
+                      "categories": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "example": [
+                          "Haircut & Styling",
+                          "Hair Colour"
+                        ]
+                      },
+                      "coverImageUrl": {
+                        "type": "string",
+                        "example": "https://..."
+                      },
+                      "services": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "example": "Womens Haircut"
+                            },
+                            "price": {
+                              "type": "integer",
+                              "example": 45
+                            },
+                            "category": {
+                              "type": "string",
+                              "example": "Haircut & Styling"
+                            }
+                          }
+                        }
+                      },
+                      "amenities": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "example": "Parking area"
+                            },
+                            "type": {
+                              "type": "string",
+                              "example": "amenity"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Provider profile updated successfully"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden: Requires provider role"
+          }
+        }
+      }
+    },
+    "/clients/reviews": {
+      "post": {
+        "tags": [
+          "Reviews & Ratings"
+        ],
+        "summary": "Submit Rating & Review for Provider",
+        "description": "Allows a client user to submit a star rating and written review for a service provider.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "rating"
+                ],
+                "properties": {
+                  "providerId": {
+                    "type": "integer",
+                    "example": 2,
+                    "description": "ID of the service provider being reviewed"
+                  },
+                  "bookingId": {
+                    "type": "integer",
+                    "example": 5,
+                    "description": "ID of the associated booking"
+                  },
+                  "rating": {
+                    "type": "number",
+                    "example": 5,
+                    "description": "Rating score (1 to 5)"
+                  },
+                  "comment": {
+                    "type": "string",
+                    "example": "Great service! Very punctual and clean.",
+                    "description": "Optional review comment or feedback"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Review submitted successfully"
+          },
+          "400": {
+            "description": "Bad Request - Missing rating or provider/booking details"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/clients/vouchers": {
+      "get": {
+        "tags": [
+          "Vouchers & Promo Codes"
+        ],
+        "summary": "Get List of Active Promo / Voucher Codes",
+        "description": "Retrieve list of active discount vouchers and promo codes available for clients.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of active promo/voucher codes retrieved successfully"
+          },
+          "400": {
+            "description": "Failed to fetch promo codes"
+          }
+        }
+      }
+    },
+    "/cms": {
+      "get": {
+        "tags": [
+          "CMS & Legal Pages"
+        ],
+        "summary": "Get All CMS Pages & Legal Content",
+        "description": "Retrieve list of all CMS pages content including Terms & Conditions, Privacy Policy, Refund Policy, Payment Policies, Client/Provider FAQs, and Community Guidelines.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "All CMS pages content retrieved successfully"
+          }
+        }
+      }
+    },
+    "/cms/{slug}": {
+      "get": {
+        "tags": [
+          "CMS & Legal Pages"
+        ],
+        "summary": "Get CMS Legal Page or FAQ Content by Slug",
+        "description": "Retrieve specific CMS page or FAQ content by slug identifier.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "terms",
+                "privacy-policy",
+                "refund-policy",
+                "client-payment-policy",
+                "provider-payment-policy",
+                "client-faqs",
+                "provider-faqs",
+                "community-guidelines"
+              ]
+            },
+            "description": "CMS page slug identifier (terms, privacy-policy, refund-policy, client-payment-policy, provider-payment-policy, client-faqs, provider-faqs, community-guidelines)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CMS page content retrieved successfully"
+          },
+          "404": {
+            "description": "CMS page not found"
+          }
+        }
+      }
+    },
+    "/app-version": {
+      "get": {
+        "tags": [
+          "App Settings & Version"
+        ],
+        "summary": "Get Mobile App Current & Minimum Version Requirements",
+        "description": "Retrieve current and minimum required app version settings for mobile clients.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "App version requirements retrieved successfully"
+          },
+          "400": {
+            "description": "Failed to fetch app versions"
+          }
+        }
+      }
+    },
+    "/reports": {
+      "post": {
+        "tags": [
+          "Report & Issues"
+        ],
+        "summary": "Submit App Feedback or Issue Report",
+        "description": "Submit user feedback or app issue report with optional file attachment uploads.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "message"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Issue with booking confirmation",
+                    "description": "Short title describing the issue or feedback"
+                  },
+                  "message": {
+                    "type": "string",
+                    "example": "I encountered an error when trying to select a time slot.",
+                    "description": "Detailed explanation of the issue"
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "/uploads/reports/screenshot1.png"
+                    ],
+                    "description": "List of attachment URLs"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "message"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Issue with booking confirmation"
+                  },
+                  "message": {
+                    "type": "string",
+                    "example": "I encountered an error when trying to select a time slot."
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Uploaded image files or attachments"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Issue report submitted successfully"
+          },
+          "400": {
+            "description": "Bad Request - Title and message are required"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/provider/stripe/onboard": {
+      "post": {
+        "tags": [
+          "Provider Stripe Connect & Payouts"
+        ],
+        "summary": "Initiate Provider Stripe Connect Express Onboarding",
+        "description": "Creates a Stripe Connect Express account for the provider (if not created yet) and returns the single-use onboarding web URL to collect bank account & KYC details.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stripe Connect onboarding URL created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "stripeAccountId": { "type": "string", "example": "acct_1N9x829xZ..." },
+                    "url": { "type": "string", "example": "https://connect.stripe.com/setup/s/..." }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized - Provider Bearer JWT required" },
+          "403": { "description": "Forbidden - Provider role required" }
+        }
+      }
+    },
+    "/provider/stripe/status": {
+      "get": {
+        "tags": [
+          "Provider Stripe Connect & Payouts"
+        ],
+        "summary": "Get Provider Stripe Account & Payout Capability Status",
+        "description": "Fetches current onboarding completion status, bank account verification state, and payout enablement for the authenticated provider.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider Stripe account status retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "stripeAccountId": { "type": "string", "example": "acct_1N9x829xZ...", "nullable": true },
+                    "detailsSubmitted": { "type": "boolean", "example": true },
+                    "payoutsEnabled": { "type": "boolean", "example": true },
+                    "chargesEnabled": { "type": "boolean", "example": true },
+                    "commissionRate": { "type": "number", "example": 10.0 }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized - Provider Bearer JWT required" },
+          "403": { "description": "Forbidden - Provider role required" }
+        }
+      }
+    },
+    "/provider/stripe/login-link": {
+      "post": {
+        "tags": [
+          "Provider Stripe Connect & Payouts"
+        ],
+        "summary": "Generate Stripe Express Dashboard Single-Sign-On Link",
+        "description": "Generates a single-use login link to the Stripe Express Dashboard for the provider to update bank account details or view payout tax forms.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stripe Express dashboard login link generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "url": { "type": "string", "example": "https://connect.stripe.com/express/..." }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Provider does not have a connected Stripe account yet" },
+          "401": { "description": "Unauthorized - Provider Bearer JWT required" }
+        }
+      }
+    },
+    "/provider/stripe/payouts": {
+      "get": {
+        "tags": [
+          "Provider Stripe Connect & Payouts"
+        ],
+        "summary": "Get Provider Payout History & Commission Breakdown",
+        "description": "Returns list of all completed booking payouts with gross amounts, platform commission deducted, and net amounts transferred to provider bank account.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider payout history retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "commissionRate": { "type": "number", "example": 10.0 },
+                    "totalGrossEarnings": { "type": "number", "example": 1250.00 },
+                    "totalCommissionDeducted": { "type": "number", "example": 125.00 },
+                    "totalNetPayouts": { "type": "number", "example": 1125.00 },
+                    "payouts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "bookingId": { "type": "integer", "example": 102 },
+                          "date": { "type": "string", "format": "date-time", "example": "2026-08-19T20:00:00Z" },
+                          "serviceAmount": { "type": "number", "example": 100.00 },
+                          "platformCommission": { "type": "number", "example": 10.00 },
+                          "providerPayoutAmount": { "type": "number", "example": 90.00 },
+                          "payoutStatus": { "type": "string", "example": "transferred" },
+                          "transactionId": { "type": "string", "example": "pi_3MtwB2LkdIw..." },
+                          "stripeTransferId": { "type": "string", "example": "tr_1N9x..." }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized - Provider Bearer JWT required" }
+        }
+      }
+    },
+    "/stripe/payment-intent": {
+      "post": {
+        "tags": [
+          "Stripe Payments"
+        ],
+        "summary": "Create Booking PaymentIntent with Automatic Commission Split",
+        "description": "Creates a Stripe PaymentIntent with application_fee_amount (platform commission deduction) and transfer_data.destination (direct payout to provider's connected Stripe bank account).",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "bookingId"
+                ],
+                "properties": {
+                  "bookingId": {
+                    "type": "integer",
+                    "example": 102,
+                    "description": "ID of the booking to pay for"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "PaymentIntent created successfully with commission fee split",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "clientSecret": { "type": "string", "example": "pi_3MtwB..._secret_..." },
+                    "paymentIntentId": { "type": "string", "example": "pi_3MtwB2LkdIw..." },
+                    "amount": { "type": "number", "example": 100.00 },
+                    "platformCommission": { "type": "number", "example": 10.00 },
+                    "providerPayoutAmount": { "type": "number", "example": 90.00 }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Bad Request - Missing bookingId or Stripe payment failure" },
+          "401": { "description": "Unauthorized - Bearer JWT required" }
+        }
+      }
+    },
+    "/stripe/webhook": {
+      "post": {
+        "tags": [
+          "Stripe Payments"
+        ],
+        "summary": "Stripe Webhook Event Listener",
+        "description": "Handles asynchronous events from Stripe (payment_intent.succeeded, account.updated) to finalize booking status, confirm bank payout transfer, and send FCM notification to provider.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Raw Stripe Event payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook event processed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "received": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid Webhook Signature or Payload" }
         }
       }
     }

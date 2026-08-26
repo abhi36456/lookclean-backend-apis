@@ -1377,8 +1377,38 @@
           "Client Profile"
         ],
         "summary": "Get All Providers list with category filter",
-        "description": "Returns list of all registered service providers. Can optionally filter by main category ID or name.",
+        "description": "Returns list of all registered service providers. Supports filtering by category, search term, city, country, and location. When a provider has active Travel Mode (isTravelMode = true and current date <= travelEndDate), the provider is displayed for clients searching in their destination city/country, and hidden from clients searching in their home profile city/country until travelEndDate passes.",
         "parameters": [
+          {
+            "name": "city",
+            "in": "query",
+            "required": false,
+            "description": "Filter providers by city or active travel destination city",
+            "schema": {
+              "type": "string",
+              "example": "Los Angeles"
+            }
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "description": "Filter providers by country or active travel destination country",
+            "schema": {
+              "type": "string",
+              "example": "USA"
+            }
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "required": false,
+            "description": "Filter providers by location string / address",
+            "schema": {
+              "type": "string",
+              "example": "Los Angeles, CA"
+            }
+          },
           {
             "name": "categoryId",
             "in": "query",
@@ -1393,7 +1423,7 @@
             "name": "search",
             "in": "query",
             "required": false,
-            "description": "Search by provider name",
+            "description": "Search by provider name, salon name, or service",
             "schema": {
               "type": "string",
               "example": "abc"
@@ -2201,6 +2231,124 @@
         "responses": {
           "200": {
             "description": "Success"
+          }
+        }
+      }
+    },
+    "/provider/bookings/{id}/complete": {
+      "post": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Complete Provider Booking & Process Payout",
+        "description": "Provider completes a booking. Automatically captures the held Stripe payment, calculates platform commission cut, transfers provider payout to connected Stripe account, updates booking status to 'completed', and sends FCM completion notifications.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Booking ID to complete",
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Booking successfully completed and payout processed"
+          },
+          "400": {
+            "description": "Invalid booking ID or payment capture failure"
+          },
+          "404": {
+            "description": "Booking not found"
+          }
+        }
+      }
+    },
+    "/provider/bookings/status": {
+      "post": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Update Provider Booking Status",
+        "description": "Update status of a booking (pending, confirmed, completed, cancelled). Setting status to 'completed' captures held Stripe payment and transfers payout.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "bookingId",
+                  "status"
+                ],
+                "properties": {
+                  "bookingId": {
+                    "type": "integer",
+                    "example": 1
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "confirmed",
+                      "completed",
+                      "cancelled"
+                    ],
+                    "example": "completed"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Booking status updated successfully"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Update Provider Booking Status (PUT)",
+        "description": "Update status of a booking (pending, confirmed, completed, cancelled). Setting status to 'completed' captures held Stripe payment and transfers payout.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "bookingId",
+                  "status"
+                ],
+                "properties": {
+                  "bookingId": {
+                    "type": "integer",
+                    "example": 1
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "confirmed",
+                      "completed",
+                      "cancelled"
+                    ],
+                    "example": "completed"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Booking status updated successfully"
           }
         }
       }
