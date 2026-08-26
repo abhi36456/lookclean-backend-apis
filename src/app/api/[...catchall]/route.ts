@@ -6354,6 +6354,11 @@ export async function POST(
       let isAway: any = undefined;
       let isRushMode: any = undefined;
       let isTravelMode: any = undefined;
+      let travelCity: any = undefined;
+      let travelState: any = undefined;
+      let travelCountry: any = undefined;
+      let travelStartDate: any = undefined;
+      let travelEndDate: any = undefined;
       let isFeatured: any = undefined;
 
       const contentType = request.headers.get('content-type') || '';
@@ -6376,6 +6381,11 @@ export async function POST(
           isAway = formData.get('isAway') ?? formData.get('is_away');
           isRushMode = formData.get('isRushMode') ?? formData.get('is_rush_mode');
           isTravelMode = formData.get('isTravelMode') ?? formData.get('is_travel_mode');
+          travelCity = formData.get('travelCity') ?? formData.get('travel_city');
+          travelState = formData.get('travelState') ?? formData.get('travel_state');
+          travelCountry = formData.get('travelCountry') ?? formData.get('travel_country');
+          travelStartDate = formData.get('travelStartDate') ?? formData.get('travel_start_date');
+          travelEndDate = formData.get('travelEndDate') ?? formData.get('travel_end_date');
           isFeatured = formData.get('isFeatured') ?? formData.get('is_featured') ?? formData.get('featured');
 
           const uploadDir = nodePath.join(process.cwd(), 'public', 'uploads');
@@ -6423,6 +6433,11 @@ export async function POST(
         isAway = bodyObj.isAway ?? bodyObj.is_away;
         isRushMode = bodyObj.isRushMode ?? bodyObj.is_rush_mode;
         isTravelMode = bodyObj.isTravelMode ?? bodyObj.is_travel_mode;
+        travelCity = bodyObj.travelCity ?? bodyObj.travel_city;
+        travelState = bodyObj.travelState ?? bodyObj.travel_state;
+        travelCountry = bodyObj.travelCountry ?? bodyObj.travel_country;
+        travelStartDate = bodyObj.travelStartDate ?? bodyObj.travel_start_date;
+        travelEndDate = bodyObj.travelEndDate ?? bodyObj.travel_end_date;
         isFeatured = bodyObj.isFeatured ?? bodyObj.is_featured ?? bodyObj.featured;
       }
 
@@ -6434,6 +6449,12 @@ export async function POST(
       const postalCodeVal = postalCode ? String(postalCode) : null;
       const latVal = latitude !== undefined && latitude !== null && latitude !== '' ? parseFloat(latitude) : null;
       const lngVal = longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude) : null;
+
+      const travelCityVal = travelCity !== undefined ? (travelCity ? String(travelCity) : null) : undefined;
+      const travelStateVal = travelState !== undefined ? (travelState ? String(travelState) : null) : undefined;
+      const travelCountryVal = travelCountry !== undefined ? (travelCountry ? String(travelCountry) : null) : undefined;
+      const travelStartDateVal = travelStartDate !== undefined ? (travelStartDate ? new Date(travelStartDate) : null) : undefined;
+      const travelEndDateVal = travelEndDate !== undefined ? (travelEndDate ? new Date(travelEndDate) : null) : undefined;
 
       const parseBool = (val: any) => {
         if (val === undefined || val === null || val === '') return undefined;
@@ -6481,6 +6502,11 @@ export async function POST(
                 ...(isAwayVal !== undefined && { isAway: isAwayVal }),
                 ...(isRushModeVal !== undefined && { isRushMode: isRushModeVal }),
                 ...(isTravelModeVal !== undefined && { isTravelMode: isTravelModeVal }),
+                ...(travelCityVal !== undefined && { travelCity: travelCityVal }),
+                ...(travelStateVal !== undefined && { travelState: travelStateVal }),
+                ...(travelCountryVal !== undefined && { travelCountry: travelCountryVal }),
+                ...(travelStartDateVal !== undefined && { travelStartDate: travelStartDateVal }),
+                ...(travelEndDateVal !== undefined && { travelEndDate: travelEndDateVal }),
                 ...(isFeaturedVal !== undefined && { isFeatured: isFeaturedVal }),
               },
               create: {
@@ -6499,6 +6525,11 @@ export async function POST(
                 isAway: isAwayVal ?? false,
                 isRushMode: isRushModeVal ?? false,
                 isTravelMode: isTravelModeVal ?? false,
+                travelCity: travelCityVal ?? null,
+                travelState: travelStateVal ?? null,
+                travelCountry: travelCountryVal ?? null,
+                travelStartDate: travelStartDateVal ?? null,
+                travelEndDate: travelEndDateVal ?? null,
                 isFeatured: isFeaturedVal ?? true,
               },
             });
@@ -6535,6 +6566,11 @@ export async function POST(
             if (isAwayVal !== undefined) mockProfile.isAway = isAwayVal;
             if (isRushModeVal !== undefined) mockProfile.isRushMode = isRushModeVal;
             if (isTravelModeVal !== undefined) mockProfile.isTravelMode = isTravelModeVal;
+            if (travelCityVal !== undefined) mockProfile.travelCity = travelCityVal;
+            if (travelStateVal !== undefined) mockProfile.travelState = travelStateVal;
+            if (travelCountryVal !== undefined) mockProfile.travelCountry = travelCountryVal;
+            if (travelStartDateVal !== undefined) mockProfile.travelStartDate = travelStartDateVal;
+            if (travelEndDateVal !== undefined) mockProfile.travelEndDate = travelEndDateVal;
             if (isFeaturedVal !== undefined) mockProfile.isFeatured = isFeaturedVal;
             return mockProfile;
           }
@@ -6543,6 +6579,22 @@ export async function POST(
         const baseUrl = getBaseUrl(request);
 
         const resProfile = JSON.parse(JSON.stringify(profile));
+        if (baseUrl) {
+          if (resProfile.profileImageUrl && resProfile.profileImageUrl.startsWith('/')) {
+            resProfile.profileImageUrl = `${baseUrl}${resProfile.profileImageUrl}`;
+          }
+          if (resProfile.coverImageUrl && resProfile.coverImageUrl.startsWith('/')) {
+            resProfile.coverImageUrl = `${baseUrl}${resProfile.coverImageUrl}`;
+          }
+        }
+
+        const now = new Date();
+        resProfile.isTravelActive = Boolean(
+          resProfile.isTravelMode &&
+          resProfile.travelEndDate &&
+          new Date(resProfile.travelEndDate) >= now &&
+          (!resProfile.travelStartDate || new Date(resProfile.travelStartDate) <= now)
+        );
         if (baseUrl) {
           if (resProfile.profileImageUrl && resProfile.profileImageUrl.startsWith('/')) {
             resProfile.profileImageUrl = `${baseUrl}${resProfile.profileImageUrl}`;
