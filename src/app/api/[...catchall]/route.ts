@@ -5554,6 +5554,16 @@ export async function POST(
 
       let stripeAccountId = profile?.stripeAccountId || null;
 
+      if (stripeAccountId) {
+        try {
+          await stripe.accounts.retrieve(stripeAccountId);
+        } catch (checkErr: any) {
+          if (checkErr.message && (checkErr.message.includes('does not have access') || checkErr.message.includes('does not exist') || checkErr.code === 'resource_missing')) {
+            stripeAccountId = null;
+          }
+        }
+      }
+
       try {
         if (!stripeAccountId) {
           const account = await stripe.accounts.create({
@@ -5637,6 +5647,70 @@ export async function POST(
           url: loginLink.url
         });
       } catch (err: any) {
+        if (err.message && (err.message.includes('does not have access') || err.message.includes('does not exist') || err.code === 'resource_missing')) {
+          // Reset invalid account ID in DB and create fresh onboarding link under current key
+          await executeWithDbFallback(
+            async () => {
+              await prisma.providerProfile.update({
+                where: { userId: auth.userId },
+                data: {
+                  stripeAccountId: null,
+                  stripeDetailsSubmitted: false,
+                  stripePayoutsEnabled: false,
+                  stripeChargesEnabled: false
+                }
+              });
+            },
+            async () => {
+              if (profile) {
+                profile.stripeAccountId = null;
+                profile.stripeDetailsSubmitted = false;
+                profile.stripePayoutsEnabled = false;
+                profile.stripeChargesEnabled = false;
+              }
+            }
+          ).catch(() => {});
+
+          const newAccount = await stripe.accounts.create({
+            type: 'express',
+            country: 'US',
+            email: auth.email,
+            capabilities: {
+              card_payments: { requested: true },
+              transfers: { requested: true },
+            },
+            business_type: 'individual',
+          });
+
+          await executeWithDbFallback(
+            async () => {
+              await prisma.providerProfile.update({
+                where: { userId: auth.userId },
+                data: { stripeAccountId: newAccount.id }
+              });
+            },
+            async () => {
+              if (profile) profile.stripeAccountId = newAccount.id;
+            }
+          ).catch(() => {});
+
+          const baseUrl = getBaseUrl(request);
+          const accountLink = await stripe.accountLinks.create({
+            account: newAccount.id,
+            refresh_url: `${baseUrl}/provider/stripe-connect/refresh`,
+            return_url: `${baseUrl}/provider/stripe-connect/callback?status=success`,
+            type: 'account_onboarding',
+          });
+
+          return NextResponse.json({
+            success: true,
+            requiresOnboarding: true,
+            message: 'Stripe account link reset. Please complete onboarding for your new connected account.',
+            stripeAccountId: newAccount.id,
+            url: accountLink.url
+          });
+        }
+
         return NextResponse.json({ success: false, error: err.message || 'Failed to create Stripe login link' }, { status: 400 });
       }
     }
