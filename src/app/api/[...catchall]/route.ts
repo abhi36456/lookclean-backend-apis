@@ -1531,7 +1531,7 @@ export async function GET(
         }
       );
 
-      let platformFeeCut = 5;
+      let platformFeeCut = 10;
       await executeWithDbFallback(
         async () => {
           const setting = await prisma.systemSetting.findUnique({ where: { key: 'platform_fee_cut' } });
@@ -1546,15 +1546,28 @@ export async function GET(
         }
       ).catch(() => {});
 
-      const commissionRate = platformFeeCut;
+      let commissionRate = platformFeeCut;
+      const providerProfile = await executeWithDbFallback(
+        async () => await prisma.providerProfile.findUnique({ where: { userId: auth.userId } }),
+        async () => mockDb.profiles.find((p) => p.userId === auth.userId)
+      );
+      if (providerProfile && providerProfile.commissionRate !== undefined && providerProfile.commissionRate !== null) {
+        commissionRate = providerProfile.commissionRate;
+      }
+
       let totalGrossEarnings = 0;
       let totalCommissionDeducted = 0;
       let totalNetPayouts = 0;
 
       const payouts = bookings.map((b) => {
         const serviceAmount = b.serviceAmount || b.grandTotal || 0;
-        const commission = b.platformCommission ?? (serviceAmount * (commissionRate / 100));
-        const netPayout = b.providerPayoutAmount ?? (serviceAmount - commission);
+        const commission = (b.platformCommission !== null && b.platformCommission !== undefined && b.platformCommission > 0)
+          ? b.platformCommission
+          : Math.round(serviceAmount * (commissionRate / 100) * 100) / 100;
+
+        const netPayout = (b.providerPayoutAmount !== null && b.providerPayoutAmount !== undefined && b.providerPayoutAmount > 0)
+          ? b.providerPayoutAmount
+          : Math.round((serviceAmount - commission) * 100) / 100;
 
         totalGrossEarnings += serviceAmount;
         totalCommissionDeducted += commission;
@@ -1575,9 +1588,9 @@ export async function GET(
       return NextResponse.json({
         success: true,
         commissionRate,
-        totalGrossEarnings,
-        totalCommissionDeducted,
-        totalNetPayouts,
+        totalGrossEarnings: Math.round(totalGrossEarnings * 100) / 100,
+        totalCommissionDeducted: Math.round(totalCommissionDeducted * 100) / 100,
+        totalNetPayouts: Math.round(totalNetPayouts * 100) / 100,
         payouts
       });
     }
