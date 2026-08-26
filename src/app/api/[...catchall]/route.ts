@@ -69,6 +69,148 @@ async function sendNotificationToUser(userId: number, title: string, body: strin
   }
 }
 
+async function processBookingCompletion(bookingId: number) {
+  let booking: any = null;
+  await executeWithDbFallback(
+    async () => {
+      booking = await prisma.booking.findUnique({
+        where: { id: bookingId },
+        include: { client: true, provider: { include: { providerProfile: true } } }
+      });
+    },
+    async () => {
+      booking = mockDb.bookings.find((b: any) => b.id === bookingId);
+    }
+  );
+
+  if (!booking) {
+    throw new Error('Booking not found');
+  }
+
+  const stripe = getStripeInstance();
+  let capturedTxId = booking.transactionId;
+  let stripeTransferId = booking.stripeTransferId || null;
+  let payoutStatus = booking.payoutStatus || 'pending';
+
+  const serviceAmount = booking.serviceAmount || booking.grandTotal || 0;
+  let platformFeeCut = 5;
+  await executeWithDbFallback(
+    async () => {
+      const setting = await prisma.systemSetting.findUnique({ where: { key: 'platform_fee_cut' } });
+      if (setting && setting.value) platformFeeCut = parseFloat(setting.value);
+    },
+    async () => {
+      if (mockDb.platformFeeCut !== undefined) platformFeeCut = mockDb.platformFeeCut;
+    }
+  ).catch(() => {});
+
+  const commissionRate = (booking.provider?.providerProfile?.commissionRate && booking.provider.providerProfile.commissionRate !== 10.0)
+    ? booking.provider.providerProfile.commissionRate
+    : platformFeeCut;
+  const amountCents = Math.round(serviceAmount * 100);
+  const commissionCents = Math.round(amountCents * (commissionRate / 100));
+  const providerPayoutCents = amountCents - commissionCents;
+  const platformCommission = commissionCents / 100;
+  const providerPayoutAmount = providerPayoutCents / 100;
+  const providerStripeAccountId = booking.provider?.providerProfile?.stripeAccountId;
+
+  // 1. Capture held Stripe payment intent if currently in hold/authorized state
+  if (stripe && booking.transactionId && booking.transactionId.startsWith('pi_')) {
+    try {
+      const intent = await stripe.paymentIntents.retrieve(booking.transactionId);
+      if (intent.status === 'requires_capture' || intent.status === 'requires_action') {
+        const capturedIntent = await stripe.paymentIntents.capture(booking.transactionId);
+        capturedTxId = capturedIntent.id;
+      }
+    } catch (captureErr: any) {
+      console.warn('[Stripe Capture Warning] Intent capture skipped or already captured:', captureErr.message);
+    }
+
+    // 2. Transfer payout to provider's Stripe Connect account if available
+    if (providerStripeAccountId) {
+      try {
+        const transfer = await stripe.transfers.create({
+          amount: providerPayoutCents,
+          currency: 'usd',
+          destination: providerStripeAccountId,
+          description: `Payout for Booking #${booking.id}`,
+          transfer_group: `booking_${booking.id}`
+        });
+        stripeTransferId = transfer.id;
+        payoutStatus = 'transferred';
+      } catch (transferErr: any) {
+        console.error('[Stripe Transfer Error]', transferErr);
+        payoutStatus = 'failed';
+      }
+    }
+  }
+
+  // 3. Update booking status to completed and save commission & payout details
+  let updatedBooking: any = null;
+  await executeWithDbFallback(
+    async () => {
+      updatedBooking = await prisma.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: 'completed',
+          platformCommission: platformCommission,
+          providerPayoutAmount: providerPayoutAmount,
+          stripeTransferId: stripeTransferId,
+          payoutStatus: payoutStatus,
+          transactionId: capturedTxId
+        },
+        include: { client: true, provider: true }
+      });
+    },
+    async () => {
+      const b = mockDb.bookings.find((item: any) => item.id === bookingId);
+      if (b) {
+        b.status = 'completed';
+        b.platformCommission = platformCommission;
+        b.providerPayoutAmount = providerPayoutAmount;
+        b.stripeTransferId = stripeTransferId;
+        b.payoutStatus = payoutStatus;
+        if (capturedTxId) b.transactionId = capturedTxId;
+        updatedBooking = b;
+      }
+    }
+  );
+
+  // 4. Send FCM completion notifications to Client and Provider
+  if (updatedBooking) {
+    if (updatedBooking.clientId) {
+      sendNotificationToUser(
+        updatedBooking.clientId,
+        'Booking Completed! 🎉',
+        'Your appointment is complete. Tap here to share your review and rate your provider!',
+        {
+          bookingId: String(bookingId),
+          clientId: String(updatedBooking.clientId),
+          providerId: String(updatedBooking.providerId || ''),
+          type: 'BOOKING_COMPLETED'
+        }
+      ).catch(err => console.error('FCM Client Notification Error:', err));
+    }
+
+    if (updatedBooking.providerId) {
+      sendNotificationToUser(
+        updatedBooking.providerId,
+        'Booking Completed & Payout Processed! 💰',
+        `Booking #${bookingId} is completed. Payout of $${providerPayoutAmount.toFixed(2)} credited (Platform Commission: $${platformCommission.toFixed(2)}).`,
+        {
+          bookingId: String(bookingId),
+          providerId: String(updatedBooking.providerId),
+          payoutAmount: String(providerPayoutAmount),
+          commissionAmount: String(platformCommission),
+          type: 'PROVIDER_PAYOUT'
+        }
+      ).catch(err => console.error('FCM Provider Notification Error:', err));
+    }
+  }
+
+  return updatedBooking;
+}
+
 function hashPassword(password: string) {
   return crypto.createHash('sha256').update(password).digest('hex');
 }
@@ -499,10 +641,30 @@ function sanitizeUser(user: unknown, request?: any) {
     const travelVal = plainUser.providerProfile.isTravelMode ?? plainUser.providerProfile.is_travel_mode ?? plainUser.isTravelMode ?? plainUser.is_travel_mode;
     const isTravelBool = travelVal !== undefined && travelVal !== null ? (travelVal === true || travelVal === 'true' || travelVal === 1 || travelVal === '1') : false;
 
+    const travelCity = plainUser.providerProfile.travelCity ?? plainUser.providerProfile.travel_city ?? null;
+    const travelState = plainUser.providerProfile.travelState ?? plainUser.providerProfile.travel_state ?? null;
+    const travelCountry = plainUser.providerProfile.travelCountry ?? plainUser.providerProfile.travel_country ?? null;
+    const travelStartDate = plainUser.providerProfile.travelStartDate ?? plainUser.providerProfile.travel_start_date ?? null;
+    const travelEndDate = plainUser.providerProfile.travelEndDate ?? plainUser.providerProfile.travel_end_date ?? null;
+
+    const now = new Date();
+    const isTravelActive = Boolean(
+      isTravelBool &&
+      travelEndDate &&
+      new Date(travelEndDate) >= now &&
+      (!travelStartDate || new Date(travelStartDate) <= now)
+    );
+
     plainUser.providerProfile.isAvailable = isAvailBool;
     plainUser.providerProfile.isAway = isAwayBool;
     plainUser.providerProfile.isRushMode = isRushBool;
     plainUser.providerProfile.isTravelMode = isTravelBool;
+    plainUser.providerProfile.travelCity = travelCity;
+    plainUser.providerProfile.travelState = travelState;
+    plainUser.providerProfile.travelCountry = travelCountry;
+    plainUser.providerProfile.travelStartDate = travelStartDate;
+    plainUser.providerProfile.travelEndDate = travelEndDate;
+    plainUser.providerProfile.isTravelActive = isTravelActive;
 
     plainUser.isAvailable = isAvailBool;
     plainUser.isAway = isAwayBool;
@@ -709,6 +871,16 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
     is_rush_mode,
     isTravelMode,
     is_travel_mode,
+    travelCity,
+    travel_city,
+    travelState,
+    travel_state,
+    travelCountry,
+    travel_country,
+    travelStartDate,
+    travel_start_date,
+    travelEndDate,
+    travel_end_date,
     isFeatured,
     is_featured,
     featured
@@ -722,6 +894,18 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
   const postalCodeVal = (postalCode || postal_code || zipCode) ? String(postalCode || postal_code || zipCode) : null;
   const latVal = (latitude ?? lat) !== undefined && (latitude ?? lat) !== null && (latitude ?? lat) !== '' ? parseFloat(latitude ?? lat) : null;
   const lngVal = (longitude ?? lng ?? long) !== undefined && (longitude ?? lng ?? long) !== null && (longitude ?? lng ?? long) !== '' ? parseFloat(longitude ?? lng ?? long) : null;
+
+  const travelCityInput = travelCity ?? travel_city ?? profObj.travelCity ?? profObj.travel_city ?? bodyPayload?.travelCity ?? bodyPayload?.travel_city;
+  const travelStateInput = travelState ?? travel_state ?? profObj.travelState ?? profObj.travel_state ?? bodyPayload?.travelState ?? bodyPayload?.travel_state;
+  const travelCountryInput = travelCountry ?? travel_country ?? profObj.travelCountry ?? profObj.travel_country ?? bodyPayload?.travelCountry ?? bodyPayload?.travel_country;
+  const travelStartDateInput = travelStartDate ?? travel_start_date ?? profObj.travelStartDate ?? profObj.travel_start_date ?? bodyPayload?.travelStartDate ?? bodyPayload?.travel_start_date;
+  const travelEndDateInput = travelEndDate ?? travel_end_date ?? profObj.travelEndDate ?? profObj.travel_end_date ?? bodyPayload?.travelEndDate ?? bodyPayload?.travel_end_date;
+
+  const travelCityVal = travelCityInput !== undefined ? (travelCityInput ? String(travelCityInput) : null) : undefined;
+  const travelStateVal = travelStateInput !== undefined ? (travelStateInput ? String(travelStateInput) : null) : undefined;
+  const travelCountryVal = travelCountryInput !== undefined ? (travelCountryInput ? String(travelCountryInput) : null) : undefined;
+  const travelStartDateVal = travelStartDateInput !== undefined ? (travelStartDateInput ? new Date(travelStartDateInput) : null) : undefined;
+  const travelEndDateVal = travelEndDateInput !== undefined ? (travelEndDateInput ? new Date(travelEndDateInput) : null) : undefined;
 
   const availInput = isAvailable ?? is_available ?? profObj.isAvailable ?? profObj.is_available ?? bodyPayload?.isAvailable ?? bodyPayload?.is_available;
   const awayInput = isAway ?? is_away ?? profObj.isAway ?? profObj.is_away ?? bodyPayload?.isAway ?? bodyPayload?.is_away;
@@ -766,6 +950,11 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
             ...(isAwayVal !== undefined && { isAway: isAwayVal }),
             ...(isRushModeVal !== undefined && { isRushMode: isRushModeVal }),
             ...(isTravelModeVal !== undefined && { isTravelMode: isTravelModeVal }),
+            ...(travelCityVal !== undefined && { travelCity: travelCityVal }),
+            ...(travelStateVal !== undefined && { travelState: travelStateVal }),
+            ...(travelCountryVal !== undefined && { travelCountry: travelCountryVal }),
+            ...(travelStartDateVal !== undefined && { travelStartDate: travelStartDateVal }),
+            ...(travelEndDateVal !== undefined && { travelEndDate: travelEndDateVal }),
             ...(isFeaturedVal !== undefined && { isFeatured: isFeaturedVal }),
           },
           create: {
@@ -787,6 +976,11 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
             isAway: isAwayVal ?? false,
             isRushMode: isRushModeVal ?? false,
             isTravelMode: isTravelModeVal ?? false,
+            travelCity: travelCityVal ?? null,
+            travelState: travelStateVal ?? null,
+            travelCountry: travelCountryVal ?? null,
+            travelStartDate: travelStartDateVal ?? null,
+            travelEndDate: travelEndDateVal ?? null,
             isFeatured: isFeaturedVal ?? true,
           }
         });
@@ -877,6 +1071,11 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
         if (isAwayVal !== undefined) profile.isAway = isAwayVal;
         if (isRushModeVal !== undefined) profile.isRushMode = isRushModeVal;
         if (isTravelModeVal !== undefined) profile.isTravelMode = isTravelModeVal;
+        if (travelCityVal !== undefined) profile.travelCity = travelCityVal;
+        if (travelStateVal !== undefined) profile.travelState = travelStateVal;
+        if (travelCountryVal !== undefined) profile.travelCountry = travelCountryVal;
+        if (travelStartDateVal !== undefined) profile.travelStartDate = travelStartDateVal;
+        if (travelEndDateVal !== undefined) profile.travelEndDate = travelEndDateVal;
         if (isFeaturedVal !== undefined) profile.isFeatured = isFeaturedVal;
 
         if (Array.isArray(services)) {
@@ -1866,6 +2065,58 @@ export async function GET(
         }
 
         let filteredProviders = sanitizedProviders;
+
+        // Travel Mode Location Filtering:
+        // When provider is in active travel mode (isTravelMode === true and current date <= travelEndDate):
+        // Return provider for travel destination city/country and hide from home profile city/country until travelEndDate ends.
+        const cityParam = (searchParams.get('city') || searchParams.get('clientCity') || '').trim().toLowerCase();
+        const countryParam = (searchParams.get('country') || searchParams.get('clientCountry') || '').trim().toLowerCase();
+        const locationParam = (searchParams.get('location') || searchParams.get('address') || '').trim().toLowerCase();
+
+        filteredProviders = filteredProviders.filter((u: any) => {
+          if (!u || !u.providerProfile) return true;
+          const prof = u.providerProfile;
+          const now = new Date();
+
+          const isTravelActive = Boolean(
+            prof.isTravelMode &&
+            prof.travelEndDate &&
+            new Date(prof.travelEndDate) >= now &&
+            (!prof.travelStartDate || new Date(prof.travelStartDate) <= now)
+          );
+
+          const homeCity = (prof.city || '').toLowerCase();
+          const homeCountry = (prof.country || '').toLowerCase();
+          const travelCity = (prof.travelCity || '').toLowerCase();
+          const travelCountry = (prof.travelCountry || '').toLowerCase();
+
+          if (isTravelActive) {
+            prof.isTravelActive = true;
+            prof.activeLocation = [prof.travelCity, prof.travelState, prof.travelCountry].filter(Boolean).join(', ');
+            prof.displayCity = prof.travelCity || prof.city;
+            prof.displayCountry = prof.travelCountry || prof.country;
+
+            if (cityParam || countryParam || locationParam) {
+              const matchTravel = (cityParam && travelCity.includes(cityParam)) ||
+                                  (countryParam && travelCountry.includes(countryParam)) ||
+                                  (locationParam && (travelCity.includes(locationParam) || travelCountry.includes(locationParam)));
+
+              const matchHome = (cityParam && homeCity.includes(cityParam)) ||
+                                (countryParam && homeCountry.includes(countryParam)) ||
+                                (locationParam && (homeCity.includes(locationParam) || homeCountry.includes(locationParam)));
+
+              if (matchHome && !matchTravel) return false;
+              if (matchTravel) return true;
+            }
+          } else {
+            prof.isTravelActive = false;
+            prof.activeLocation = prof.location || [prof.city, prof.state, prof.country].filter(Boolean).join(', ');
+            prof.displayCity = prof.city;
+            prof.displayCountry = prof.country;
+          }
+
+          return true;
+        });
 
         // Filter by providerType (salon | freelancer)
         if (providerTypeFilter && providerTypeFilter !== 'all') {
@@ -7978,6 +8229,51 @@ export async function POST(
       }
     }
 
+    // POST Booking Status Update & Completion (/api/providers/bookings/status, /api/provider/bookings/complete, /api/bookings/complete, etc.)
+    if (path === 'providers/bookings/status' || path === 'provider/bookings/status' || path === 'bookings/status' || path === 'client/bookings/status' || path === 'clients/bookings/status' || path.endsWith('/complete')) {
+      let bookingId = body?.bookingId;
+      if (!bookingId) {
+        const parts = path.split('/');
+        const completeIdx = parts.indexOf('complete');
+        if (completeIdx > 0 && !isNaN(Number(parts[completeIdx - 1]))) {
+          bookingId = Number(parts[completeIdx - 1]);
+        }
+      }
+
+      const status = body?.status || (path.endsWith('/complete') ? 'completed' : null);
+      if (!bookingId || !status) {
+        return NextResponse.json({ message: 'bookingId and status are required' }, { status: 400 });
+      }
+
+      const numBookingId = Number(bookingId);
+      try {
+        let updatedBooking: any = null;
+        if (status === 'completed') {
+          updatedBooking = await processBookingCompletion(numBookingId);
+        } else {
+          await executeWithDbFallback(
+            async () => {
+              updatedBooking = await prisma.booking.update({
+                where: { id: numBookingId },
+                data: { status },
+                include: { client: true, provider: true }
+              });
+            },
+            async () => {
+              const b = mockDb.bookings.find((item: any) => item.id === numBookingId);
+              if (!b) throw new Error('Booking not found');
+              b.status = status;
+              updatedBooking = b;
+            }
+          );
+        }
+
+        return NextResponse.json({ success: true, message: `Booking status updated to ${status}`, booking: updatedBooking });
+      } catch (err: any) {
+        return NextResponse.json({ message: err.message || 'Failed to update booking status' }, { status: 400 });
+      }
+    }
+
     // POST Provider Request (/api/provider/requests or /api/provider-requests)
     if (path === 'provider/requests' || path === 'providers/requests' || path === 'provider-requests') {
       const auth = await getAuthenticatedUser(request);
@@ -8190,15 +8486,24 @@ export async function PUT(
     }
 
     // PUT Booking Status Update (/api/providers/bookings/status or /api/bookings/status)
-    if (path === 'providers/bookings/status' || path === 'provider/bookings/status' || path === 'bookings/status' || path === 'client/bookings/status' || path === 'clients/bookings/status') {
+    if (path === 'providers/bookings/status' || path === 'provider/bookings/status' || path === 'bookings/status' || path === 'client/bookings/status' || path === 'clients/bookings/status' || path.endsWith('/complete')) {
       let body: any = {};
       try {
         body = await request.json();
       } catch {
-        return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
+        // empty body ok if bookingId is in path or query
       }
 
-      const { bookingId, status } = body;
+      let bookingId = body?.bookingId;
+      if (!bookingId) {
+        const parts = path.split('/');
+        const completeIdx = parts.indexOf('complete');
+        if (completeIdx > 0 && !isNaN(Number(parts[completeIdx - 1]))) {
+          bookingId = Number(parts[completeIdx - 1]);
+        }
+      }
+
+      const status = body?.status || (path.endsWith('/complete') ? 'completed' : null);
       if (!bookingId || !status) {
         return NextResponse.json({ message: 'bookingId and status are required' }, { status: 400 });
       }
@@ -8206,38 +8511,24 @@ export async function PUT(
       const numBookingId = Number(bookingId);
       try {
         let updatedBooking: any = null;
-        await executeWithDbFallback(
-          async () => {
-            updatedBooking = await prisma.booking.update({
-              where: { id: numBookingId },
-              data: { status },
-              include: { client: true, provider: true }
-            });
-          },
-          async () => {
-            const b = mockDb.bookings.find((item: any) => item.id === numBookingId);
-            if (!b) throw new Error('Booking not found');
-            b.status = status;
-            updatedBooking = b;
-          }
-        );
-
-        // Client Notification B: Trigger when booking gets completed to share review & rating
-        if (status === 'completed' && updatedBooking) {
-          const clientId = updatedBooking.clientId;
-          if (clientId) {
-            sendNotificationToUser(
-              clientId,
-              'Booking Completed! 🎉',
-              'Your appointment is complete. Tap here to share your review and rate your provider!',
-              {
-                bookingId: String(numBookingId),
-                clientId: String(updatedBooking.clientId || clientId),
-                providerId: String(updatedBooking.providerId || ''),
-                type: 'BOOKING_COMPLETED'
-              }
-            ).catch(err => console.error('FCM Client Completed Notification Error:', err));
-          }
+        if (status === 'completed') {
+          updatedBooking = await processBookingCompletion(numBookingId);
+        } else {
+          await executeWithDbFallback(
+            async () => {
+              updatedBooking = await prisma.booking.update({
+                where: { id: numBookingId },
+                data: { status },
+                include: { client: true, provider: true }
+              });
+            },
+            async () => {
+              const b = mockDb.bookings.find((item: any) => item.id === numBookingId);
+              if (!b) throw new Error('Booking not found');
+              b.status = status;
+              updatedBooking = b;
+            }
+          );
         }
 
         return NextResponse.json({ success: true, message: `Booking status updated to ${status}`, booking: updatedBooking });

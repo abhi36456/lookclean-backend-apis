@@ -2478,6 +2478,28 @@
                     "example": false,
                     "default": false
                   },
+                  "travelCity": {
+                    "type": "string",
+                    "example": "Los Angeles"
+                  },
+                  "travelState": {
+                    "type": "string",
+                    "example": "CA"
+                  },
+                  "travelCountry": {
+                    "type": "string",
+                    "example": "USA"
+                  },
+                  "travelStartDate": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2026-09-01T00:00:00Z"
+                  },
+                  "travelEndDate": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2026-09-15T23:59:59Z"
+                  },
                   "isFeatured": {
                     "type": "boolean",
                     "example": true,
@@ -2562,6 +2584,28 @@
                     "type": "boolean",
                     "example": false,
                     "default": false
+                  },
+                  "travelCity": {
+                    "type": "string",
+                    "example": "Los Angeles"
+                  },
+                  "travelState": {
+                    "type": "string",
+                    "example": "CA"
+                  },
+                  "travelCountry": {
+                    "type": "string",
+                    "example": "USA"
+                  },
+                  "travelStartDate": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2026-09-01T00:00:00Z"
+                  },
+                  "travelEndDate": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2026-09-15T23:59:59Z"
                   },
                   "isFeatured": {
                     "type": "boolean",
@@ -3377,6 +3421,32 @@
                         "type": "boolean",
                         "example": false,
                         "default": false
+                      },
+                      "travelCity": {
+                        "type": "string",
+                        "example": "Los Angeles"
+                      },
+                      "travelState": {
+                        "type": "string",
+                        "example": "CA"
+                      },
+                      "travelCountry": {
+                        "type": "string",
+                        "example": "USA"
+                      },
+                      "travelStartDate": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-09-01T00:00:00Z"
+                      },
+                      "travelEndDate": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-09-15T23:59:59Z"
+                      },
+                      "isTravelActive": {
+                        "type": "boolean",
+                        "example": true
                       },
                       "isFeatured": {
                         "type": "boolean",

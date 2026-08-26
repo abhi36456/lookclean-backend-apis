@@ -79,6 +79,11 @@ model ProviderProfile {
   isAway          Boolean           @default(false)
   isRushMode      Boolean           @default(false)
   isTravelMode    Boolean           @default(false)
+  travelCity      String?
+  travelState     String?
+  travelCountry   String?
+  travelStartDate DateTime?
+  travelEndDate   DateTime?
   stripeAccountId String?           @db.VarChar(255)
   stripeDetailsSubmitted Boolean    @default(false)
   stripePayoutsEnabled   Boolean    @default(false)
