@@ -69,6 +69,34 @@ async function sendNotificationToUser(userId: number, title: string, body: strin
   }
 }
 
+async function transformServicesListWithRealNames(services: any[]) {
+  if (!Array.isArray(services) || services.length === 0) return services;
+  try {
+    const serviceSettings = await prisma.serviceSetting.findMany({
+      select: { id: true, title: true }
+    }).catch(() => []);
+    const settingsMap = new Map(serviceSettings.map(st => [st.id, st.title]));
+
+    return services.map((bs: any) => {
+      if (!bs) return bs;
+      const svcObj = bs.service || bs;
+      if (svcObj && typeof svcObj === 'object') {
+        const currentName = svcObj.name || '';
+        if (!currentName || currentName.startsWith('Service #')) {
+          const targetId = svcObj.serviceId || svcObj.id || bs.serviceId;
+          const realTitle = settingsMap.get(targetId);
+          const fallbackName = realTitle || (svcObj.category && svcObj.category !== 'General' ? `${svcObj.category} Service` : 'Beauty & Wellness Service');
+          svcObj.name = fallbackName;
+          if (bs.service) bs.service.name = fallbackName;
+        }
+      }
+      return bs;
+    });
+  } catch (err) {
+    return services;
+  }
+}
+
 async function processBookingCompletion(bookingId: number) {
   let booking: any = null;
   await executeWithDbFallback(
@@ -991,7 +1019,7 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
           if (services.length > 0) {
             const servicesToInsert = services.map((s: any) => ({
               profileId: profile.id,
-              name: s.name,
+              name: s.name || s.serviceName || s.title || s.service_name || 'Beauty Service',
               price: parseInt(s.price) || 0,
               rushPrice: parseInt(s.rushPrice ?? s.rush_price) || 0,
               category: s.category || 'General'
@@ -3196,6 +3224,9 @@ export async function GET(
           });
           return Promise.all(dbBookings.map(async (b: any) => {
             const processed = await processBookingPaymentAndStatus(b);
+            if (processed && Array.isArray(processed.services)) {
+              processed.services = await transformServicesListWithRealNames(processed.services);
+            }
             const clientUser = processed.client;
             const profile = clientUser?.clientProfile;
             let profileImageUrl = profile?.profileImageUrl || null;
@@ -3842,6 +3873,7 @@ export async function POST(
         const paymentIntent = await stripe.paymentIntents.create({
           amount: amountInCents,
           currency: String(currency).toLowerCase(),
+          capture_method: 'manual',
           description: description || `LookClean Salon Charge for User #${authUser.userId}`,
           metadata: {
             userId: String(authUser.userId),
@@ -5777,6 +5809,7 @@ export async function POST(
         const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
           amount: amountCents,
           currency: 'usd',
+          capture_method: 'manual',
           automatic_payment_methods: { enabled: true },
           metadata: {
             bookingId: String(booking.id),
@@ -6910,11 +6943,16 @@ export async function POST(
               include: { mainType: true }
             });
 
-            const dataToInsert = processedServices.map(s => {
+            const dataToInsert = processedServices.map((s, idx) => {
               const setting = serviceSettings.find(set => set.id === s.serviceId);
+              const explicitName = s.name || s.title || s.serviceName || s.service_name;
+              const nameToUse = (explicitName && !explicitName.startsWith('Service #'))
+                ? explicitName
+                : (setting ? setting.title : (s.serviceId ? `Service ${s.serviceId}` : `Service ${idx + 1}`));
+
               return {
                 profileId: profile.id,
-                name: setting ? setting.title : `Service #${s.serviceId}`,
+                name: nameToUse,
                 price: s.price,
                 rushPrice: s.rushPrice,
                 category: setting && setting.mainType ? setting.mainType.title : 'General',
@@ -6959,10 +6997,15 @@ export async function POST(
               if (baseUrl && img && img.startsWith('/')) {
                 img = `${baseUrl}${img}`;
               }
+              const explicitName = s.name || s.title || s.serviceName || s.service_name;
+              const nameToUse = (explicitName && !explicitName.startsWith('Service #'))
+                ? explicitName
+                : (s.serviceId ? `Service ${s.serviceId}` : `Service ${index + 1}`);
+
               const mockSvc = {
                 id: newId,
                 profileId: mockProfile.id,
-                name: `Service #${s.serviceId || index + 1}`,
+                name: nameToUse,
                 price: s.price,
                 rushPrice: s.rushPrice || 0,
                 category: 'General',
@@ -7822,6 +7865,23 @@ export async function POST(
         }
 
         const grandTotal = Math.max(0, serviceAmount + calculatedTip - discount);
+
+        // Verify Stripe PaymentIntent status on server if transactionId is provided (Step 2: Don't trust client payload alone)
+        if (finalTransactionId && String(finalTransactionId).startsWith('pi_')) {
+          const stripe = getStripeInstance();
+          if (stripe) {
+            try {
+              const intent = await stripe.paymentIntents.retrieve(String(finalTransactionId));
+              if (!['requires_capture', 'succeeded', 'requires_action', 'processing'].includes(intent.status)) {
+                return NextResponse.json({
+                  message: `Stripe PaymentIntent is not authorized or valid (Current status: ${intent.status})`
+                }, { status: 400 });
+              }
+            } catch (stripeErr: any) {
+              console.warn('[Stripe Verification Warning] Could not verify PaymentIntent from Stripe:', stripeErr.message);
+            }
+          }
+        }
 
         const booking = await executeWithDbFallback(
           async () => {

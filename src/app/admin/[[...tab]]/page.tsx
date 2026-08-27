@@ -6,8 +6,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldAlert, LogOut, Search, Filter, ShieldCheck, Phone, Check, Mail,
   X, Calendar, Star, MapPin, Award, Clock, Users, Building, Activity, FileText, ChevronRight, Settings, Lock, Server, Globe, Tag, Scissors, Sparkles, Database,
-  HelpCircle, AlertCircle, Smartphone, Plus, Trash2, Edit3, Save, Eye, CheckCircle, XCircle, ExternalLink, Percent, DollarSign, Copy, CreditCard, Upload, Image as ImageIcon, FileCode
+  HelpCircle, AlertCircle, Smartphone, Plus, Trash2, Edit3, Save, Eye, CheckCircle, XCircle, ExternalLink, Percent, DollarSign, Copy, CreditCard, Upload, Image as ImageIcon, FileCode, Download
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
 import Card from '@/components/Card';
@@ -253,6 +254,75 @@ export default function AdminPage() {
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [bookingSearchQuery, setBookingSearchQuery] = useState('');
   const [bookingStatusFilter, setBookingStatusFilter] = useState<'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled'>('all');
+
+  // Export Users to Excel
+  const exportUsersToExcel = () => {
+    const dataToExport = filteredUsers.map((u) => ({
+      'User ID': u.id,
+      'Name': u.name || u.email.split('@')[0],
+      'Email': u.email,
+      'Role': u.role ? u.role.toUpperCase() : 'NOT SELECTED',
+      'Salon / Profile Name': u.role === 'provider' ? (u.providerProfile?.salonName || u.providerProfile?.name || '—') : '—',
+      'Phone Number': u.phoneNumber || '—',
+      'City': (u as any).clientProfile?.city || (u as any).providerProfile?.city || (u as any).city || '—',
+      'Country': (u as any).clientProfile?.country || (u as any).providerProfile?.country || (u as any).country || '—',
+      'Phone Verified': u.isPhoneVerified ? 'Yes' : 'No',
+      'Onboarding Completed': u.onboardingCompleted ? 'Yes' : 'No',
+      'Featured Provider': u.role === 'provider' ? (u.providerProfile?.isFeatured || u.providerProfile?.featured || u.isFeatured ? 'Yes' : 'No') : 'N/A',
+      'Registered Date': u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
+    XLSX.writeFile(workbook, `LookClean_Users_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  // Export Bookings to Excel
+  const exportBookingsToExcel = () => {
+    const filtered = bookingsList.filter((b) => {
+      const search = bookingSearchQuery.toLowerCase();
+      const matchesSearch =
+        !search ||
+        String(b.id).includes(search) ||
+        b.client?.name?.toLowerCase().includes(search) ||
+        b.client?.email?.toLowerCase().includes(search) ||
+        b.provider?.name?.toLowerCase().includes(search) ||
+        b.provider?.email?.toLowerCase().includes(search) ||
+        b.provider?.providerProfile?.salonName?.toLowerCase().includes(search);
+      const matchesStatus = bookingStatusFilter === 'all' || b.status?.toLowerCase() === bookingStatusFilter.toLowerCase();
+      return matchesSearch && matchesStatus;
+    });
+
+    const dataToExport = filtered.map((b) => {
+      const serviceNames = Array.isArray(b.services)
+        ? b.services.map((s: any) => s.name || s.title || (s.service ? (s.service.name || s.service.title) : 'Service')).join(', ')
+        : 'Services';
+
+      return {
+        'Booking ID': `#${b.id}`,
+        'Booking Date': b.date ? new Date(b.date).toLocaleDateString() : '—',
+        'Time Slot': b.timeSlot || '—',
+        'Client Name': b.client?.name || `Client #${b.clientId}`,
+        'Client Email': b.client?.email || '—',
+        'Provider Name': b.provider?.name || b.provider?.providerProfile?.salonName || `Provider #${b.providerId}`,
+        'Provider Email': b.provider?.email || '—',
+        'Services': serviceNames,
+        'Status': (b.status || 'pending').toUpperCase(),
+        'Base Service Amount ($)': b.serviceAmount !== undefined ? Number(b.serviceAmount).toFixed(2) : '0.00',
+        'Tip Amount ($)': b.tipAmount !== undefined ? Number(b.tipAmount).toFixed(2) : '0.00',
+        'Promo Discount ($)': b.promoDiscount !== undefined ? Number(b.promoDiscount).toFixed(2) : '0.00',
+        'Grand Total ($)': b.grandTotal !== undefined ? Number(b.grandTotal).toFixed(2) : '0.00',
+        'Transaction ID': b.transactionId || '—',
+        'Created Date': b.createdAt ? new Date(b.createdAt).toLocaleDateString() : '—'
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Bookings');
+    XLSX.writeFile(workbook, `LookClean_Bookings_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
 
   // Promo Codes and Reports search/filter states
   const [voucherSearch, setVoucherSearch] = useState('');
@@ -2261,6 +2331,15 @@ export default function AdminPage() {
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
                   </select>
+
+                  <Button
+                    onClick={exportBookingsToExcel}
+                    variant="secondary"
+                    leftIcon={<Download className="w-4 h-4 text-primary" />}
+                    className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold whitespace-nowrap bg-gray-900 hover:bg-gray-800 border border-gray-800 text-white rounded-xl transition-all cursor-pointer shrink-0 flex items-center justify-center gap-2"
+                  >
+                    EXPORT EXCEL
+                  </Button>
                 </div>
               </div>
 
@@ -4116,6 +4195,15 @@ export default function AdminPage() {
                     <option value="client">Clients Only</option>
                     <option value="provider">Providers Only</option>
                   </select>
+
+                  <Button
+                    onClick={exportUsersToExcel}
+                    variant="secondary"
+                    leftIcon={<Download className="w-4 h-4 text-primary" />}
+                    className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold whitespace-nowrap bg-gray-900 hover:bg-gray-800 border border-gray-800 text-white rounded-xl transition-all cursor-pointer shrink-0 flex items-center justify-center gap-2"
+                  >
+                    EXPORT EXCEL
+                  </Button>
                 </div>
               </div>
 
