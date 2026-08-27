@@ -7,7 +7,9 @@
     "build": "node --max-old-space-size=4096 node_modules/next/dist/bin/next build",
     "start": "next start",
     "lint": "eslint",
-    "cron:completed-bookings": "node scripts/cron-completed-bookings.js"
+    "cron:completed-bookings": "node scripts/cron-completed-bookings.js",
+    "fix-service-names": "node scripts/fix-service-names.js",
+    "fix:services": "node scripts/fix-service-names.js"
   },
   "dependencies": {
     "@nestjs/swagger": "^11.4.4",
