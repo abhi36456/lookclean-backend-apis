@@ -7898,16 +7898,19 @@ export async function POST(
           async () => mockDb.services.filter((s) => serviceIds.map(Number).includes(s.id))
         );
 
-        let providerRushMode = false;
+        let pProfile: any = null;
         if (targetProviderId) {
-          const pProfile = await executeWithDbFallback(
+          pProfile = await executeWithDbFallback(
             async () => await prisma.providerProfile.findFirst({
-              where: { OR: [{ userId: targetProviderId }, { id: targetProviderId }] }
+              where: { OR: [{ userId: targetProviderId }, { id: targetProviderId }] },
+              include: { user: true }
             }),
-            async () => mockDb.profiles.find((p) => p.userId === targetProviderId || p.id === targetProviderId)
+            async () => mockDb.profiles.find((p: any) => p.userId === targetProviderId || p.id === targetProviderId)
           );
+        }
+
         const pTimezone = pProfile?.user?.timezone || pProfile?.timezone || 'UTC';
-        const isRushModeActive = checkExpressPriceApplies(pProfile, (body as any)?.date, pTimezone);
+        let isRushModeActive = checkExpressPriceApplies(pProfile, (body as any)?.date, pTimezone);
 
         const baseServiceAmount = servicesList.reduce((sum, s) => {
           let serviceRushOn = isRushModeActive;
