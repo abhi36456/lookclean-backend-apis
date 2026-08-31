@@ -1669,6 +1669,7 @@ export async function GET(
       try {
         if (paymentIntentId) {
           const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+          const isAuthorizedOrPaid = paymentIntent.status === 'succeeded' || paymentIntent.status === 'requires_capture';
           return NextResponse.json({
             success: true,
             type: 'payment_intent',
@@ -1676,7 +1677,8 @@ export async function GET(
             status: paymentIntent.status,
             amount: paymentIntent.amount / 100,
             currency: paymentIntent.currency,
-            paid: paymentIntent.status === 'succeeded'
+            paid: isAuthorizedOrPaid,
+            isAuthorized: isAuthorizedOrPaid
           });
         } else if (sessionId) {
           const session = await stripe.checkout.sessions.retrieve(sessionId);
