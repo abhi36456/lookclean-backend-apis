@@ -270,6 +270,190 @@ function formatTime(minutesTotal: number) {
   return `${hStr}:${mStr} ${modifier}`;
 }
 
+function getFormattedDateInTimezone(dateInput: string | Date, timezone?: string | null): string {
+  if (!dateInput) return '';
+  const tz = (timezone && typeof timezone === 'string' && timezone.trim()) ? timezone.trim() : 'UTC';
+  try {
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-CA', { timeZone: tz });
+  } catch (err) {
+    try {
+      const d = new Date(dateInput);
+      return d.toISOString().slice(0, 10);
+    } catch {
+      return '';
+    }
+  }
+}
+
+function checkExpressPriceApplies(providerProfile: any, bookingDateInput: string | Date, providerTimezone?: string | null): boolean {
+  const isRushOn = providerProfile?.isRushMode ?? providerProfile?.is_rush_mode ?? false;
+  if (!isRushOn) return false;
+
+  const tz = providerTimezone || providerProfile?.user?.timezone || providerProfile?.timezone || 'UTC';
+  const todayYYYYMMDD = getFormattedDateInTimezone(new Date(), tz);
+  const bookingYYYYMMDD = getFormattedDateInTimezone(bookingDateInput, tz);
+
+  if (!todayYYYYMMDD || !bookingYYYYMMDD) return false;
+  return todayYYYYMMDD === bookingYYYYMMDD;
+}
+
+async function handleBookingCancellation(bookingIdInput: any, authUser: any, cancellationReason?: string) {
+  const bId = Number(bookingIdInput);
+  if (!bId || isNaN(bId)) {
+    throw new Error('Valid bookingId is required');
+  }
+
+  let booking: any = null;
+  await executeWithDbFallback(
+    async () => {
+      booking = await prisma.booking.findUnique({
+        where: { id: bId },
+        include: { client: true, provider: { include: { providerProfile: true } } }
+      });
+    },
+    async () => {
+      booking = mockDb.bookings.find((item: any) => item.id === bId);
+    }
+  );
+
+  if (!booking) {
+    throw new Error('Booking not found');
+  }
+
+  if (authUser && authUser.role !== 'admin' && booking.clientId !== authUser.userId) {
+    throw new Error('Unauthorized to cancel this booking');
+  }
+
+  if (booking.status === 'cancelled') {
+    return { success: true, message: 'Booking is already cancelled', booking, cancellationFee: 0 };
+  }
+
+  if (booking.status === 'completed') {
+    throw new Error('Completed bookings cannot be cancelled');
+  }
+
+  const providerTimezone = booking.provider?.timezone || booking.provider?.providerProfile?.timezone || 'UTC';
+  const bookingDateFormatted = getFormattedDateInTimezone(booking.date, providerTimezone);
+
+  let slotStartMins = 540;
+  if (booking.timeSlot) {
+    const slotPart = String(booking.timeSlot).split('-')[0].trim();
+    try {
+      slotStartMins = parseTime(slotPart);
+    } catch {}
+  }
+
+  const slotHours = Math.floor(slotStartMins / 60);
+  const slotMins = slotStartMins % 60;
+
+  const apptDate = new Date(booking.date);
+  apptDate.setHours(slotHours, slotMins, 0, 0);
+
+  const hoursRemaining = (apptDate.getTime() - Date.now()) / (1000 * 60 * 60);
+
+  let feePercentage = 0;
+  let cancellationFee = 0;
+
+  const servicePrice = Number(booking.serviceAmount) || Number(booking.grandTotal) || 0;
+
+  if (hoursRemaining >= 24) {
+    feePercentage = 0;
+    cancellationFee = 0;
+  } else if (hoursRemaining >= 0) {
+    feePercentage = 50;
+    cancellationFee = Math.round((servicePrice * 0.50) * 100) / 100;
+  } else {
+    feePercentage = 100;
+    cancellationFee = servicePrice;
+  }
+
+  const stripe = getStripeInstance();
+  let stripeAction = 'none';
+
+  if (stripe && booking.transactionId && booking.transactionId.startsWith('pi_')) {
+    try {
+      const intent = await stripe.paymentIntents.retrieve(booking.transactionId);
+      if (intent.status === 'requires_capture') {
+        if (cancellationFee === 0) {
+          await stripe.paymentIntents.cancel(booking.transactionId);
+          stripeAction = 'full_release_payment_intent_cancelled';
+        } else {
+          const feeCents = Math.round(cancellationFee * 100);
+          if (feeCents > 0) {
+            await stripe.paymentIntents.capture(booking.transactionId, { amount_to_capture: feeCents });
+            stripeAction = `partially_captured_fee_${cancellationFee}`;
+          } else {
+            await stripe.paymentIntents.cancel(booking.transactionId);
+            stripeAction = 'full_release_zero_fee';
+          }
+        }
+      } else if (intent.status === 'succeeded') {
+        const grandTotal = Number(booking.grandTotal) || servicePrice;
+        const refundAmount = Math.max(0, grandTotal - cancellationFee);
+        const refundCents = Math.round(refundAmount * 100);
+        if (refundCents > 0) {
+          await stripe.refunds.create({
+            payment_intent: booking.transactionId,
+            amount: refundCents,
+          });
+          stripeAction = `refunded_${refundAmount}`;
+        }
+      }
+    } catch (stripeErr: any) {
+      console.error('[Stripe Booking Cancellation Error]', stripeErr.message || stripeErr);
+    }
+  }
+
+  let updatedBooking: any = null;
+  await executeWithDbFallback(
+    async () => {
+      updatedBooking = await prisma.booking.update({
+        where: { id: bId },
+        data: {
+          status: 'cancelled',
+        },
+        include: { client: true, provider: true }
+      });
+    },
+    async () => {
+      if (booking) {
+        booking.status = 'cancelled';
+        updatedBooking = booking;
+      }
+    }
+  );
+
+  if (booking.clientId) {
+    const feeNotice = cancellationFee > 0 ? ` (Cancellation Fee: $${cancellationFee.toFixed(2)})` : ' (No fee applied)';
+    sendNotificationToUser(
+      booking.clientId,
+      'Booking Cancelled ❌',
+      `Your booking #${bId} scheduled for ${bookingDateFormatted} has been cancelled${feeNotice}.`,
+      { bookingId: String(bId), type: 'BOOKING_CANCELLED' }
+    ).catch(() => {});
+  }
+
+  if (booking.providerId) {
+    sendNotificationToUser(
+      booking.providerId,
+      'Booking Cancelled by Client 📅',
+      `Booking #${bId} for ${bookingDateFormatted} (${booking.timeSlot || ''}) was cancelled by client.`,
+      { bookingId: String(bId), type: 'BOOKING_CANCELLED' }
+    ).catch(() => {});
+  }
+
+  return {
+    success: true,
+    message: cancellationFee > 0 ? `Booking cancelled. A $${cancellationFee.toFixed(2)} cancellation fee applied.` : 'Booking cancelled successfully with no fee.',
+    booking: updatedBooking || booking,
+    cancellationFee,
+    feePercentage,
+    stripeAction
+  };
+}
+
 function getSlotsRange(start: string, end: string, duration: number) {
   const startMin = parseTime(start);
   const endMin = parseTime(end);
@@ -545,6 +729,71 @@ async function getAuthenticatedUser(request: Request) {
   }
 
   return payload;
+}
+
+async function ensureStripeCustomer(authUser: any, stripe: Stripe): Promise<string> {
+  const userId = authUser.userId;
+  let customerId: string | null = null;
+
+  await executeWithDbFallback(
+    async () => {
+      const profile = await prisma.clientProfile.findUnique({
+        where: { userId: userId },
+        select: { stripeCustomerId: true }
+      });
+      if (profile?.stripeCustomerId) {
+        customerId = profile.stripeCustomerId;
+      }
+    },
+    async () => {
+      const profile = mockDb.profiles.find((p: any) => p.userId === userId);
+      if (profile?.stripeCustomerId) {
+        customerId = profile.stripeCustomerId;
+      }
+    }
+  ).catch(() => {});
+
+  if (customerId) {
+    return customerId;
+  }
+
+  const customer = await stripe.customers.create({
+    email: authUser.email || undefined,
+    name: authUser.user?.name || authUser.email || `User #${userId}`,
+    metadata: { userId: String(userId) }
+  });
+  customerId = customer.id;
+
+  await executeWithDbFallback(
+    async () => {
+      await prisma.clientProfile.upsert({
+        where: { userId: userId },
+        create: {
+          userId: userId,
+          stripeCustomerId: customerId
+        },
+        update: {
+          stripeCustomerId: customerId
+        }
+      });
+    },
+    async () => {
+      let profile = mockDb.profiles.find((p: any) => p.userId === userId);
+      if (profile) {
+        profile.stripeCustomerId = customerId;
+      } else {
+        mockDb.profiles.push({
+          id: mockDb.profiles.length + 1,
+          userId: userId,
+          stripeCustomerId: customerId
+        });
+      }
+    }
+  ).catch((err) => {
+    console.error('[ensureStripeCustomer] Error saving stripeCustomerId to profile:', err);
+  });
+
+  return customerId;
 }
 
 function parseCsv(csvText: string): { title: string; icon?: string }[] {
@@ -3851,6 +4100,44 @@ export async function POST(
       }
     }
 
+    // POST /api/stripe/customer-sheet
+    if (path === 'stripe/customer-sheet') {
+      const authUser = await getAuthenticatedUser(request);
+      if (!authUser) {
+        return NextResponse.json({ success: false, error: 'Unauthorized. Bearer token required.' }, { status: 401 });
+      }
+
+      const stripe = getStripeInstance();
+      if (!stripe) {
+        return NextResponse.json({ success: false, error: 'Stripe is not configured on server. Missing STRIPE_SECRET_KEY in environment.' }, { status: 500 });
+      }
+
+      try {
+        const customerId = await ensureStripeCustomer(authUser, stripe);
+
+        const ephemeralKey = await stripe.ephemeralKeys.create(
+          { customer: customerId },
+          { apiVersion: '2024-11-20.acacia' }
+        );
+
+        const setupIntent = await stripe.setupIntents.create({
+          customer: customerId,
+          usage: 'off_session',
+          payment_method_types: ['card'],
+        });
+
+        return NextResponse.json({
+          success: true,
+          customerId: customerId,
+          customerEphemeralKeySecret: ephemeralKey.secret,
+          setupIntentClientSecret: setupIntent.client_secret,
+        });
+      } catch (stripeErr: any) {
+        console.error('[Stripe Customer Sheet Error]', stripeErr);
+        return NextResponse.json({ success: false, error: stripeErr.message || 'Failed to initialize customer sheet' }, { status: 400 });
+      }
+    }
+
     // POST /api/stripe/create-payment-intent
     if (path === 'stripe/create-payment-intent') {
       const authUser = await getAuthenticatedUser(request);
@@ -3869,11 +4156,16 @@ export async function POST(
       }
 
       try {
+        const customerId = await ensureStripeCustomer(authUser, stripe);
         const amountInCents = Math.round(Number(amount) * 100);
+
         const paymentIntent = await stripe.paymentIntents.create({
           amount: amountInCents,
           currency: String(currency).toLowerCase(),
+          customer: customerId,
           capture_method: 'manual',
+          setup_future_usage: 'off_session',
+          automatic_payment_methods: { enabled: true },
           description: description || `LookClean Salon Charge for User #${authUser.userId}`,
           metadata: {
             userId: String(authUser.userId),
@@ -3881,6 +4173,25 @@ export async function POST(
             bookingId: bookingId ? String(bookingId) : ''
           }
         });
+
+        let customerSessionClientSecret: string | null = null;
+        try {
+          const customerSession = await stripe.customerSessions.create({
+            customer: customerId,
+            components: {
+              payment_element: {
+                enabled: true,
+                features: {
+                  payment_method_save: 'enabled',
+                  payment_method_redisplay: 'enabled',
+                },
+              },
+            },
+          });
+          customerSessionClientSecret = customerSession.client_secret;
+        } catch (csErr: any) {
+          console.warn('[Customer Session Creation Warning]', csErr?.message || csErr);
+        }
 
         const rawDataStr = JSON.stringify(paymentIntent);
 
@@ -3906,6 +4217,8 @@ export async function POST(
           clientSecret: paymentIntent.client_secret,
           paymentIntentId: paymentIntent.id,
           transactionId: paymentIntent.id,
+          customerId: customerId,
+          customerSessionClientSecret: customerSessionClientSecret,
           stripeRawData: paymentIntent,
           amount: Number(amount),
           amountInCents: paymentIntent.amount,
@@ -5806,10 +6119,14 @@ export async function POST(
       const providerStripeAccountId = booking.provider?.providerProfile?.stripeAccountId;
 
       try {
+        const customerId = await ensureStripeCustomer(auth, stripe);
+
         const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
           amount: amountCents,
           currency: 'usd',
+          customer: customerId,
           capture_method: 'manual',
+          setup_future_usage: 'off_session',
           automatic_payment_methods: { enabled: true },
           metadata: {
             bookingId: String(booking.id),
@@ -5828,10 +6145,31 @@ export async function POST(
 
         const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams);
 
+        let customerSessionClientSecret: string | null = null;
+        try {
+          const customerSession = await stripe.customerSessions.create({
+            customer: customerId,
+            components: {
+              payment_element: {
+                enabled: true,
+                features: {
+                  payment_method_save: 'enabled',
+                  payment_method_redisplay: 'enabled',
+                },
+              },
+            },
+          });
+          customerSessionClientSecret = customerSession.client_secret;
+        } catch (csErr: any) {
+          console.warn('[Customer Session Creation Warning]', csErr?.message || csErr);
+        }
+
         return NextResponse.json({
           success: true,
           clientSecret: paymentIntent.client_secret,
           paymentIntentId: paymentIntent.id,
+          customerId: customerId,
+          customerSessionClientSecret: customerSessionClientSecret,
           amount: serviceAmount,
           platformCommission: commissionCents / 100,
           providerPayoutAmount: providerPayoutCents / 100,
@@ -6945,7 +7283,7 @@ export async function POST(
 
             const dataToInsert = processedServices.map((s, idx) => {
               const setting = serviceSettings.find(set => set.id === s.serviceId);
-              const explicitName = s.name || s.title || s.serviceName || s.service_name;
+              const explicitName = (s as any).name || (s as any).title || (s as any).serviceName || (s as any).service_name;
               const nameToUse = (explicitName && !explicitName.startsWith('Service #'))
                 ? explicitName
                 : (setting ? setting.title : (s.serviceId ? `Service ${s.serviceId}` : `Service ${idx + 1}`));
@@ -6997,7 +7335,7 @@ export async function POST(
               if (baseUrl && img && img.startsWith('/')) {
                 img = `${baseUrl}${img}`;
               }
-              const explicitName = s.name || s.title || s.serviceName || s.service_name;
+              const explicitName = (s as any).name || (s as any).title || (s as any).serviceName || (s as any).service_name;
               const nameToUse = (explicitName && !explicitName.startsWith('Service #'))
                 ? explicitName
                 : (s.serviceId ? `Service ${s.serviceId}` : `Service ${index + 1}`);
@@ -7568,13 +7906,11 @@ export async function POST(
             }),
             async () => mockDb.profiles.find((p) => p.userId === targetProviderId || p.id === targetProviderId)
           );
-          providerRushMode = pProfile?.isRushMode ?? false;
-        }
-
-        let isRushModeActive = providerRushMode;
+        const pTimezone = pProfile?.user?.timezone || pProfile?.timezone || 'UTC';
+        const isRushModeActive = checkExpressPriceApplies(pProfile, (body as any)?.date, pTimezone);
 
         const baseServiceAmount = servicesList.reduce((sum, s) => {
-          let serviceRushOn = providerRushMode;
+          let serviceRushOn = isRushModeActive;
           if (!serviceRushOn) {
             if ((s as any).profile) {
               serviceRushOn = (s as any).profile.isRushMode ?? false;
@@ -7791,7 +8127,8 @@ export async function POST(
           }),
           async () => mockDb.profiles.find((p) => p.userId === providerIdInt || p.id === providerIdInt)
         );
-        const isRushActive = providerProfile?.isRushMode ?? false;
+        const providerTimezone = providerProfile?.user?.timezone || providerProfile?.timezone || 'UTC';
+        const isRushActive = checkExpressPriceApplies(providerProfile, date, providerTimezone);
 
         const servicesList = await executeWithDbFallback(
           async () => await prisma.providerService.findMany({
@@ -8428,6 +8765,30 @@ export async function POST(
       }
     }
 
+    // POST Client Booking Cancel (/api/client/bookings/cancel, /api/clients/bookings/cancel, /api/client/booking/cancel)
+    if (path === 'client/bookings/cancel' || path === 'clients/bookings/cancel' || path === 'client/booking/cancel' || (path.includes('bookings/') && path.endsWith('/cancel'))) {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ success: false, error: 'Unauthorized. Bearer token required.' }, { status: 401 });
+      }
+
+      let bookingId = body?.bookingId ?? body?.booking_id ?? body?.id;
+      if (!bookingId) {
+        const parts = path.split('/');
+        const cancelIdx = parts.indexOf('cancel');
+        if (cancelIdx > 0 && !isNaN(Number(parts[cancelIdx - 1]))) {
+          bookingId = Number(parts[cancelIdx - 1]);
+        }
+      }
+
+      try {
+        const result = await handleBookingCancellation(bookingId, auth, body?.reason || body?.cancellationReason);
+        return NextResponse.json(result);
+      } catch (err: any) {
+        return NextResponse.json({ success: false, error: err.message || 'Failed to cancel booking' }, { status: 400 });
+      }
+    }
+
     // POST Booking Status Update & Completion (/api/providers/bookings/status, /api/provider/bookings/complete, /api/bookings/complete, etc.)
     if (path === 'providers/bookings/status' || path === 'provider/bookings/status' || path === 'bookings/status' || path === 'client/bookings/status' || path === 'clients/bookings/status' || path.endsWith('/complete')) {
       let bookingId = body?.bookingId;
@@ -8449,6 +8810,10 @@ export async function POST(
         let updatedBooking: any = null;
         if (status === 'completed') {
           updatedBooking = await processBookingCompletion(numBookingId);
+        } else if (status === 'cancelled') {
+          const auth = await getAuthenticatedUser(request);
+          const cancelRes = await handleBookingCancellation(numBookingId, auth, body?.reason);
+          return NextResponse.json(cancelRes);
         } else {
           await executeWithDbFallback(
             async () => {
