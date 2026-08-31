@@ -7912,22 +7912,12 @@ export async function POST(
         }
 
         const pTimezone = pProfile?.user?.timezone || pProfile?.timezone || 'UTC';
-        let isRushModeActive = checkExpressPriceApplies(pProfile, (body as any)?.date, pTimezone);
+        const isRushModeActive = checkExpressPriceApplies(pProfile, (body as any)?.date, pTimezone);
 
         const baseServiceAmount = servicesList.reduce((sum, s) => {
-          let serviceRushOn = isRushModeActive;
-          if (!serviceRushOn) {
-            if ((s as any).profile) {
-              serviceRushOn = (s as any).profile.isRushMode ?? false;
-            } else {
-              const prof = mockDb.profiles.find((p) => p.id === s.profileId);
-              serviceRushOn = prof?.isRushMode ?? false;
-            }
-          }
-          if (serviceRushOn) isRushModeActive = true;
           const rushP = Number(s.rushPrice ?? (s as any).rush_price) || 0;
           const normalP = Number(s.price) || 0;
-          const effectivePrice = (serviceRushOn && rushP > 0) ? rushP : normalP;
+          const effectivePrice = (isRushModeActive && rushP > 0) ? rushP : normalP;
           return sum + effectivePrice;
         }, 0);
 
@@ -8148,18 +8138,9 @@ export async function POST(
         }
 
         const baseServiceAmount = servicesList.reduce((sum, s) => {
-          let serviceRushOn = isRushActive;
-          if (!serviceRushOn) {
-            if ((s as any).profile) {
-              serviceRushOn = (s as any).profile.isRushMode ?? false;
-            } else {
-              const prof = mockDb.profiles.find((p) => p.id === s.profileId);
-              serviceRushOn = prof?.isRushMode ?? false;
-            }
-          }
           const rushP = Number(s.rushPrice ?? (s as any).rush_price) || 0;
           const normalP = Number(s.price) || 0;
-          const effectivePrice = (serviceRushOn && rushP > 0) ? rushP : normalP;
+          const effectivePrice = (isRushActive && rushP > 0) ? rushP : normalP;
           return sum + effectivePrice;
         }, 0);
 
