@@ -2267,6 +2267,38 @@
         }
       }
     },
+    "/provider/bookings/{id}/no-show": {
+      "post": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Mark Provider Booking as No-Show",
+        "description": "Provider marks a booking as no-show. Updates booking status to 'no-show' and returns message 'Booking status updated to no-show up'.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Booking ID to mark as no-show",
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Booking status successfully updated to no-show"
+          },
+          "400": {
+            "description": "Invalid booking ID"
+          },
+          "404": {
+            "description": "Booking not found"
+          }
+        }
+      }
+    },
     "/provider/bookings/status": {
       "post": {
         "tags": [

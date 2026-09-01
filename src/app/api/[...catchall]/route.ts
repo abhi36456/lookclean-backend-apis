@@ -8775,18 +8775,20 @@ export async function POST(
       }
     }
 
-    // POST Booking Status Update & Completion (/api/providers/bookings/status, /api/provider/bookings/complete, /api/bookings/complete, etc.)
-    if (path === 'providers/bookings/status' || path === 'provider/bookings/status' || path === 'bookings/status' || path === 'client/bookings/status' || path === 'clients/bookings/status' || path.endsWith('/complete')) {
+    // POST Booking Status Update & Completion (/api/providers/bookings/status, /api/provider/bookings/complete, /api/provider/bookings/{id}/no-show, etc.)
+    if (path === 'providers/bookings/status' || path === 'provider/bookings/status' || path === 'bookings/status' || path === 'client/bookings/status' || path === 'clients/bookings/status' || path.endsWith('/complete') || path.endsWith('/no-show')) {
       let bookingId = body?.bookingId;
       if (!bookingId) {
         const parts = path.split('/');
         const completeIdx = parts.indexOf('complete');
-        if (completeIdx > 0 && !isNaN(Number(parts[completeIdx - 1]))) {
-          bookingId = Number(parts[completeIdx - 1]);
+        const noShowIdx = parts.indexOf('no-show');
+        const targetIdx = completeIdx > 0 ? completeIdx : noShowIdx;
+        if (targetIdx > 0 && !isNaN(Number(parts[targetIdx - 1]))) {
+          bookingId = Number(parts[targetIdx - 1]);
         }
       }
 
-      const status = body?.status || (path.endsWith('/complete') ? 'completed' : null);
+      const status = body?.status || (path.endsWith('/complete') ? 'completed' : path.endsWith('/no-show') ? 'no-show' : null);
       if (!bookingId || !status) {
         return NextResponse.json({ message: 'bookingId and status are required' }, { status: 400 });
       }
@@ -8818,7 +8820,8 @@ export async function POST(
           );
         }
 
-        return NextResponse.json({ success: true, message: `Booking status updated to ${status}`, booking: updatedBooking });
+        const messageText = (path.endsWith('/no-show') || status === 'no-show') ? 'Booking status updated to no-show up' : `Booking status updated to ${status}`;
+        return NextResponse.json({ success: true, message: messageText, booking: updatedBooking });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to update booking status' }, { status: 400 });
       }
@@ -9036,7 +9039,7 @@ export async function PUT(
     }
 
     // PUT Booking Status Update (/api/providers/bookings/status or /api/bookings/status)
-    if (path === 'providers/bookings/status' || path === 'provider/bookings/status' || path === 'bookings/status' || path === 'client/bookings/status' || path === 'clients/bookings/status' || path.endsWith('/complete')) {
+    if (path === 'providers/bookings/status' || path === 'provider/bookings/status' || path === 'bookings/status' || path === 'client/bookings/status' || path === 'clients/bookings/status' || path.endsWith('/complete') || path.endsWith('/no-show')) {
       let body: any = {};
       try {
         body = await request.json();
@@ -9048,12 +9051,14 @@ export async function PUT(
       if (!bookingId) {
         const parts = path.split('/');
         const completeIdx = parts.indexOf('complete');
-        if (completeIdx > 0 && !isNaN(Number(parts[completeIdx - 1]))) {
-          bookingId = Number(parts[completeIdx - 1]);
+        const noShowIdx = parts.indexOf('no-show');
+        const targetIdx = completeIdx > 0 ? completeIdx : noShowIdx;
+        if (targetIdx > 0 && !isNaN(Number(parts[targetIdx - 1]))) {
+          bookingId = Number(parts[targetIdx - 1]);
         }
       }
 
-      const status = body?.status || (path.endsWith('/complete') ? 'completed' : null);
+      const status = body?.status || (path.endsWith('/complete') ? 'completed' : path.endsWith('/no-show') ? 'no-show' : null);
       if (!bookingId || !status) {
         return NextResponse.json({ message: 'bookingId and status are required' }, { status: 400 });
       }
@@ -9081,7 +9086,8 @@ export async function PUT(
           );
         }
 
-        return NextResponse.json({ success: true, message: `Booking status updated to ${status}`, booking: updatedBooking });
+        const messageText = (path.endsWith('/no-show') || status === 'no-show') ? 'Booking status updated to no-show up' : `Booking status updated to ${status}`;
+        return NextResponse.json({ success: true, message: messageText, booking: updatedBooking });
       } catch (err: any) {
         return NextResponse.json({ message: err.message || 'Failed to update booking status' }, { status: 400 });
       }
