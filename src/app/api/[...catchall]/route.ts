@@ -655,12 +655,13 @@ async function executeWithDbFallback<T>(
   }
 }
 
-try {
-  setCronDependencies(mockDb, sendNotificationToUser);
-  initCompletedBookingsCron('* * * * *');
-} catch (cronInitErr) {
-  console.error('Failed to initialize completed bookings cron:', cronInitErr);
-}
+// Auto-complete cron disabled as providers mark bookings completed manually from frontend
+// try {
+//   setCronDependencies(mockDb, sendNotificationToUser);
+//   initCompletedBookingsCron('* * * * *');
+// } catch (cronInitErr) {
+//   console.error('Failed to initialize completed bookings cron:', cronInitErr);
+// }
 
 // Token helper (Base64 encoding/decoding simulation of JWT)
 function generateToken(userId: number, email: string, role: string, timezone?: string | null) {
@@ -3354,7 +3355,6 @@ export async function GET(
       if (!auth || auth.role !== 'client') {
         return NextResponse.json({ message: 'Forbidden: Requires client role' }, { status: 403 });
       }
-      await autoCompletePastBookings().catch(() => {});
       const baseUrl = getBaseUrl(request);
       const list = await executeWithDbFallback(
         async () => {
@@ -3459,7 +3459,6 @@ export async function GET(
       if (!auth || auth.role !== 'provider') {
         return NextResponse.json({ message: 'Forbidden: Requires provider role' }, { status: 403 });
       }
-      await autoCompletePastBookings().catch(() => {});
       const baseUrl = getBaseUrl(request);
       const list = await executeWithDbFallback(
         async () => {
@@ -3804,7 +3803,6 @@ export async function GET(
       if (!auth || auth.role !== 'admin') {
         return NextResponse.json({ message: 'Forbidden: Requires admin role' }, { status: 403 });
       }
-      await autoCompletePastBookings().catch(() => {});
       try {
         const bookingsList = await executeWithDbFallback(
           async () => {
