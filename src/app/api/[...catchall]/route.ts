@@ -142,28 +142,55 @@ async function processBookingCompletion(bookingId: number) {
   const providerPayoutAmount = providerPayoutCents / 100;
   const providerStripeAccountId = booking.provider?.providerProfile?.stripeAccountId;
 
-  // 1. Capture held Stripe payment intent if currently in hold/authorized state
-  if (stripe && booking.transactionId && booking.transactionId.startsWith('pi_')) {
-    try {
-      const intent = await stripe.paymentIntents.retrieve(booking.transactionId);
-      if (intent.status === 'requires_capture' || intent.status === 'requires_action') {
-        const capturedIntent = await stripe.paymentIntents.capture(booking.transactionId);
-        capturedTxId = capturedIntent.id;
+  // 1. Capture held Stripe payment intent if currently in hold/authorized state & handle transfers
+  if (stripe) {
+    let intent: Stripe.PaymentIntent | null = null;
+    let latestChargeId: string | undefined = undefined;
+
+    if (booking.transactionId && booking.transactionId.startsWith('pi_')) {
+      try {
+        intent = await stripe.paymentIntents.retrieve(booking.transactionId);
+        if (intent.status === 'requires_capture' || intent.status === 'requires_action') {
+          const capturedIntent = await stripe.paymentIntents.capture(booking.transactionId);
+          capturedTxId = capturedIntent.id;
+          intent = capturedIntent;
+        }
+        latestChargeId = typeof intent.latest_charge === 'string' ? intent.latest_charge : (intent.latest_charge as any)?.id;
+      } catch (captureErr: any) {
+        console.warn('[Stripe Capture Warning] Intent capture skipped or already captured:', captureErr.message);
       }
-    } catch (captureErr: any) {
-      console.warn('[Stripe Capture Warning] Intent capture skipped or already captured:', captureErr.message);
     }
 
-    // 2. Transfer payout to provider's Stripe Connect account if available
-    if (providerStripeAccountId) {
+    // Check if auto-transferred via Destination Charges (transfer_data.destination)
+    const autoDestination = intent?.transfer_data?.destination;
+    const autoTransfer = (intent as any)?.transfer;
+
+    if (autoDestination && autoDestination === providerStripeAccountId) {
+      payoutStatus = 'transferred';
+      stripeTransferId = typeof autoTransfer === 'string' ? autoTransfer : (autoTransfer as any)?.id || `tr_auto_${booking.id}`;
+    } else if (providerStripeAccountId && providerPayoutCents > 0) {
+      // 2. Transfer payout to provider's Stripe Connect account if available
       try {
-        const transfer = await stripe.transfers.create({
+        const transferParams: Stripe.TransferCreateParams = {
           amount: providerPayoutCents,
           currency: 'usd',
           destination: providerStripeAccountId,
           description: `Payout for Booking #${booking.id}`,
           transfer_group: `booking_${booking.id}`
-        });
+        };
+
+        if (latestChargeId) {
+          transferParams.source_transaction = latestChargeId;
+        }
+
+        let transfer: Stripe.Transfer;
+        try {
+          transfer = await stripe.transfers.create(transferParams);
+        } catch (sourceTxErr: any) {
+          delete transferParams.source_transaction;
+          transfer = await stripe.transfers.create(transferParams);
+        }
+
         stripeTransferId = transfer.id;
         payoutStatus = 'transferred';
       } catch (transferErr: any) {
@@ -369,12 +396,44 @@ async function handleBookingCancellation(bookingIdInput: any, authUser: any, can
     cancellationFee = servicePrice;
   }
 
+  let platformFeeCut = 5;
+  await executeWithDbFallback(
+    async () => {
+      const setting = await prisma.systemSetting.findUnique({ where: { key: 'platform_fee_cut' } });
+      if (setting && setting.value) platformFeeCut = parseFloat(setting.value);
+    },
+    async () => {
+      if (mockDb.platformFeeCut !== undefined) platformFeeCut = mockDb.platformFeeCut;
+    }
+  ).catch(() => {});
+
+  const commissionRate = (booking.provider?.providerProfile?.commissionRate && booking.provider.providerProfile.commissionRate !== 10.0)
+    ? booking.provider.providerProfile.commissionRate
+    : platformFeeCut;
+
+  let platformCommission = 0;
+  let providerPayoutAmount = 0;
+  let providerPayoutCents = 0;
+  let stripeTransferId: string | null = booking.stripeTransferId || null;
+  let payoutStatus: string = booking.payoutStatus || 'pending';
+
+  if (cancellationFee > 0) {
+    const feeCents = Math.round(cancellationFee * 100);
+    const commissionCents = Math.round(feeCents * (commissionRate / 100));
+    providerPayoutCents = feeCents - commissionCents;
+    platformCommission = commissionCents / 100;
+    providerPayoutAmount = providerPayoutCents / 100;
+  }
+
+  const providerStripeAccountId = booking.provider?.providerProfile?.stripeAccountId;
   const stripe = getStripeInstance();
   let stripeAction = 'none';
 
   if (stripe && booking.transactionId && booking.transactionId.startsWith('pi_')) {
     try {
       const intent = await stripe.paymentIntents.retrieve(booking.transactionId);
+      let capturedChargeId: string | undefined = undefined;
+
       if (intent.status === 'requires_capture') {
         if (cancellationFee === 0) {
           await stripe.paymentIntents.cancel(booking.transactionId);
@@ -382,8 +441,27 @@ async function handleBookingCancellation(bookingIdInput: any, authUser: any, can
         } else {
           const feeCents = Math.round(cancellationFee * 100);
           if (feeCents > 0) {
-            await stripe.paymentIntents.capture(booking.transactionId, { amount_to_capture: feeCents });
+            const hasTransferData = !!intent.transfer_data?.destination;
+            const captureParams: Stripe.PaymentIntentCaptureParams = { amount_to_capture: feeCents };
+
+            if (hasTransferData) {
+              const commissionCents = Math.round(feeCents * (commissionRate / 100));
+              captureParams.application_fee_amount = commissionCents;
+            }
+
+            const capturedIntent = await stripe.paymentIntents.capture(booking.transactionId, captureParams);
             stripeAction = `partially_captured_fee_${cancellationFee}`;
+            capturedChargeId = typeof capturedIntent.latest_charge === 'string'
+              ? capturedIntent.latest_charge
+              : (capturedIntent.latest_charge as any)?.id;
+
+            if (hasTransferData && capturedIntent.transfer_data?.destination === providerStripeAccountId) {
+              payoutStatus = 'transferred';
+              const autoTr = (capturedIntent as any)?.transfer;
+              stripeTransferId = typeof autoTr === 'string'
+                ? autoTr
+                : (autoTr as any)?.id || `tr_auto_cancel_${bId}`;
+            }
           } else {
             await stripe.paymentIntents.cancel(booking.transactionId);
             stripeAction = 'full_release_zero_fee';
@@ -400,6 +478,39 @@ async function handleBookingCancellation(bookingIdInput: any, authUser: any, can
           });
           stripeAction = `refunded_${refundAmount}`;
         }
+        capturedChargeId = typeof intent.latest_charge === 'string'
+          ? intent.latest_charge
+          : (intent.latest_charge as any)?.id;
+      }
+
+      if (cancellationFee > 0 && providerStripeAccountId && payoutStatus !== 'transferred' && providerPayoutCents > 0) {
+        try {
+          const transferParams: Stripe.TransferCreateParams = {
+            amount: providerPayoutCents,
+            currency: 'usd',
+            destination: providerStripeAccountId,
+            description: `Cancellation Fee Payout for Booking #${booking.id}`,
+            transfer_group: `booking_${booking.id}`
+          };
+
+          if (capturedChargeId) {
+            transferParams.source_transaction = capturedChargeId;
+          }
+
+          let transfer: Stripe.Transfer;
+          try {
+            transfer = await stripe.transfers.create(transferParams);
+          } catch (sourceTxErr: any) {
+            delete transferParams.source_transaction;
+            transfer = await stripe.transfers.create(transferParams);
+          }
+
+          stripeTransferId = transfer.id;
+          payoutStatus = 'transferred';
+        } catch (transferErr: any) {
+          console.error('[Stripe Cancellation Transfer Error]', transferErr);
+          payoutStatus = 'failed';
+        }
       }
     } catch (stripeErr: any) {
       console.error('[Stripe Booking Cancellation Error]', stripeErr.message || stripeErr);
@@ -413,6 +524,10 @@ async function handleBookingCancellation(bookingIdInput: any, authUser: any, can
         where: { id: bId },
         data: {
           status: 'cancelled',
+          platformCommission: platformCommission,
+          providerPayoutAmount: providerPayoutAmount,
+          payoutStatus: cancellationFee > 0 ? payoutStatus : 'none',
+          stripeTransferId: stripeTransferId,
         },
         include: { client: true, provider: true }
       });
@@ -420,6 +535,10 @@ async function handleBookingCancellation(bookingIdInput: any, authUser: any, can
     async () => {
       if (booking) {
         booking.status = 'cancelled';
+        booking.platformCommission = platformCommission;
+        booking.providerPayoutAmount = providerPayoutAmount;
+        booking.payoutStatus = cancellationFee > 0 ? payoutStatus : 'none';
+        booking.stripeTransferId = stripeTransferId;
         updatedBooking = booking;
       }
     }
@@ -436,10 +555,13 @@ async function handleBookingCancellation(bookingIdInput: any, authUser: any, can
   }
 
   if (booking.providerId) {
+    const payoutNotice = cancellationFee > 0 && providerPayoutAmount > 0
+      ? ` Cancellation fee payout of $${providerPayoutAmount.toFixed(2)} credited.`
+      : '';
     sendNotificationToUser(
       booking.providerId,
       'Booking Cancelled by Client 📅',
-      `Booking #${bId} for ${bookingDateFormatted} (${booking.timeSlot || ''}) was cancelled by client.`,
+      `Booking #${bId} for ${bookingDateFormatted} (${booking.timeSlot || ''}) was cancelled by client.${payoutNotice}`,
       { bookingId: String(bId), type: 'BOOKING_CANCELLED' }
     ).catch(() => {});
   }
