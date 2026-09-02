@@ -67,6 +67,10 @@
     {
       "name": "Report & Issues",
       "description": "User feedback and app issues report submission API"
+    },
+    {
+      "name": "Booking & Order Summary",
+      "description": "APIs for order calculation, booking creation, listing, and 24h cancellation policies"
     }
   ],
   "components": {
@@ -280,6 +284,303 @@
     }
   ],
   "paths": {
+    "/stripe/customer-sheet": {
+      "post": {
+        "tags": [
+          "Stripe Payments"
+        ],
+        "summary": "Initialize Stripe Customer Sheet (Saved Payment Methods)",
+        "description": "Returns customer ID, ephemeral key secret, and SetupIntent secret for mobile app Settings -> Payment methods screen.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer Sheet secrets generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "customerId": { "type": "string", "example": "cus_N12345" },
+                    "customerEphemeralKeySecret": { "type": "string", "example": "ek_test_..." },
+                    "setupIntentClientSecret": { "type": "string", "example": "seti_..._secret_..." }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/stripe/create-payment-intent": {
+      "post": {
+        "tags": [
+          "Stripe Payments"
+        ],
+        "summary": "Create Payment Intent with Customer Session & Manual Capture",
+        "description": "Creates a Stripe PaymentIntent with capture_method: manual, setup_future_usage: off_session, and Customer Session for saved card checkout.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["amount"],
+                "properties": {
+                  "amount": { "type": "number", "example": 45.0 },
+                  "bookingId": { "type": "integer", "example": 101 },
+                  "currency": { "type": "string", "example": "usd" },
+                  "description": { "type": "string", "example": "LookClean Service Charge" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "PaymentIntent created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "clientSecret": { "type": "string", "example": "pi_..._secret_..." },
+                    "paymentIntentId": { "type": "string", "example": "pi_..." },
+                    "transactionId": { "type": "string", "example": "pi_..." },
+                    "customerId": { "type": "string", "example": "cus_..." },
+                    "customerSessionClientSecret": { "type": "string", "example": "cuss_..." },
+                    "amount": { "type": "number", "example": 45.0 },
+                    "amountInCents": { "type": "integer", "example": 4500 },
+                    "currency": { "type": "string", "example": "usd" },
+                    "status": { "type": "string", "example": "requires_payment_method" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid amount or parameters" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/stripe/payment-status": {
+      "get": {
+        "tags": [
+          "Stripe Payments"
+        ],
+        "summary": "Check Stripe PaymentIntent or Checkout Session Status",
+        "description": "Retrieve current payment authorization/charge status using paymentIntentId or sessionId.",
+        "parameters": [
+          {
+            "name": "paymentIntentId",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "example": "pi_12345" }
+          },
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "example": "cs_test_12345" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payment status retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "id": { "type": "string", "example": "pi_12345" },
+                    "status": { "type": "string", "example": "requires_capture" },
+                    "amount": { "type": "number", "example": 45.0 },
+                    "currency": { "type": "string", "example": "usd" },
+                    "paid": { "type": "boolean", "example": false }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/bookings/calculate": {
+      "post": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Calculate Order Summary (Service total, tip, discounts, and Express Price)",
+        "description": "Calculates order totals. Express price applies when provider.isRushMode is true AND appointment date matches today in provider.timezone.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["serviceIds"],
+                "properties": {
+                  "serviceIds": { "type": "array", "items": { "type": "integer" }, "example": [1, 2] },
+                  "numberOfPeople": { "type": "integer", "example": 1 },
+                  "date": { "type": "string", "example": "2026-08-31" },
+                  "providerId": { "type": "integer", "example": 5 },
+                  "tipType": { "type": "string", "example": "15%" },
+                  "tipAmount": { "type": "number", "example": 5.0 },
+                  "promoCode": { "type": "string", "example": "WELCOME10" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Order summary calculated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "numberOfPeople": { "type": "integer", "example": 1 },
+                    "serviceAmount": { "type": "number", "example": 45.0 },
+                    "tipAmount": { "type": "number", "example": 6.75 },
+                    "promoDiscount": { "type": "number", "example": 5.0 },
+                    "grandTotal": { "type": "number", "example": 46.75 },
+                    "isRushMode": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/bookings": {
+      "post": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Create a new client appointment booking",
+        "description": "Creates booking record after payment intent authorization.",
+        "security": [
+          { "BearerAuth": [] }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["providerId", "date", "timeSlot", "serviceIds"],
+                "properties": {
+                  "providerId": { "type": "integer", "example": 5 },
+                  "serviceIds": { "type": "array", "items": { "type": "integer" }, "example": [1] },
+                  "date": { "type": "string", "example": "2026-08-31" },
+                  "timeSlot": { "type": "string", "example": "09:00 AM" },
+                  "numberOfPeople": { "type": "integer", "example": 1 },
+                  "transactionId": { "type": "string", "example": "pi_12345" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Booking created successfully" }
+        }
+      },
+      "get": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "List client bookings",
+        "description": "Fetch all upcoming or past bookings for authenticated client.",
+        "security": [
+          { "BearerAuth": [] }
+        ],
+        "responses": {
+          "200": { "description": "Bookings list retrieved successfully" }
+        }
+      }
+    },
+    "/client/bookings/cancel": {
+      "post": {
+        "tags": [
+          "Booking & Order Summary"
+        ],
+        "summary": "Cancel booking with 24-hour policy & Stripe hold release/partial capture",
+        "description": "Cancels appointment. >= 24h prior = $0 fee (full Stripe hold release). < 24h prior = 50% service fee (50% captured, balance released). Past appointment = 100% fee.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["bookingId"],
+                "properties": {
+                  "bookingId": { "type": "integer", "example": 101 },
+                  "reason": { "type": "string", "example": "Schedule conflict" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Booking cancelled successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Booking cancelled. A $22.50 cancellation fee applied." },
+                    "cancellationFee": { "type": "number", "example": 22.5 },
+                    "feePercentage": { "type": "integer", "example": 50 },
+                    "stripeAction": { "type": "string", "example": "partially_captured_fee_22.5" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Booking already cancelled or completed" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "Booking not found" }
+        }
+      }
+    },
     "/stripe/config": {
       "get": {
         "tags": [
@@ -2684,6 +2985,16 @@
                     "type": "boolean",
                     "example": true,
                     "default": true
+                  },
+                  "payoutScheduleType": {
+                    "type": "string",
+                    "enum": [
+                      "INSTANT",
+                      "WEEKLY"
+                    ],
+                    "example": "INSTANT",
+                    "default": "INSTANT",
+                    "description": "Provider payout schedule preference: INSTANT (instant payout) or WEEKLY (weekly scheduled payout without charge)"
                   }
                 }
               }
@@ -2791,6 +3102,16 @@
                     "type": "boolean",
                     "example": true,
                     "default": true
+                  },
+                  "payoutScheduleType": {
+                    "type": "string",
+                    "enum": [
+                      "INSTANT",
+                      "WEEKLY"
+                    ],
+                    "example": "INSTANT",
+                    "default": "INSTANT",
+                    "description": "Provider payout schedule preference: INSTANT (instant payout) or WEEKLY (weekly scheduled payout without charge)"
                   }
                 }
               }
@@ -2800,6 +3121,167 @@
         "responses": {
           "200": {
             "description": "Profile updated successfully"
+          }
+        }
+      }
+    },
+    "/provider/payout-type": {
+      "post": {
+        "tags": [
+          "Provider Stripe Connect & Payouts"
+        ],
+        "summary": "Update Provider Payout Schedule Type",
+        "description": "Allows a Service Provider to update their payout preference between INSTANT (instant payouts) and WEEKLY (weekly scheduled auto payouts without charge).",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "payoutScheduleType"
+                ],
+                "properties": {
+                  "payoutScheduleType": {
+                    "type": "string",
+                    "enum": [
+                      "INSTANT",
+                      "WEEKLY"
+                    ],
+                    "example": "WEEKLY",
+                    "description": "Selected payout schedule type: INSTANT or WEEKLY"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Payout schedule type updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Payout schedule type updated to WEEKLY successfully"
+                    },
+                    "payoutScheduleType": {
+                      "type": "string",
+                      "example": "WEEKLY"
+                    },
+                    "providerProfile": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid payoutScheduleType value"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden: Requires provider role"
+          }
+        }
+      }
+    },
+    "/provider/payout-charges": {
+      "get": {
+        "tags": [
+          "Provider Stripe Connect & Payouts"
+        ],
+        "summary": "Get Instant and Scheduled Payout Charge Details",
+        "description": "Returns two detailed payout charge breakdown objects for INSTANT and WEEKLY scheduled payouts, including fees, processing times, and descriptions.",
+        "responses": {
+          "200": {
+            "description": "Payout charge options retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "instantPayout": {
+                      "type": "object",
+                      "properties": {
+                        "payoutScheduleType": {
+                          "type": "string",
+                          "example": "INSTANT"
+                        },
+                        "title": {
+                          "type": "string",
+                          "example": "Instant Payout"
+                        },
+                        "feePercentage": {
+                          "type": "number",
+                          "example": 1.0
+                        },
+                        "feeText": {
+                          "type": "string",
+                          "example": "1.0% charge"
+                        },
+                        "processingTime": {
+                          "type": "string",
+                          "example": "Instant (Within 30 minutes)"
+                        },
+                        "description": {
+                          "type": "string",
+                          "example": "Receive payouts directly to your debit card/bank account immediately for a small processing fee."
+                        }
+                      }
+                    },
+                    "scheduledPayout": {
+                      "type": "object",
+                      "properties": {
+                        "payoutScheduleType": {
+                          "type": "string",
+                          "example": "WEEKLY"
+                        },
+                        "title": {
+                          "type": "string",
+                          "example": "Weekly Scheduled Payout"
+                        },
+                        "feePercentage": {
+                          "type": "number",
+                          "example": 0.0
+                        },
+                        "feeText": {
+                          "type": "string",
+                          "example": "Free (0% charge)"
+                        },
+                        "processingTime": {
+                          "type": "string",
+                          "example": "Weekly (Every Monday)"
+                        },
+                        "description": {
+                          "type": "string",
+                          "example": "Automatic scheduled payout transferred to your bank account weekly with no extra fees."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

@@ -89,6 +89,7 @@ model ProviderProfile {
   stripePayoutsEnabled   Boolean    @default(false)
   stripeChargesEnabled   Boolean    @default(false)
   commissionRate         Float      @default(10.0)
+  payoutScheduleType     String     @default("WEEKLY")
   services        ProviderService[]
   amenities       ProviderAmenity[]
   createdAt       DateTime          @default(now())

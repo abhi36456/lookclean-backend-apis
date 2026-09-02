@@ -1319,6 +1319,9 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
   const isTravelModeVal = travelInput !== undefined && travelInput !== null ? (travelInput === true || travelInput === 'true' || travelInput === 1 || travelInput === '1') : undefined;
   const isFeaturedVal = featInput !== undefined && featInput !== null ? (featInput === true || featInput === 'true' || featInput === 1 || featInput === '1') : undefined;
 
+  const payoutScheduleInput = profObj.payoutScheduleType ?? profObj.payout_schedule_type ?? profObj.payoutType ?? profObj.payout_type ?? bodyPayload?.payoutScheduleType ?? bodyPayload?.payout_schedule_type ?? bodyPayload?.payoutType ?? bodyPayload?.payout_type;
+  const payoutScheduleTypeVal = payoutScheduleInput !== undefined && payoutScheduleInput !== null ? String(payoutScheduleInput).toUpperCase().trim() : undefined;
+
   try {
     const updatedUser = await executeWithDbFallback(
       async () => {
@@ -1356,6 +1359,7 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
             ...(travelStartDateVal !== undefined && { travelStartDate: travelStartDateVal }),
             ...(travelEndDateVal !== undefined && { travelEndDate: travelEndDateVal }),
             ...(isFeaturedVal !== undefined && { isFeatured: isFeaturedVal }),
+            ...(payoutScheduleTypeVal !== undefined && { payoutScheduleType: payoutScheduleTypeVal }),
           },
           create: {
             userId: auth.userId,
@@ -1382,6 +1386,7 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
             travelStartDate: travelStartDateVal ?? null,
             travelEndDate: travelEndDateVal ?? null,
             isFeatured: isFeaturedVal ?? true,
+            payoutScheduleType: payoutScheduleTypeVal ?? "INSTANT",
           }
         });
 
@@ -1477,6 +1482,7 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
         if (travelStartDateVal !== undefined) profile.travelStartDate = travelStartDateVal;
         if (travelEndDateVal !== undefined) profile.travelEndDate = travelEndDateVal;
         if (isFeaturedVal !== undefined) profile.isFeatured = isFeaturedVal;
+        if (payoutScheduleTypeVal !== undefined) profile.payoutScheduleType = payoutScheduleTypeVal;
 
         if (Array.isArray(services)) {
           mockDb.services = mockDb.services.filter((s) => s.profileId !== profile.id);
@@ -1907,6 +1913,29 @@ export async function GET(
         payoutsEnabled,
         chargesEnabled,
         commissionRate,
+      });
+    }
+
+    // GET /api/provider/payout-charges or /api/providers/payout-charges or /api/provider/payout-type
+    if (path === 'provider/payout-charges' || path === 'providers/payout-charges' || path === 'provider/payout-type' || path === 'providers/payout-type') {
+      return NextResponse.json({
+        success: true,
+        instantPayout: {
+          payoutScheduleType: 'INSTANT',
+          title: 'Instant Payout',
+          feePercentage: 1.0,
+          feeText: '1.0% charge',
+          processingTime: 'Instant (Within 30 minutes)',
+          description: 'Receive payouts directly to your debit card/bank account immediately for a small processing fee.'
+        },
+        scheduledPayout: {
+          payoutScheduleType: 'WEEKLY',
+          title: 'Weekly Scheduled Payout',
+          feePercentage: 0.0,
+          feeText: 'Free (0% charge)',
+          processingTime: 'Weekly (Every Monday)',
+          description: 'Automatic scheduled payout transferred to your bank account weekly with no extra fees.'
+        }
       });
     }
 
@@ -9794,6 +9823,65 @@ export async function PUT(
     // Update Provider Profile (/api/providers/profile or /api/provider/profile)
     if (path === 'providers/profile' || path === 'provider/profile') {
       return await handleUpdateProviderProfile(request, body);
+    }
+
+    // POST /api/provider/payout-type or /api/providers/payout-type
+    if (path === 'provider/payout-type' || path === 'providers/payout-type') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+      }
+      if (auth.role !== 'provider') {
+        return NextResponse.json({ success: false, message: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      const inputPayoutType = body?.payoutScheduleType ?? body?.payout_schedule_type ?? body?.payoutType ?? body?.payout_type ?? body?.type;
+      if (!inputPayoutType || typeof inputPayoutType !== 'string') {
+        return NextResponse.json({ success: false, message: 'Invalid or missing payoutScheduleType. Must be "INSTANT" or "WEEKLY".' }, { status: 400 });
+      }
+
+      const normalizedType = inputPayoutType.toUpperCase().trim();
+      if (normalizedType !== 'INSTANT' && normalizedType !== 'WEEKLY') {
+        return NextResponse.json({ success: false, message: 'Invalid payoutScheduleType. Allowed values: "INSTANT" or "WEEKLY".' }, { status: 400 });
+      }
+
+      try {
+        const updatedProfile = await executeWithDbFallback(
+          async () => {
+            return await prisma.providerProfile.upsert({
+              where: { userId: auth.userId },
+              update: { payoutScheduleType: normalizedType },
+              create: {
+                userId: auth.userId,
+                payoutScheduleType: normalizedType
+              }
+            });
+          },
+          async () => {
+            let profile = mockDb.profiles.find((p: any) => p.userId === auth.userId);
+            if (!profile) {
+              profile = {
+                id: mockDb.profiles.length + 1,
+                userId: auth.userId,
+                payoutScheduleType: normalizedType
+              } as any;
+              mockDb.profiles.push(profile);
+            } else {
+              profile.payoutScheduleType = normalizedType;
+            }
+            return profile;
+          }
+        );
+
+        return NextResponse.json({
+          success: true,
+          message: `Payout schedule type updated to ${normalizedType} successfully`,
+          payoutScheduleType: updatedProfile.payoutScheduleType || normalizedType,
+          providerProfile: updatedProfile
+        });
+      } catch (err: any) {
+        return NextResponse.json({ success: false, message: 'Failed to update payout schedule: ' + err.message }, { status: 500 });
+      }
     }
 
     // PUT Admin Voucher - Update

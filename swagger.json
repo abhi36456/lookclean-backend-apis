@@ -2985,6 +2985,16 @@
                     "type": "boolean",
                     "example": true,
                     "default": true
+                  },
+                  "payoutScheduleType": {
+                    "type": "string",
+                    "enum": [
+                      "INSTANT",
+                      "WEEKLY"
+                    ],
+                    "example": "INSTANT",
+                    "default": "INSTANT",
+                    "description": "Provider payout schedule preference: INSTANT (instant payout) or WEEKLY (weekly scheduled payout without charge)"
                   }
                 }
               }
@@ -3092,6 +3102,16 @@
                     "type": "boolean",
                     "example": true,
                     "default": true
+                  },
+                  "payoutScheduleType": {
+                    "type": "string",
+                    "enum": [
+                      "INSTANT",
+                      "WEEKLY"
+                    ],
+                    "example": "INSTANT",
+                    "default": "INSTANT",
+                    "description": "Provider payout schedule preference: INSTANT (instant payout) or WEEKLY (weekly scheduled payout without charge)"
                   }
                 }
               }
@@ -3101,6 +3121,167 @@
         "responses": {
           "200": {
             "description": "Profile updated successfully"
+          }
+        }
+      }
+    },
+    "/provider/payout-type": {
+      "post": {
+        "tags": [
+          "Provider Stripe Connect & Payouts"
+        ],
+        "summary": "Update Provider Payout Schedule Type",
+        "description": "Allows a Service Provider to update their payout preference between INSTANT (instant payouts) and WEEKLY (weekly scheduled auto payouts without charge).",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "payoutScheduleType"
+                ],
+                "properties": {
+                  "payoutScheduleType": {
+                    "type": "string",
+                    "enum": [
+                      "INSTANT",
+                      "WEEKLY"
+                    ],
+                    "example": "WEEKLY",
+                    "description": "Selected payout schedule type: INSTANT or WEEKLY"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Payout schedule type updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Payout schedule type updated to WEEKLY successfully"
+                    },
+                    "payoutScheduleType": {
+                      "type": "string",
+                      "example": "WEEKLY"
+                    },
+                    "providerProfile": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid payoutScheduleType value"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden: Requires provider role"
+          }
+        }
+      }
+    },
+    "/provider/payout-charges": {
+      "get": {
+        "tags": [
+          "Provider Stripe Connect & Payouts"
+        ],
+        "summary": "Get Instant and Scheduled Payout Charge Details",
+        "description": "Returns two detailed payout charge breakdown objects for INSTANT and WEEKLY scheduled payouts, including fees, processing times, and descriptions.",
+        "responses": {
+          "200": {
+            "description": "Payout charge options retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "instantPayout": {
+                      "type": "object",
+                      "properties": {
+                        "payoutScheduleType": {
+                          "type": "string",
+                          "example": "INSTANT"
+                        },
+                        "title": {
+                          "type": "string",
+                          "example": "Instant Payout"
+                        },
+                        "feePercentage": {
+                          "type": "number",
+                          "example": 1.0
+                        },
+                        "feeText": {
+                          "type": "string",
+                          "example": "1.0% charge"
+                        },
+                        "processingTime": {
+                          "type": "string",
+                          "example": "Instant (Within 30 minutes)"
+                        },
+                        "description": {
+                          "type": "string",
+                          "example": "Receive payouts directly to your debit card/bank account immediately for a small processing fee."
+                        }
+                      }
+                    },
+                    "scheduledPayout": {
+                      "type": "object",
+                      "properties": {
+                        "payoutScheduleType": {
+                          "type": "string",
+                          "example": "WEEKLY"
+                        },
+                        "title": {
+                          "type": "string",
+                          "example": "Weekly Scheduled Payout"
+                        },
+                        "feePercentage": {
+                          "type": "number",
+                          "example": 0.0
+                        },
+                        "feeText": {
+                          "type": "string",
+                          "example": "Free (0% charge)"
+                        },
+                        "processingTime": {
+                          "type": "string",
+                          "example": "Weekly (Every Monday)"
+                        },
+                        "description": {
+                          "type": "string",
+                          "example": "Automatic scheduled payout transferred to your bank account weekly with no extra fees."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
