@@ -4251,6 +4251,70 @@ export async function POST(
       }
     }
 
+    // Update Provider Profile (/api/providers/profile or /api/provider/profile)
+    if (path === 'providers/profile' || path === 'provider/profile') {
+      return await handleUpdateProviderProfile(request, body);
+    }
+
+    // POST /api/provider/payout-type or /api/providers/payout-type
+    if (path === 'provider/payout-type' || path === 'providers/payout-type') {
+      const auth = await getAuthenticatedUser(request);
+      if (!auth) {
+        return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+      }
+      if (auth.role !== 'provider') {
+        return NextResponse.json({ success: false, message: 'Forbidden: Requires provider role' }, { status: 403 });
+      }
+
+      const inputPayoutType = body?.payoutScheduleType ?? body?.payout_schedule_type ?? body?.payoutType ?? body?.payout_type ?? body?.type;
+      if (!inputPayoutType || typeof inputPayoutType !== 'string') {
+        return NextResponse.json({ success: false, message: 'Invalid or missing payoutScheduleType. Must be "INSTANT" or "WEEKLY".' }, { status: 400 });
+      }
+
+      const normalizedType = inputPayoutType.toUpperCase().trim();
+      if (normalizedType !== 'INSTANT' && normalizedType !== 'WEEKLY') {
+        return NextResponse.json({ success: false, message: 'Invalid payoutScheduleType. Allowed values: "INSTANT" or "WEEKLY".' }, { status: 400 });
+      }
+
+      try {
+        const updatedProfile = await executeWithDbFallback(
+          async () => {
+            return await prisma.providerProfile.upsert({
+              where: { userId: auth.userId },
+              update: { payoutScheduleType: normalizedType },
+              create: {
+                userId: auth.userId,
+                payoutScheduleType: normalizedType
+              }
+            });
+          },
+          async () => {
+            let profile = mockDb.profiles.find((p: any) => p.userId === auth.userId);
+            if (!profile) {
+              profile = {
+                id: mockDb.profiles.length + 1,
+                userId: auth.userId,
+                payoutScheduleType: normalizedType
+              } as any;
+              mockDb.profiles.push(profile);
+            } else {
+              profile.payoutScheduleType = normalizedType;
+            }
+            return profile;
+          }
+        );
+
+        return NextResponse.json({
+          success: true,
+          message: `Payout schedule type updated to ${normalizedType} successfully`,
+          payoutScheduleType: updatedProfile.payoutScheduleType || normalizedType,
+          providerProfile: updatedProfile
+        });
+      } catch (err: any) {
+        return NextResponse.json({ success: false, message: 'Failed to update payout schedule: ' + err.message }, { status: 500 });
+      }
+    }
+
     // POST /api/stripe/customer-sheet
     if (path === 'stripe/customer-sheet') {
       const authUser = await getAuthenticatedUser(request);
@@ -9823,65 +9887,6 @@ export async function PUT(
     // Update Provider Profile (/api/providers/profile or /api/provider/profile)
     if (path === 'providers/profile' || path === 'provider/profile') {
       return await handleUpdateProviderProfile(request, body);
-    }
-
-    // POST /api/provider/payout-type or /api/providers/payout-type
-    if (path === 'provider/payout-type' || path === 'providers/payout-type') {
-      const auth = await getAuthenticatedUser(request);
-      if (!auth) {
-        return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-      }
-      if (auth.role !== 'provider') {
-        return NextResponse.json({ success: false, message: 'Forbidden: Requires provider role' }, { status: 403 });
-      }
-
-      const inputPayoutType = body?.payoutScheduleType ?? body?.payout_schedule_type ?? body?.payoutType ?? body?.payout_type ?? body?.type;
-      if (!inputPayoutType || typeof inputPayoutType !== 'string') {
-        return NextResponse.json({ success: false, message: 'Invalid or missing payoutScheduleType. Must be "INSTANT" or "WEEKLY".' }, { status: 400 });
-      }
-
-      const normalizedType = inputPayoutType.toUpperCase().trim();
-      if (normalizedType !== 'INSTANT' && normalizedType !== 'WEEKLY') {
-        return NextResponse.json({ success: false, message: 'Invalid payoutScheduleType. Allowed values: "INSTANT" or "WEEKLY".' }, { status: 400 });
-      }
-
-      try {
-        const updatedProfile = await executeWithDbFallback(
-          async () => {
-            return await prisma.providerProfile.upsert({
-              where: { userId: auth.userId },
-              update: { payoutScheduleType: normalizedType },
-              create: {
-                userId: auth.userId,
-                payoutScheduleType: normalizedType
-              }
-            });
-          },
-          async () => {
-            let profile = mockDb.profiles.find((p: any) => p.userId === auth.userId);
-            if (!profile) {
-              profile = {
-                id: mockDb.profiles.length + 1,
-                userId: auth.userId,
-                payoutScheduleType: normalizedType
-              } as any;
-              mockDb.profiles.push(profile);
-            } else {
-              profile.payoutScheduleType = normalizedType;
-            }
-            return profile;
-          }
-        );
-
-        return NextResponse.json({
-          success: true,
-          message: `Payout schedule type updated to ${normalizedType} successfully`,
-          payoutScheduleType: updatedProfile.payoutScheduleType || normalizedType,
-          providerProfile: updatedProfile
-        });
-      } catch (err: any) {
-        return NextResponse.json({ success: false, message: 'Failed to update payout schedule: ' + err.message }, { status: 500 });
-      }
     }
 
     // PUT Admin Voucher - Update
