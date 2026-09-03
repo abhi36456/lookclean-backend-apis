@@ -1041,6 +1041,7 @@ function sanitizeUser(user: unknown, request?: any) {
     const travelVal = plainUser.providerProfile.isTravelMode ?? plainUser.providerProfile.is_travel_mode ?? plainUser.isTravelMode ?? plainUser.is_travel_mode;
     const isTravelBool = travelVal !== undefined && travelVal !== null ? (travelVal === true || travelVal === 'true' || travelVal === 1 || travelVal === '1') : false;
 
+    const travelLocation = plainUser.providerProfile.travelLocation ?? plainUser.providerProfile.travel_location ?? null;
     const travelCity = plainUser.providerProfile.travelCity ?? plainUser.providerProfile.travel_city ?? null;
     const travelState = plainUser.providerProfile.travelState ?? plainUser.providerProfile.travel_state ?? null;
     const travelCountry = plainUser.providerProfile.travelCountry ?? plainUser.providerProfile.travel_country ?? null;
@@ -1059,6 +1060,7 @@ function sanitizeUser(user: unknown, request?: any) {
     plainUser.providerProfile.isAway = isAwayBool;
     plainUser.providerProfile.isRushMode = isRushBool;
     plainUser.providerProfile.isTravelMode = isTravelBool;
+    plainUser.providerProfile.travelLocation = travelLocation;
     plainUser.providerProfile.travelCity = travelCity;
     plainUser.providerProfile.travelState = travelState;
     plainUser.providerProfile.travelCountry = travelCountry;
@@ -1271,6 +1273,8 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
     is_rush_mode,
     isTravelMode,
     is_travel_mode,
+    travelLocation,
+    travel_location,
     travelCity,
     travel_city,
     travelState,
@@ -1295,12 +1299,14 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
   const latVal = (latitude ?? lat) !== undefined && (latitude ?? lat) !== null && (latitude ?? lat) !== '' ? parseFloat(latitude ?? lat) : null;
   const lngVal = (longitude ?? lng ?? long) !== undefined && (longitude ?? lng ?? long) !== null && (longitude ?? lng ?? long) !== '' ? parseFloat(longitude ?? lng ?? long) : null;
 
+  const travelLocationInput = travelLocation ?? travel_location ?? profObj.travelLocation ?? profObj.travel_location ?? bodyPayload?.travelLocation ?? bodyPayload?.travel_location;
   const travelCityInput = travelCity ?? travel_city ?? profObj.travelCity ?? profObj.travel_city ?? bodyPayload?.travelCity ?? bodyPayload?.travel_city;
   const travelStateInput = travelState ?? travel_state ?? profObj.travelState ?? profObj.travel_state ?? bodyPayload?.travelState ?? bodyPayload?.travel_state;
   const travelCountryInput = travelCountry ?? travel_country ?? profObj.travelCountry ?? profObj.travel_country ?? bodyPayload?.travelCountry ?? bodyPayload?.travel_country;
   const travelStartDateInput = travelStartDate ?? travel_start_date ?? profObj.travelStartDate ?? profObj.travel_start_date ?? bodyPayload?.travelStartDate ?? bodyPayload?.travel_start_date;
   const travelEndDateInput = travelEndDate ?? travel_end_date ?? profObj.travelEndDate ?? profObj.travel_end_date ?? bodyPayload?.travelEndDate ?? bodyPayload?.travel_end_date;
 
+  const travelLocationVal = travelLocationInput !== undefined ? (travelLocationInput ? String(travelLocationInput) : null) : undefined;
   const travelCityVal = travelCityInput !== undefined ? (travelCityInput ? String(travelCityInput) : null) : undefined;
   const travelStateVal = travelStateInput !== undefined ? (travelStateInput ? String(travelStateInput) : null) : undefined;
   const travelCountryVal = travelCountryInput !== undefined ? (travelCountryInput ? String(travelCountryInput) : null) : undefined;
@@ -1353,6 +1359,7 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
             ...(isAwayVal !== undefined && { isAway: isAwayVal }),
             ...(isRushModeVal !== undefined && { isRushMode: isRushModeVal }),
             ...(isTravelModeVal !== undefined && { isTravelMode: isTravelModeVal }),
+            ...(travelLocationVal !== undefined && { travelLocation: travelLocationVal }),
             ...(travelCityVal !== undefined && { travelCity: travelCityVal }),
             ...(travelStateVal !== undefined && { travelState: travelStateVal }),
             ...(travelCountryVal !== undefined && { travelCountry: travelCountryVal }),
@@ -1380,6 +1387,7 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
             isAway: isAwayVal ?? false,
             isRushMode: isRushModeVal ?? false,
             isTravelMode: isTravelModeVal ?? false,
+            travelLocation: travelLocationVal ?? null,
             travelCity: travelCityVal ?? null,
             travelState: travelStateVal ?? null,
             travelCountry: travelCountryVal ?? null,
@@ -1476,6 +1484,7 @@ async function handleUpdateProviderProfile(request: Request, bodyPayload: any) {
         if (isAwayVal !== undefined) profile.isAway = isAwayVal;
         if (isRushModeVal !== undefined) profile.isRushMode = isRushModeVal;
         if (isTravelModeVal !== undefined) profile.isTravelMode = isTravelModeVal;
+        if (travelLocationVal !== undefined) profile.travelLocation = travelLocationVal;
         if (travelCityVal !== undefined) profile.travelCity = travelCityVal;
         if (travelStateVal !== undefined) profile.travelState = travelStateVal;
         if (travelCountryVal !== undefined) profile.travelCountry = travelCountryVal;
@@ -2536,7 +2545,7 @@ export async function GET(
 
           if (isTravelActive) {
             prof.isTravelActive = true;
-            prof.activeLocation = [prof.travelCity, prof.travelState, prof.travelCountry].filter(Boolean).join(', ');
+            prof.activeLocation = [prof.travelLocation || prof.travelCity, prof.travelState, prof.travelCountry].filter(Boolean).join(', ');
             prof.displayCity = prof.travelCity || prof.city;
             prof.displayCountry = prof.travelCountry || prof.country;
 
@@ -7027,6 +7036,7 @@ export async function POST(
       let isAway: any = undefined;
       let isRushMode: any = undefined;
       let isTravelMode: any = undefined;
+      let travelLocation: any = undefined;
       let travelCity: any = undefined;
       let travelState: any = undefined;
       let travelCountry: any = undefined;
@@ -7054,6 +7064,7 @@ export async function POST(
           isAway = formData.get('isAway') ?? formData.get('is_away');
           isRushMode = formData.get('isRushMode') ?? formData.get('is_rush_mode');
           isTravelMode = formData.get('isTravelMode') ?? formData.get('is_travel_mode');
+          travelLocation = formData.get('travelLocation') ?? formData.get('travel_location');
           travelCity = formData.get('travelCity') ?? formData.get('travel_city');
           travelState = formData.get('travelState') ?? formData.get('travel_state');
           travelCountry = formData.get('travelCountry') ?? formData.get('travel_country');
@@ -7106,6 +7117,7 @@ export async function POST(
         isAway = bodyObj.isAway ?? bodyObj.is_away;
         isRushMode = bodyObj.isRushMode ?? bodyObj.is_rush_mode;
         isTravelMode = bodyObj.isTravelMode ?? bodyObj.is_travel_mode;
+        travelLocation = bodyObj.travelLocation ?? bodyObj.travel_location;
         travelCity = bodyObj.travelCity ?? bodyObj.travel_city;
         travelState = bodyObj.travelState ?? bodyObj.travel_state;
         travelCountry = bodyObj.travelCountry ?? bodyObj.travel_country;
@@ -7123,6 +7135,7 @@ export async function POST(
       const latVal = latitude !== undefined && latitude !== null && latitude !== '' ? parseFloat(latitude) : null;
       const lngVal = longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude) : null;
 
+      const travelLocationVal = travelLocation !== undefined ? (travelLocation ? String(travelLocation) : null) : undefined;
       const travelCityVal = travelCity !== undefined ? (travelCity ? String(travelCity) : null) : undefined;
       const travelStateVal = travelState !== undefined ? (travelState ? String(travelState) : null) : undefined;
       const travelCountryVal = travelCountry !== undefined ? (travelCountry ? String(travelCountry) : null) : undefined;
@@ -7175,6 +7188,7 @@ export async function POST(
                 ...(isAwayVal !== undefined && { isAway: isAwayVal }),
                 ...(isRushModeVal !== undefined && { isRushMode: isRushModeVal }),
                 ...(isTravelModeVal !== undefined && { isTravelMode: isTravelModeVal }),
+                ...(travelLocationVal !== undefined && { travelLocation: travelLocationVal }),
                 ...(travelCityVal !== undefined && { travelCity: travelCityVal }),
                 ...(travelStateVal !== undefined && { travelState: travelStateVal }),
                 ...(travelCountryVal !== undefined && { travelCountry: travelCountryVal }),
@@ -7198,6 +7212,7 @@ export async function POST(
                 isAway: isAwayVal ?? false,
                 isRushMode: isRushModeVal ?? false,
                 isTravelMode: isTravelModeVal ?? false,
+                travelLocation: travelLocationVal ?? null,
                 travelCity: travelCityVal ?? null,
                 travelState: travelStateVal ?? null,
                 travelCountry: travelCountryVal ?? null,
@@ -7239,6 +7254,7 @@ export async function POST(
             if (isAwayVal !== undefined) mockProfile.isAway = isAwayVal;
             if (isRushModeVal !== undefined) mockProfile.isRushMode = isRushModeVal;
             if (isTravelModeVal !== undefined) mockProfile.isTravelMode = isTravelModeVal;
+            if (travelLocationVal !== undefined) mockProfile.travelLocation = travelLocationVal;
             if (travelCityVal !== undefined) mockProfile.travelCity = travelCityVal;
             if (travelStateVal !== undefined) mockProfile.travelState = travelStateVal;
             if (travelCountryVal !== undefined) mockProfile.travelCountry = travelCountryVal;

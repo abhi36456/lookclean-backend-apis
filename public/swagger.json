@@ -262,6 +262,33 @@
             "type": "boolean",
             "example": false
           },
+          "travelLocation": {
+            "type": "string",
+            "example": "Downtown, Los Angeles, CA",
+            "description": "Travel location place/address description along with travel city (accepts travelLocation or travel_location)"
+          },
+          "travelCity": {
+            "type": "string",
+            "example": "Los Angeles"
+          },
+          "travelState": {
+            "type": "string",
+            "example": "CA"
+          },
+          "travelCountry": {
+            "type": "string",
+            "example": "USA"
+          },
+          "travelStartDate": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-01T00:00:00Z"
+          },
+          "travelEndDate": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-15T23:59:59Z"
+          },
           "totalDistance": {
             "type": "string",
             "example": "2.5 mi"
@@ -2959,6 +2986,11 @@
                     "example": false,
                     "default": false
                   },
+                  "travelLocation": {
+                    "type": "string",
+                    "example": "Downtown, Los Angeles, CA",
+                    "description": "Travel location place/address description along with travel city (accepts travelLocation or travel_location)"
+                  },
                   "travelCity": {
                     "type": "string",
                     "example": "Los Angeles"
@@ -3075,6 +3107,11 @@
                     "type": "boolean",
                     "example": false,
                     "default": false
+                  },
+                  "travelLocation": {
+                    "type": "string",
+                    "example": "Downtown, Los Angeles, CA",
+                    "description": "Travel location place/address description along with travel city (accepts travelLocation or travel_location)"
                   },
                   "travelCity": {
                     "type": "string",
@@ -4083,6 +4120,11 @@
                         "type": "boolean",
                         "example": false,
                         "default": false
+                      },
+                      "travelLocation": {
+                        "type": "string",
+                        "example": "Downtown, Los Angeles, CA",
+                        "description": "Travel location place/address description along with travel city (accepts travelLocation or travel_location)"
                       },
                       "travelCity": {
                         "type": "string",
