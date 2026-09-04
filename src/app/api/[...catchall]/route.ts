@@ -1860,7 +1860,7 @@ export async function GET(
       let detailsSubmitted = profile?.stripeDetailsSubmitted || false;
       let payoutsEnabled = profile?.stripePayoutsEnabled || false;
       let chargesEnabled = profile?.stripeChargesEnabled || false;
-      let bankAccount: { last4: string | null; bankName: string | null; object: string | null } | null = null;
+      let bankAccount: { last4: string | null; bankName?: string | null; object: string | null } | null = null;
 
       if (stripeAccountId) {
         const stripe = getStripeInstance();
@@ -1872,13 +1872,23 @@ export async function GET(
             chargesEnabled = account.charges_enabled || false;
 
             if (account.external_accounts && Array.isArray(account.external_accounts.data) && account.external_accounts.data.length > 0) {
-              const extAcc: any = account.external_accounts.data.find((acc: any) => acc.object === 'bank_account') || account.external_accounts.data[0];
+              const extAcc: any = account.external_accounts.data.find((acc: any) => acc.object === 'bank_account')
+                || account.external_accounts.data.find((acc: any) => acc.object === 'card')
+                || account.external_accounts.data[0];
+
               if (extAcc) {
-                bankAccount = {
-                  last4: extAcc.last4 || null,
-                  bankName: extAcc.bank_name || extAcc.brand || null,
-                  object: extAcc.object || 'bank_account',
-                };
+                if (extAcc.object === 'card') {
+                  bankAccount = {
+                    last4: extAcc.last4 || null,
+                    object: extAcc.object || 'card',
+                  };
+                } else {
+                  bankAccount = {
+                    last4: extAcc.last4 || null,
+                    bankName: extAcc.bank_name || null,
+                    object: extAcc.object || 'bank_account',
+                  };
+                }
               }
             }
 
