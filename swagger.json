@@ -4543,7 +4543,15 @@
                     "detailsSubmitted": { "type": "boolean", "example": true },
                     "payoutsEnabled": { "type": "boolean", "example": true },
                     "chargesEnabled": { "type": "boolean", "example": true },
-                    "commissionRate": { "type": "number", "example": 10.0 }
+                    "commissionRate": { "type": "number", "example": 10.0 },
+                    "bankAccount": {
+                      "type": "object",
+                      "properties": {
+                        "last4": { "type": "string", "example": "6789", "nullable": true },
+                        "bankName": { "type": "string", "example": "STRIPE TEST BANK", "nullable": true },
+                        "object": { "type": "string", "example": "bank_account", "nullable": true }
+                      }
+                    }
                   }
                 }
               }

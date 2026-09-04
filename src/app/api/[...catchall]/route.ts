@@ -1860,6 +1860,7 @@ export async function GET(
       let detailsSubmitted = profile?.stripeDetailsSubmitted || false;
       let payoutsEnabled = profile?.stripePayoutsEnabled || false;
       let chargesEnabled = profile?.stripeChargesEnabled || false;
+      let bankAccount: { last4: string | null; bankName: string | null; object: string | null } | null = null;
 
       if (stripeAccountId) {
         const stripe = getStripeInstance();
@@ -1869,6 +1870,17 @@ export async function GET(
             detailsSubmitted = account.details_submitted || false;
             payoutsEnabled = account.payouts_enabled || false;
             chargesEnabled = account.charges_enabled || false;
+
+            if (account.external_accounts && Array.isArray(account.external_accounts.data) && account.external_accounts.data.length > 0) {
+              const extAcc: any = account.external_accounts.data.find((acc: any) => acc.object === 'bank_account') || account.external_accounts.data[0];
+              if (extAcc) {
+                bankAccount = {
+                  last4: extAcc.last4 || null,
+                  bankName: extAcc.bank_name || extAcc.brand || null,
+                  object: extAcc.object || 'bank_account',
+                };
+              }
+            }
 
             await executeWithDbFallback(
               async () => {
@@ -1922,6 +1934,11 @@ export async function GET(
         payoutsEnabled,
         chargesEnabled,
         commissionRate,
+        bankAccount: bankAccount || {
+          last4: null,
+          bankName: null,
+          object: null,
+        },
       });
     }
 
